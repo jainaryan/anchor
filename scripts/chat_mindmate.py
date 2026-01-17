@@ -3,7 +3,9 @@
 #   conda activate mindmatenv
 #   python scripts/chat_mindmate.py
 
+import json
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 from mlx_lm import load, generate
@@ -28,6 +30,9 @@ PROMPT_PATH = PROJECT_ROOT / "system_prompt.txt"
 TEMPERATURE = 0.7
 TOP_P = 0.9
 MAX_NEW_TOKENS = 1024
+
+# Conversation logs directory
+LOG_DIR = PROJECT_ROOT / "logs"
 
 # ========= END CONFIG =========
 
@@ -62,6 +67,25 @@ def load_system_prompt():
         return system
     except FileNotFoundError:
         print(f"[warn] system prompt not found at {PROMPT_PATH}.")
+        return ""
+
+
+def save_conversation(history: list, log_dir: Path):
+    """
+    Save the conversation history to a timestamped JSON file.
+    """
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"chat_{timestamp}.json"
+    
+    with log_file.open("w", encoding="utf-8") as f:
+        json.dump({
+            "timestamp": timestamp,
+            "messages": history
+        }, f, indent=2, ensure_ascii=False)
+    
+    print(f"[info] conversation saved to {log_file}")
+    return log_file
 
 
 def main():
@@ -88,6 +112,9 @@ def main():
             user = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nbye!")
+            # Save conversation on exit
+            if len(history) > 1:  # More than just system prompt
+                save_conversation(history, LOG_DIR)
             return
 
         if not user:
