@@ -25,6 +25,11 @@ import subprocess
 import shlex
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 # ======================
 # CONFIG – EDIT IF NEEDED
 # ======================

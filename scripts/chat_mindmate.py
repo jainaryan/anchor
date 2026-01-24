@@ -10,6 +10,7 @@ from pathlib import Path
 
 from mlx_lm import load, generate
 
+
 # ========= CONFIG: EDIT HERE IF NEEDED =========
 
 # This file lives in .../mindmate/scripts/chat_mindmate.py
