@@ -79,7 +79,7 @@ def main():
 if __name__ == "__main__":
     main()
 """
-
+#%%
 # chunk.py
 # Usage:
 #   python chunk.py --in /path/mindmate_train.cleaned.jsonl --out /path/train.split.jsonl \
@@ -120,16 +120,23 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="inp", required=True)
     ap.add_argument("--out", dest="out", required=True)
-    ap.add_argument("--model-dir", required=True, help="Path to your MLX model dir (used only if --tokenizer not set)")
+    ap.add_argument("--model-dir", default=None, help="Path to your MLX model dir (used only if --tokenizer not set)")
     ap.add_argument("--tokenizer", default=None, help="HF tokenizer name/path (recommended), e.g. meta-llama/Llama-3.2-3B-Instruct")
     ap.add_argument("--max-len", type=int, default=2048)
     ap.add_argument("--overlap", type=int, default=128)
     args = ap.parse_args()
     if args.overlap < 0 or args.overlap >= args.max_len:
         raise ValueError(f"--overlap must be in [0, {args.max_len - 1}]")
-
+    
+    if not args.tokenizer and not args.model_dir:
+        raise ValueError("You must pass either --tokenizer or --model-dir")
+        
     tok_src = args.tokenizer or args.model_dir
-    tok = AutoTokenizer.from_pretrained(tok_src, use_fast=True)
+    tok = AutoTokenizer.from_pretrained(
+    tok_src,
+    use_fast=False,
+    fix_mistral_regex=True,
+)
 
     total = overs = written = 0
 
@@ -142,6 +149,7 @@ def main():
             ex = json.loads(line)
             text, schema = get_text_from_example(ex)
             ids = tok.encode(text, add_special_tokens=False)
+            ids.append(tok.eos_token_id)
             if len(ids) <= args.max_len:
                 f_out.write(json.dumps(set_text_into_example(ex, text, schema, 0), ensure_ascii=False) + "\n")
                 written += 1
@@ -158,3 +166,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# %%

@@ -24,6 +24,7 @@ import sys
 import subprocess
 import shlex
 from pathlib import Path
+import torch
 
 # ======================
 # CONFIG – EDIT IF NEEDED
@@ -52,10 +53,12 @@ CHUNK_TRAIN = CHUNK_DATA_DIR / "train.jsonl"
 CHUNK_VAL   = CHUNK_DATA_DIR / "valid.jsonl"
 
 # Base model dir for tokenizer + MLX
-BASE_MODEL_DIR = PROJECT_ROOT / "mlx_llama32_3b"
+# BASE_MODEL_DIR = PROJECT_ROOT / "mlx_llama32_3b"                      #MAC
+BASE_MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"                      #WINDOWS
+BASE_MODEL_DIR = PROJECT_ROOT / "models" / "llama-3.2-3b-instruct"      #WINDOWS
 
 # Path to mlx_lm.lora binary
-MLX_LORA_BIN = Path("/Users/aryanjain/miniconda3/envs/mindmatenv/bin/mlx_lm.lora")
+# MLX_LORA_BIN = Path("/Users/aryanjain/miniconda3/envs/mindmatenv/bin/mlx_lm.lora")    #MAC
 
 # QLoRA / training config
 MAX_LEN = 3072
@@ -93,10 +96,16 @@ def count_lines(path: Path) -> int:
     with path.open("r", encoding="utf-8") as f:
         return sum(1 for line in f if line.strip())
 
+def check_cuda():
+    if not torch.cuda.is_available():
+        raise RuntimeError("❌ CUDA not available — training would run on CPU")
+    return f"CUDA available: {torch.cuda.is_available()}, GPU: {torch.cuda.get_device_name(0)}"
+
 
 # ======================
 # Steps
 # ======================
+
 def step_build_dataset():
     """
     Step 1: build raw dataset into data/raw_data/
@@ -174,17 +183,13 @@ def step_chunk_dataset():
     cmd_train = [
         sys.executable,
         str(script),
-        "--in",
-        str(CLEAN_TRAIN),
-        "--out",
-        str(CHUNK_TRAIN),
-        "--model-dir",
-        str(BASE_MODEL_DIR),
-        "--max-len",
-        str(MAX_LEN),
-        "--overlap",
-        str(OVERLAP),
+        "--in", str(CLEAN_TRAIN),
+        "--out", str(CHUNK_TRAIN),
+        "--tokenizer", str(BASE_MODEL_DIR),
+        "--max-len", str(MAX_LEN),
+        "--overlap", str(OVERLAP),
     ]
+
     cmd_val = [
         sys.executable,
         str(script),
@@ -192,7 +197,7 @@ def step_chunk_dataset():
         str(CLEAN_VAL),
         "--out",
         str(CHUNK_VAL),
-        "--model-dir",
+        "--tokenizer",
         str(BASE_MODEL_DIR),
         "--max-len",
         str(MAX_LEN),
@@ -213,69 +218,77 @@ def step_chunk_dataset():
         f"  {CHUNK_VAL}"
     )
 
-
 def step_train_qlora():
     """
-    Step 4: run QLoRA training via mlx_lm.lora on the chunked data,
-    wrapped with nice + caffeinate and resource limits so the Mac stays usable.
+    This function is for training on windows systems
     """
+    run(
+        [sys.executable, "scripts/train_qlora_hf.py"],
+        cwd=PROJECT_ROOT,
+    )
+# def step_train_qlora():
+#     """
+#     Step 4: run QLoRA training via mlx_lm.lora on the chunked data,
+#     wrapped with nice + caffeinate and resource limits so the Mac stays usable.
+#     """
 
-    if not MLX_LORA_BIN.exists():
-        raise FileNotFoundError(f"mlx_lm.lora binary not found at {MLX_LORA_BIN}")
+#     if not MLX_LORA_BIN.exists():
+#         raise FileNotFoundError(f"mlx_lm.lora binary not found at {MLX_LORA_BIN}")
 
-    ADAPTER_PATH.parent.mkdir(parents=True, exist_ok=True)
+#     ADAPTER_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    # Base MLX QLoRA command
-    base_cmd = [
-        str(MLX_LORA_BIN),
-        "--model", "./mlx_llama32_3b",
-        "--train",
-        "--data", str(CHUNK_DATA_DIR),
-        "--batch-size", str(BATCH_SIZE),
-        "--iters", str(ITERS),
-        "--save-every", "200",
-        "--max-seq-length", str(MAX_LEN),
-        "--num-layers", str(NUM_LAYERS),
-        "--learning-rate", str(LR),
-        "--grad-checkpoint",
-        "--steps-per-eval", "200",
-        "--steps-per-report", "50",
-        "--adapter-path", str(ADAPTER_PATH),
-    ]
+#     # Base MLX QLoRA command
+#     base_cmd = [
+#         str(MLX_LORA_BIN),
+#         "--model", "./mlx_llama32_3b",
+#         "--train",
+#         "--data", str(CHUNK_DATA_DIR),
+#         "--batch-size", str(BATCH_SIZE),
+#         "--iters", str(ITERS),
+#         "--save-every", "200",
+#         "--max-seq-length", str(MAX_LEN),
+#         "--num-layers", str(NUM_LAYERS),
+#         "--learning-rate", str(LR),
+#         "--grad-checkpoint",
+#         "--steps-per-eval", "200",
+#         "--steps-per-report", "50",
+#         "--adapter-path", str(ADAPTER_PATH),
+#     ]
 
-    # Shell string with tee for logging
-    train_part = " ".join(shlex.quote(c) for c in base_cmd)
-    full_shell = f"{train_part} 2>&1 | tee {LOG_FILE}"
+#     # Shell string with tee for logging
+#     train_part = " ".join(shlex.quote(c) for c in base_cmd)
+#     full_shell = f"{train_part} 2>&1 | tee {LOG_FILE}"
 
-    # Wrap with nice + caffeinate
-    caffeinated_cmd = [
-        "nice", "-n", "15",
-        "caffeinate", "-dims",
-        "bash", "-o", "pipefail", "-c",
-        full_shell,
-    ]
+#     # Wrap with nice + caffeinate
+#     caffeinated_cmd = [
+#         "nice", "-n", "15",
+#         "caffeinate", "-dims",
+#         "bash", "-o", "pipefail", "-c",
+#         full_shell,
+#     ]
 
-    # Environment with resource limits
-    env = os.environ.copy()
-    env["OMP_NUM_THREADS"] = "2"
-    env["MLX_NUM_THREADS"] = "2"
+#     # Environment with resource limits
+#     env = os.environ.copy()
+#     env["OMP_NUM_THREADS"] = "2"
+#     env["MLX_NUM_THREADS"] = "2"
 
-    print("\n[train_qlora] Starting QLoRA under caffeinate with resource limits…")
-    print(f"[train_qlora] OMP_NUM_THREADS={env['OMP_NUM_THREADS']}, "
-          f"MLX_NUM_THREADS={env['MLX_NUM_THREADS']}, nice -n 10\n")
+#     print("\n[train_qlora] Starting QLoRA under caffeinate with resource limits…")
+#     print(f"[train_qlora] OMP_NUM_THREADS={env['OMP_NUM_THREADS']}, "
+#           f"MLX_NUM_THREADS={env['MLX_NUM_THREADS']}, nice -n 10\n")
 
-    run(caffeinated_cmd, cwd=PROJECT_ROOT, env=env)
+#     run(caffeinated_cmd, cwd=PROJECT_ROOT, env=env)
 
-    print(f"[train_qlora] Done. Adapters saved to {ADAPTER_PATH}")
-    print(f"[train_qlora] Log file: {PROJECT_ROOT / LOG_FILE}")
+#     print(f"[train_qlora] Done. Adapters saved to {ADAPTER_PATH}")
+#     print(f"[train_qlora] Log file: {PROJECT_ROOT / LOG_FILE}")
 
 def main():
     print("=== MindMate QLoRA Pipeline ===")
+    print(check_cuda())
     print(f"Project root   : {PROJECT_ROOT}")
     print(f"Data dir       : {DATA_DIR}")
     print(f"Base model dir : {BASE_MODEL_DIR}\n")
 
-    step_build_dataset()
+    # step_build_dataset()
     step_clean_dataset()
     step_chunk_dataset()
     step_train_qlora()
