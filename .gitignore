@@ -26,3 +26,4 @@ mlx_llama32_3b/
 *.pth
 *.bin
 *.pte
+llama.cpp/
