@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
 # chunk.py
 # Usage:
-#   python chunk.py --in /path/mindmate_train.cleaned.jsonl --out /path/train.split.jsonl \
+#   python finetuning/chunk.py --in ./data/cleaned_data/mindmate_train.cleaned.jsonl --out ./data/chunked_3072/train.split.jsonl \
 #     --model-dir ./mlx_llama32_3b --tokenizer meta-llama/Llama-3.2-3B-Instruct \
 #     --max-len 2048 --overlap 128
 

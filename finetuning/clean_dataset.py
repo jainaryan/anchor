@@ -14,11 +14,11 @@ Lightweight post-processing for MindMate SFT JSONL produced by make_dataset_mind
     * --dedup                 : drop exact duplicate examples
 
 Usage example:
-    python process_mindmate_data.py \
-      --train-in /Users/aryanjain/projects/mindmate/data/mindmate_train.jsonl \
-      --val-in   /Users/aryanjain/projects/mindmate/data/mindmate_val.jsonl \
-      --train-out /Users/aryanjain/projects/mindmate/data/mindmate_train.cleaned.jsonl \
-      --val-out   /Users/aryanjain/projects/mindmate/data/mindmate_val.cleaned.jsonl \
+    python finetuning/clean_dataset.py \
+      --train-in ./data/new_raw_data/mindmate_train.jsonl \
+      --val-in   ./data/new_raw_data/mindmate_val.jsonl \
+      --train-out ./data/cleaned_data/mindmate_train.cleaned.jsonl \
+      --val-out   ./data/cleaned_data/mindmate_val.cleaned.jsonl \
       --ensure-assistant-last \
       --drop-min-turns 2
 
@@ -161,6 +161,31 @@ def token_count(s: str) -> int:
     """Very rough token count by whitespace; good enough for quick stats."""
     return len(s.split())
 
+
+def merge_consecutive_user_turns(turns: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    """
+    Merges adjacent user turns into a single user turn with newline-separated content.
+    Sequence: (user, A), (user, B), (assistant, C) -> (user, A\nB), (assistant, C)
+    """
+    if not turns:
+        return []
+    
+    merged = []
+    for role, text in turns:
+        if not merged:
+            merged.append((role, text))
+            continue
+        
+        last_role, last_text = merged[-1]
+        
+        if role == "user" and last_role == "user":
+            # Merge with previous user turn
+            new_text = f"{last_text}\n{text}"
+            merged[-1] = (last_role, new_text)
+        else:
+            merged.append((role, text))
+    return merged
+
 # ---------------------------
 # File processing
 # ---------------------------
@@ -170,6 +195,7 @@ def process_file(
     ensure_assistant_final: bool = False,
     min_turns_to_keep: int = 0,
     dedup: bool = False,
+    merge_user: bool = False,
     sample_peek: int = 2,
 ):
     """
@@ -214,6 +240,10 @@ def process_file(
                 if ct:
                     cleaned.append((r, ct))
             turns = cleaned
+
+            # Optional: merge consecutive user turns
+            if merge_user:
+                turns = merge_consecutive_user_turns(turns)
 
             # Optional: ensure we end on an assistant reply (just drops trailing user lines)
             if ensure_assistant_final:
@@ -286,6 +316,8 @@ def main():
                     help="If > 0, drop examples with fewer than this many tagged (user/assistant) lines.")
     ap.add_argument("--dedup", action="store_true",
                     help="If set, drop exact duplicate examples within each file.")
+    ap.add_argument("--merge-consecutive-user", action="store_true",
+                    help="If set, merge consecutive user turns into a single turn separated by newline.")
 
     args = ap.parse_args()
 
@@ -295,6 +327,7 @@ def main():
         ensure_assistant_final=args.ensure_assistant_last,
         min_turns_to_keep=args.drop_min_turns,
         dedup=args.dedup,
+        merge_user=args.merge_consecutive_user,
     )
     process_file(
         inp_path=args.val_in,
@@ -302,6 +335,7 @@ def main():
         ensure_assistant_final=args.ensure_assistant_last,
         min_turns_to_keep=args.drop_min_turns,
         dedup=args.dedup,
+        merge_user=args.merge_consecutive_user,
     )
 
 

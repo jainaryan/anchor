@@ -12,7 +12,7 @@ mindmate/
 │   ├── new_raw_data/              (unused here, ok to keep)
 │   └── additional_training_samples.jsonl
 ├── mlx_llama32_3b/                # base Llama 3.2 3B
-└── scripts/
+└── finetuning/
     ├── build_dataset.py
     ├── clean_dataset.py
     ├── chunk.py
@@ -34,9 +34,10 @@ load_dotenv()
 # CONFIG – EDIT IF NEEDED
 # ======================
 
-# This file lives in mindmate/scripts/, so project root is one level up
+# This file lives in mindmate/finetuning/, so project root is one level up
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+# Scripts are now in the same directory as this file
+SCRIPTS_DIR = Path(__file__).resolve().parent
 
 # Data dirs
 DATA_DIR = PROJECT_ROOT / "data"
@@ -151,6 +152,7 @@ def step_clean_dataset():
         "--drop-min-turns",
         "4",
         "--dedup",
+        "--merge-consecutive-user",
     ]
     run(cmd, cwd=PROJECT_ROOT)
 

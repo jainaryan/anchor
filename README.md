@@ -44,7 +44,7 @@ huggingface-cli download mlx-community/Llama-3.2-3B-Instruct-4bit --local-dir ml
 
 ## 🧠 Training Pipeline
 
-The project includes an end-to-end pipeline in `scripts/run_pipeline.py` that handles everything from data processing to QLoRA training.
+The project includes an end-to-end pipeline in `finetuning/run_pipeline.py` that handles everything from data processing to QLoRA training.
 
 ### Pipeline Steps
 1.  **Build Dataset**: Compiles raw data from sources.
@@ -55,7 +55,7 @@ The project includes an end-to-end pipeline in `scripts/run_pipeline.py` that ha
 ### Running the Pipeline
 To run the full training process:
 ```bash
-python scripts/run_pipeline.py
+python finetuning/run_pipeline.py
 ```
 *   **Input**: Raw data in `data/new_raw_data`.
 *   **Output**: Adapters saved in `adapters/mindmate_llama32_3b_qlora_...`
@@ -99,20 +99,22 @@ See `exports/README.md` for more detailed export instructions.
 
 ## 📂 Project Structure
 
-```
 mindmate/
 ├── adapters/             # Trained LoRA adapters
 ├── data/                 # Raw/Cleaned training data
 ├── exports/              # Exported GGUF models & instructions
+├── finetuning/           # Fine-tuning pipeline & scripts
+│   ├── run_pipeline.py   # Training pipeline entry point
+│   ├── build_dataset.py
+│   ├── clean_dataset.py
+│   └── chunk.py
 ├── mlx_export/           # Intermediate fused models
 ├── mlx_llama32_3b/       # Base Llama 3.2 model (downloaded)
-├── scripts/              # Automation scripts
+├── scripts/              # Misc utility scripts
 │   ├── chat_mindmate.py  # Inference script
-│   ├── run_pipeline.py   # Training pipeline
 │   ├── export_to_gguf.py # Export tool
 │   └── ...
 └── system_prompt.txt     # Core system instructions for the bot
-```
 
 ## ☁️ Uploading to Hugging Face
 To publish your fused model and ExecuTorch artifacts (if generated):

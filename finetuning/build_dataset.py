@@ -9,13 +9,11 @@ Outputs:
   ./data/mindmate_train.jsonl
   ./data/mindmate_val.jsonl
 
-Format: each line is {"text": "<|user|> ...\n<|assistant|> ..."}
-"""
-
 import os
 import json
 import random
 from typing import List, Tuple
+from pathlib import Path
 
 import pandas as pd
 from datasets import load_dataset
@@ -26,8 +24,9 @@ from datasets import load_dataset
 SEED = 13
 random.seed(SEED)
 
-OUT_DIR = "/Users/aryanjain/projects/mindmate/data/new_raw_data"
-extra_path = "/Users/aryanjain/projects/mindmate/data/additional_training_samples.jsonl"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+OUT_DIR = PROJECT_ROOT / "data" / "new_raw_data"
+extra_path = PROJECT_ROOT / "data" / "additional_training_samples.jsonl"
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
