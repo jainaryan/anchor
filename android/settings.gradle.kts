@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "MindMate"
 include(":app")
+include(":llama")

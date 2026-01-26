@@ -21,9 +21,20 @@ venv/
 mlx_llama32_3b/
 
 # === Large model weight files (keep out of git) ===
-*.safetensors
 *.pt
 *.pth
 *.bin
 *.pte
 llama.cpp/
+
+# Android
+**/local.properties
+**/.gradle/
+**/build/
+.cxx/
+
+# Large Files & Exports
+*.safetensors
+exports/
+exports.zip
+mlx_export/

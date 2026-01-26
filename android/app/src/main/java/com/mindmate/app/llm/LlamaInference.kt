@@ -2,9 +2,7 @@ package com.mindmate.app.llm
 
 import android.content.Context
 import android.util.Log
-import de.kherud.llama.InferenceParameters
-import de.kherud.llama.LlamaModel
-import de.kherud.llama.ModelParameters
+import com.mindmate.llama.Llm
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -17,11 +15,10 @@ class LlamaInference(private val context: Context) {
     
     companion object {
         private const val TAG = "LlamaInference"
-        private const val MAX_CONTEXT_LENGTH = 4096
         private const val MAX_TOKENS = 512
     }
     
-    private var model: LlamaModel? = null
+    private val llm = Llm()
     private var systemPrompt: String = ""
     
     init {
@@ -53,45 +50,47 @@ class LlamaInference(private val context: Context) {
             Log.d(TAG, "Loading model from: $modelPath")
             onProgress(0.1f)
             
-            val params = ModelParameters()
-                .setNGpuLayers(0) // CPU only for Android compatibility
-                .setNCtx(MAX_CONTEXT_LENGTH)
-            
             onProgress(0.3f)
             
-            model = LlamaModel(modelPath, params)
+            val success = llm.load(modelPath)
             
             onProgress(1.0f)
-            Log.d(TAG, "Model loaded successfully")
-            Result.success(Unit)
+            
+            if (success) {
+                Log.d(TAG, "Model loaded successfully")
+                Result.success(Unit)
+            } else {
+                Log.e(TAG, "Failed to load model")
+                Result.failure(RuntimeException("Failed to load model"))
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load model", e)
             Result.failure(e)
         }
     }
     
-    fun isModelLoaded(): Boolean = model != null
+    fun isModelLoaded(): Boolean = llm.isLoaded()
     
     fun generateResponse(
         userMessage: String,
         conversationHistory: List<Pair<String, String>> = emptyList()
     ): Flow<String> = flow {
-        val currentModel = model ?: throw IllegalStateException("Model not loaded")
+        if (!llm.isLoaded()) {
+            throw IllegalStateException("Model not loaded")
+        }
         
         // Build the full prompt with conversation history
         val prompt = buildPrompt(userMessage, conversationHistory)
         
         Log.d(TAG, "Generating response for prompt length: ${prompt.length}")
         
-        val inferParams = InferenceParameters()
-            .setTemperature(0.7f)
-            .setTopP(0.9f)
-            .setNPredict(MAX_TOKENS)
-            .setStopStrings(arrayOf("<|eot_id|>", "<|end_of_text|>", "User:", "\nUser:"))
-        
         try {
-            for (output in currentModel.generate(prompt, inferParams)) {
-                emit(output.text)
+            // Generate full response (native lib doesn't support streaming yet)
+            val response = llm.generate(prompt, MAX_TOKENS)
+            
+            // Emit the full response
+            if (response.isNotEmpty()) {
+                emit(response)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error during generation", e)
@@ -131,8 +130,7 @@ class LlamaInference(private val context: Context) {
     
     fun unloadModel() {
         try {
-            model?.close()
-            model = null
+            llm.unload()
             Log.d(TAG, "Model unloaded")
         } catch (e: Exception) {
             Log.e(TAG, "Error unloading model", e)

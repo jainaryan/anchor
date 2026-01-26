@@ -79,8 +79,8 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     
-    // llama.cpp Android bindings
-    implementation("de.kherud:llama:3.2.1")
+    // llama.cpp Android native module
+    implementation(project(":llama"))
     
     // Testing
     testImplementation("junit:junit:4.13.2")

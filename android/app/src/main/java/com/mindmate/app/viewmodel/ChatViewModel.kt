@@ -29,6 +29,85 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
     
+    init {
+        // Auto-load model from Downloads folder on startup
+        loadModelFromDownloads()
+    }
+    
+    fun retryLoadModel() {
+        loadModelFromDownloads()
+    }
+    
+    fun loadModelFromDownloads() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(chatState = ChatState.LoadingModel(0f)) }
+            
+            try {
+                // Try multiple possible paths for model file
+                val possiblePaths = listOf(
+                    File(getApplication<Application>().filesDir, "mindmate_model.gguf").absolutePath,
+                    File(getApplication<Application>().filesDir, "mindmate_llama32_3b_q4_k_m.gguf").absolutePath,
+                    "/sdcard/Download/mindmate_llama32_3b_q4_k_m.gguf",
+                    "/storage/emulated/0/Download/mindmate_llama32_3b_q4_k_m.gguf",
+                    "/data/local/tmp/mindmate_llama32_3b_q4_k_m.gguf",
+                    "${getApplication<Application>().getExternalFilesDir(null)?.absolutePath}/mindmate_llama32_3b_q4_k_m.gguf"
+                )
+                
+                var modelFile: File? = null
+                for (path in possiblePaths) {
+                    val file = File(path)
+                    Log.d(TAG, "Checking path: $path, exists: ${file.exists()}")
+                    if (file.exists() && file.canRead()) {
+                        modelFile = file
+                        break
+                    }
+                }
+                
+                if (modelFile == null) {
+                    Log.w(TAG, "Model file not found in any location")
+                    _uiState.update { 
+                        it.copy(chatState = ChatState.Error(
+                            "Model file not found. Please place mindmate_llama32_3b_q4_k_m.gguf in the Download folder."
+                        ))
+                    }
+                    return@launch
+                }
+                
+                val modelPath = modelFile.absolutePath
+                val modelName = modelFile.name
+                
+                Log.d(TAG, "Loading model from: $modelPath")
+                
+                llamaInference.loadModel(modelPath) { progress ->
+                    _uiState.update { 
+                        it.copy(chatState = ChatState.LoadingModel(progress))
+                    }
+                }.onSuccess {
+                    _uiState.update { 
+                        it.copy(
+                            chatState = ChatState.Ready,
+                            modelPath = modelPath,
+                            modelName = modelName
+                        )
+                    }
+                    Log.d(TAG, "Model loaded: $modelName")
+                }.onFailure { error ->
+                    Log.e(TAG, "Failed to load model", error)
+                    _uiState.update { 
+                        it.copy(chatState = ChatState.Error(
+                            error.message ?: "Failed to load model"
+                        ))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading model", e)
+                _uiState.update { 
+                    it.copy(chatState = ChatState.Error(e.message ?: "Unknown error"))
+                }
+            }
+        }
+    }
+    
     fun selectModel() {
         _uiState.update { it.copy(chatState = ChatState.SelectingModel) }
     }

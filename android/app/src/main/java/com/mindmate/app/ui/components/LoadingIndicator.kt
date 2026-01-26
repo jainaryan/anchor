@@ -38,7 +38,7 @@ fun LoadingIndicator(
             )
             
             CircularProgressIndicator(
-                progress = { animatedProgress },
+                progress = animatedProgress,
                 modifier = Modifier.size(64.dp),
                 strokeWidth = 6.dp,
                 strokeCap = StrokeCap.Round,
