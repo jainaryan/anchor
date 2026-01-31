@@ -30,9 +30,9 @@ import torch
 # CONFIG – EDIT IF NEEDED
 # ======================
 
-# This file lives in mindmate/scripts/, so project root is one level up
+# This file lives in mindmate/finetuning/, so project root is one level up
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+FINETUNING_DIR = PROJECT_ROOT / "finetuning"
 
 # Data dirs
 DATA_DIR = PROJECT_ROOT / "data"
@@ -86,7 +86,7 @@ def run(cmd, cwd=None, env=None):
 
 
 def script_path(name):
-    p = SCRIPTS_DIR / name
+    p = FINETUNING_DIR / name
     if not p.exists():
         raise FileNotFoundError(f"Expected script {p} but it does not exist")
     return p
@@ -223,7 +223,7 @@ def step_train_qlora():
     This function is for training on windows systems
     """
     run(
-        [sys.executable, "scripts/CUDA_train_qlora.py", "--iters", str(ITERS)],
+        [sys.executable, str(FINETUNING_DIR / "CUDA_train_qlora.py"), "--iters", str(ITERS)],
         cwd=PROJECT_ROOT,
     )
 # def step_train_qlora():
