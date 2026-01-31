@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 from datasets import load_dataset
+from pathlib import Path
 
 # --------------------------
 # Repro + paths
@@ -24,7 +25,9 @@ from datasets import load_dataset
 SEED = 13
 random.seed(SEED)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+
 OUT_DIR = PROJECT_ROOT / "data" / "new_raw_data"
 extra_path = PROJECT_ROOT / "data" / "additional_training_samples.jsonl"
 

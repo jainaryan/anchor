@@ -12,11 +12,11 @@ mindmate/
 │   ├── new_raw_data/              (unused here, ok to keep)
 │   └── additional_training_samples.jsonl
 ├── mlx_llama32_3b/                # base Llama 3.2 3B
-└── finetuning/
+└── scripts/
     ├── build_dataset.py
     ├── clean_dataset.py
-    ├── chunk.py
-    ├── run_pipeline.py   (this file)
+    ├── CUDA_chunk.py
+    ├── CUDA_run_pipeline.py   (this file)
 """
 
 import os
@@ -26,19 +26,13 @@ import shlex
 from pathlib import Path
 import torch
 
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
 # ======================
 # CONFIG – EDIT IF NEEDED
 # ======================
 
-# This file lives in mindmate/finetuning/, so project root is one level up
+# This file lives in mindmate/scripts/, so project root is one level up
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-# Scripts are now in the same directory as this file
-SCRIPTS_DIR = Path(__file__).resolve().parent
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
 # Data dirs
 DATA_DIR = PROJECT_ROOT / "data"
@@ -61,19 +55,19 @@ CHUNK_VAL   = CHUNK_DATA_DIR / "valid.jsonl"
 # Base model dir for tokenizer + MLX
 # BASE_MODEL_DIR = PROJECT_ROOT / "mlx_llama32_3b"                      #MAC
 BASE_MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"                      #WINDOWS
-BASE_MODEL_DIR = PROJECT_ROOT / "models" / "llama-3.2-3b-instruct"      #WINDOWS
+BASE_MODEL_DIR = PROJECT_ROOT / "models" / "CUDA_llama-3.2-3b-instruct"      #WINDOWS
 
 # Path to mlx_lm.lora binary
 # MLX_LORA_BIN = Path("/Users/aryanjain/miniconda3/envs/mindmatenv/bin/mlx_lm.lora")    #MAC
 
 # QLoRA / training config
-MAX_LEN = 3072
+MAX_LEN = 2048
 OVERLAP = 256
 ITERS = 1500
 LR = 3e-5
 BATCH_SIZE = 1
 NUM_LAYERS = 10
-ADAPTER_PATH = PROJECT_ROOT / "adapters" / "mindmate_llama32_3b_qlora_nl10_3072_lr3e5"
+ADAPTER_PATH = PROJECT_ROOT / "adapters" / "CUDA_mindmate_llama32b"
 LOG_FILE = "run_qlora_nl10_3072_lr3e5.log"
 
 
@@ -161,7 +155,6 @@ def step_clean_dataset():
         "--drop-min-turns",
         "4",
         "--dedup",
-        "--merge-consecutive-user",
     ]
     run(cmd, cwd=PROJECT_ROOT)
 
@@ -185,7 +178,7 @@ def step_chunk_dataset():
     """
     CHUNK_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    script = script_path("chunk.py")
+    script = script_path("CUDA_chunk.py")
 
     cmd_train = [
         sys.executable,
@@ -230,7 +223,7 @@ def step_train_qlora():
     This function is for training on windows systems
     """
     run(
-        [sys.executable, "scripts/train_qlora_hf.py"],
+        [sys.executable, "scripts/CUDA_train_qlora.py", "--iters", str(ITERS)],
         cwd=PROJECT_ROOT,
     )
 # def step_train_qlora():
@@ -295,7 +288,7 @@ def main():
     print(f"Data dir       : {DATA_DIR}")
     print(f"Base model dir : {BASE_MODEL_DIR}\n")
 
-    # step_build_dataset()
+    step_build_dataset()
     step_clean_dataset()
     step_chunk_dataset()
     step_train_qlora()

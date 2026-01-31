@@ -1,0 +1,7 @@
+pandas
+datasets
+transformers
+huggingface_hub
+peft
+bitsandbytes
+torch
