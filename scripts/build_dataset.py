@@ -19,6 +19,7 @@ from typing import List, Tuple
 
 import pandas as pd
 from datasets import load_dataset
+from pathlib import Path
 
 # --------------------------
 # Repro + paths
@@ -29,8 +30,8 @@ random.seed(SEED)
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 
-OUT_DIR = "/Users/aryanjain/projects/mindmate/data/new_raw_data"
-extra_path = "/Users/aryanjain/projects/mindmate/data/additional_training_samples.jsonl"
+OUT_DIR = PROJECT_ROOT / "data" / "new_raw_data"
+extra_path = PROJECT_ROOT / "data" / "additional_training_samples.jsonl"
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
