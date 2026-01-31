@@ -1,4 +1,0 @@
-pandas
-datasets
-transformers
-huggingface_hub

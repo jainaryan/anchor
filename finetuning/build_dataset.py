@@ -9,6 +9,9 @@ Outputs:
   ./data/mindmate_train.jsonl
   ./data/mindmate_val.jsonl
 
+Format: each line is {"text": "<|user|> ...\n<|assistant|> ..."}
+"""
+
 import os
 import json
 import random
