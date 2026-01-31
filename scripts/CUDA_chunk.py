@@ -82,7 +82,7 @@ if __name__ == "__main__":
 #%%
 # chunk.py
 # Usage:
-#   python finetuning/chunk.py --in ./data/cleaned_data/mindmate_train.cleaned.jsonl --out ./data/chunked_3072/train.split.jsonl \
+#   python chunk.py --in /path/mindmate_train.cleaned.jsonl --out /path/train.split.jsonl \
 #     --model-dir ./mlx_llama32_3b --tokenizer meta-llama/Llama-3.2-3B-Instruct \
 #     --max-len 2048 --overlap 128
 
@@ -120,7 +120,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="inp", required=True)
     ap.add_argument("--out", dest="out", required=True)
-    ap.add_argument("--model-dir", default=None, help="Path to your MLX model dir (used only if --tokenizer not set)")
+    ap.add_argument("--model-dir", default=None, help="Path to your model dir (used only if --tokenizer not set)")
     ap.add_argument("--tokenizer", default=None, help="HF tokenizer name/path (recommended), e.g. meta-llama/Llama-3.2-3B-Instruct")
     ap.add_argument("--max-len", type=int, default=2048)
     ap.add_argument("--overlap", type=int, default=128)
@@ -157,7 +157,7 @@ def main():
 
             overs += 1
             for ci, chunk in enumerate(chunk_ids(ids, args.max_len, args.overlap)):
-                ctext = tok.decode(chunk, skip_special_tokens=True)
+                ctext = tok.decode(chunk, skip_special_tokens=False)
                 out_ex = set_text_into_example(ex, ctext, schema, ci)
                 f_out.write(json.dumps(out_ex, ensure_ascii=False) + "\n")
                 written += 1
