@@ -17,7 +17,7 @@ from mlx_lm import load, generate
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # Base model (your converted Llama 3.2 3B)
-MODEL_PATH = PROJECT_ROOT / "mlx_llama32_3b"
+MODEL_PATH = PROJECT_ROOT / "models" / "mlx_base_llama32_3b"
 
 # QLoRA adapter directory + checkpoint to use
 ADAPTER_DIR = PROJECT_ROOT / "adapters" / "mindmate_llama32_3b_qlora_nl10_3072_lr3e5"
