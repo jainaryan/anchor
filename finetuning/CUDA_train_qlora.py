@@ -17,37 +17,81 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--iters", type=int, default=1500)
 args_parsed = parser.parse_args()
 
+print(f'Version: {torch.__version__}') 
+print(f'CUDA available: {torch.cuda.is_available()}') 
+print(f'CUDA version: {torch.version.cuda}')
+
 if not torch.cuda.is_available():
     raise RuntimeError("CUDA not available")
+    
 
 BASE_MODEL_DIR = "models/CUDA_llama-3.2-3b-instruct"
 DATA_DIR = "data/cleaned_data/chunked_3072"
 OUT_DIR = "adapters/CUDA_mindmate_llama32b"
 
-tokenizer = AutoTokenizer.from_pretrained(
-    BASE_MODEL_DIR,
-    use_fast=False,
-    fix_mistral_regex=True,
-)
-tokenizer.pad_token = tokenizer.eos_token
+# Check for Unsloth availability
+try:
+    from unsloth import FastLanguageModel
+    HAS_UNSLOTH = True
+    print("🚀 Unsloth detected! Using FastLanguageModel for 2x faster training.")
+except Exception as e:
+    HAS_UNSLOTH = False
+    print(f"⚠️ Unsloth import failed ({str(e)}). Falling back to standard Hugging Face PEFT.")
 
-model = AutoModelForCausalLM.from_pretrained(
-    BASE_MODEL_DIR,
-    load_in_4bit=True,
-    torch_dtype=torch.float16,
-    device_map="auto",
-)
+# Configuration
+MAX_SEQ_LENGTH = 2048 # Can be increased to 4096+ with Unsloth if memory permits
+DTYPE = None # None = auto detection for Unsloth
+LOAD_IN_4BIT = True
 
-lora_config = LoraConfig(
-    r=4,
-    lora_alpha=8,
-    lora_dropout=0.0,
-    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
-    task_type="CAUSAL_LM",
-)
-
-model = get_peft_model(model, lora_config)
-model.enable_input_require_grads()
+if HAS_UNSLOTH:
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=BASE_MODEL_DIR,
+        max_seq_length=MAX_SEQ_LENGTH,
+        dtype=DTYPE,
+        load_in_4bit=LOAD_IN_4BIT,
+        fix_mistral_regex=True,
+    )
+    
+    # Do model patching to add LoRA adapters
+    model = FastLanguageModel.get_peft_model(
+        model,
+        r=4, # Choose any number > 0 ! Suggested 8, 16, 32, 64, 128
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+        lora_alpha=8,
+        lora_dropout=0, # Supports any, but = 0 is optimized
+        bias="none",    # Supports any, but = "none" is optimized
+        # [NEW] "unsloth" uses gradient checkpointing by default
+        use_gradient_checkpointing="unsloth", 
+        random_state=3407,
+        use_rslora=False,  # We support rank stabilized LoRA
+        loftq_config=None, # And LoftQ
+    )
+else:
+    # Standard HF Loading
+    tokenizer = AutoTokenizer.from_pretrained(
+        BASE_MODEL_DIR,
+        use_fast=False,
+        fix_mistral_regex=True,
+    )
+    tokenizer.pad_token = tokenizer.eos_token
+    
+    model = AutoModelForCausalLM.from_pretrained(
+        BASE_MODEL_DIR,
+        load_in_4bit=True,
+        torch_dtype=torch.float16,
+        device_map="auto",
+    )
+    
+    lora_config = LoraConfig(
+        r=4,
+        lora_alpha=8,
+        lora_dropout=0.0,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+        task_type="CAUSAL_LM",
+    )
+    
+    model = get_peft_model(model, lora_config)
+    model.enable_input_require_grads()
 
 dataset = load_dataset(
     "json",
