@@ -254,24 +254,22 @@ def stratified_split(rows: List[dict], ratio: float, val_min: int):
 def main():
     # ----- Load each dataset -----
     esconv_rows = tag_rows(load_esconv(), "ESConv")
-    #ed_rows     = tag_rows(load_empathetic_dialogues(), "ED")
     cc_rows     = tag_rows(load_counselchat(), "CounselChat")
-
-    # print(f"Loaded: ESConv={len(esconv_rows)}, ED={len(ed_rows)}, CounselChat={len(cc_rows)}")
-    print(f"Loaded: ESConv={len(esconv_rows)}, CounselChat={len(cc_rows)}")
-    # ----- Optional global cap (keeps relative proportions) -----
-    # all_rows = esconv_rows + ed_rows + cc_rows
-    all_rows = esconv_rows + cc_rows
+    ed_rows     = tag_rows(load_empathetic_dialogues(), "ED")
+    print(f"Loaded: ESConv={len(esconv_rows)}, ED={len(ed_rows)}, CounselChat={len(cc_rows)}")
+    # print(f"Loaded: ESConv={len(esconv_rows)}, CounselChat={len(cc_rows)}")
+    all_rows = esconv_rows + ed_rows + cc_rows
+    # all_rows = esconv_rows + cc_rows
     if MAX_TOTAL is not None and len(all_rows) > MAX_TOTAL:
         random.shuffle(all_rows)
         all_rows = all_rows[:MAX_TOTAL]
         # rebuild per-source lists after cap
         esconv_rows = [r for r in all_rows if r["_src"] == "ESConv"]
-        # ed_rows     = [r for r in all_rows if r["_src"] == "ED"]
+        ed_rows     = [r for r in all_rows if r["_src"] == "ED"]
         cc_rows     = [r for r in all_rows if r["_src"] == "CounselChat"]
 
-    # all_rows = esconv_rows + ed_rows + cc_rows
-    all_rows = esconv_rows  + cc_rows
+    all_rows = esconv_rows + ed_rows + cc_rows
+    # all_rows = esconv_rows  + cc_rows
 
     # ----- Stratified split per source -----
     train, val = stratified_split(all_rows, VAL_RATIO, VAL_MIN)
