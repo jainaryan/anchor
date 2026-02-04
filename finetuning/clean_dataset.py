@@ -148,6 +148,7 @@ def ensure_assistant_last(turns: List[Tuple[str, str]]) -> List[Tuple[str, str]]
     return turns[: last_assist_idx + 1]
 
 
+
 def drop_min_turns(turns: List[Tuple[str, str]], min_turns: int) -> bool:
     """
     Returns True if the example should be DROPPED because it has fewer than
@@ -155,6 +156,13 @@ def drop_min_turns(turns: List[Tuple[str, str]], min_turns: int) -> bool:
     """
     tagged = sum(1 for r, _ in turns if r in {"user", "assistant"})
     return tagged < min_turns
+
+
+def drop_no_assistant(turns: List[Tuple[str, str]]) -> bool:
+    """
+    Returns True if the example should be DROPPED because it contains NO assistant turns.
+    """
+    return not any(r == "assistant" for r, _ in turns)
 
 
 def token_count(s: str) -> int:
@@ -196,6 +204,7 @@ def process_file(
     min_turns_to_keep: int = 0,
     dedup: bool = False,
     merge_user: bool = False,
+    drop_no_assist: bool = False,
     sample_peek: int = 2,
 ):
     """
@@ -251,6 +260,10 @@ def process_file(
 
             # Optional: drop examples with too few tagged turns (user/assistant lines)
             if min_turns_to_keep > 0 and drop_min_turns(turns, min_turns_to_keep):
+                continue
+
+            # Optional: drop examples with no assistant turn
+            if drop_no_assist and drop_no_assistant(turns):
                 continue
 
             # Serialize back
@@ -318,6 +331,8 @@ def main():
                     help="If set, drop exact duplicate examples within each file.")
     ap.add_argument("--merge-consecutive-user", action="store_true",
                     help="If set, merge consecutive user turns into a single turn separated by newline.")
+    ap.add_argument("--drop-no-assistant", action="store_true",
+                    help="If set, drop examples that have ZERO assistant turns.")
 
     args = ap.parse_args()
 
@@ -328,6 +343,7 @@ def main():
         min_turns_to_keep=args.drop_min_turns,
         dedup=args.dedup,
         merge_user=args.merge_consecutive_user,
+        drop_no_assist=args.drop_no_assistant,
     )
     process_file(
         inp_path=args.val_in,
@@ -336,6 +352,7 @@ def main():
         min_turns_to_keep=args.drop_min_turns,
         dedup=args.dedup,
         merge_user=args.merge_consecutive_user,
+        drop_no_assist=args.drop_no_assistant,
     )
 
 
