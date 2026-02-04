@@ -272,9 +272,9 @@ def main():
         ed_rows     = [r for r in all_rows if r["_src"] == "ED"]
         cc_rows     = [r for r in all_rows if r["_src"] == "CounselChat"]
 
-    # all_rows = esconv_rows + ed_rows + cc_rows
+    all_rows = esconv_rows + ed_rows + cc_rows
     # all_rows = esconv_rows  + cc_rows
-    all_rows = ed_rows
+ 
     # ----- Stratified split per source -----
     train, val = stratified_split(all_rows, VAL_RATIO, VAL_MIN)
 
