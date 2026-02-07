@@ -1,0 +1,30 @@
+{
+  "id": "session_1770479523383_nbbo5laij",
+  "timestamp": "2026-02-07T23:52:21.837150",
+  "messages": [
+    {
+      "role": "system",
+      "content": "[USER PROFILE]\nName: Aryan\nRole: Student[/INST]\nInteraction Style: Listener\nAdditional Notes: \nCurrent Mood: Neutral\nRecurring Themes: None detected yet"
+    },
+    {
+      "role": "assistant",
+      "content": "Hello Aryan, welcome back. How are you feeling today?"
+    },
+    {
+      "role": "user",
+      "content": "sad"
+    },
+    {
+      "role": "assistant",
+      "content": "I'm sorry to hear that. What's going on?\nIs it something specific that's making you feel sad?\nI'm here to listen if you'd like to talk about it."
+    },
+    {
+      "role": "user",
+      "content": "my nightmares"
+    },
+    {
+      "role": "assistant",
+      "content": "I'm sorry to hear that you're having nightmares. Have you been able to identify any triggers that make them happen?\nOr is it more of a general feeling that you're having trouble sleeping?\nI'm here to listen if you'd like to talk about it."
+    }
+  ]
+}

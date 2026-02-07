@@ -1,0 +1,17 @@
+{
+  "static_profile": {
+    "name": "Aryan",
+    "role": "Student[/INST]",
+    "additional_notes": "",
+    "key_facts": []
+  },
+  "emotional_state": {
+    "current_mood": "Neutral",
+    "last_updated": ""
+  },
+  "preferences": {
+    "interaction_style": "Listener"
+  },
+  "recurring_patterns": [],
+  "session_history": []
+}
