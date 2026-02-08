@@ -202,6 +202,13 @@ SUMMARY: (Concise 1-3 sentences summary of the session)
         if isinstance(response_text, dict) and "text" in response_text:
             response_text = response_text["text"]  # Handle MLX return format if it changes
 
+        # DEBUG: Save raw response
+        try:
+            with open(PROJECT_ROOT / "web" / "last_llm_response.txt", "w", encoding="utf-8") as f:
+                f.write(response_text)
+        except Exception as e:
+            print(f"[MemoryEngine] Failed to save debug log: {e}")
+
         # 3. Parse Output
         parsed_data = _parse_llm_output(response_text)
         

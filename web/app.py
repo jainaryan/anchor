@@ -87,7 +87,9 @@ def chat():
                 extraction_prompt = f"""[INST] Extract the user's {field_desc} from the text below. Return ONLY the extracted value. No other text.
 Input: {text}
 Extracted {field_desc}: [/INST]"""
+                print(f"[DEBUG] Extracting {field_desc} from: {text}")
                 response = generate(model, tokenizer, prompt=extraction_prompt, max_tokens=20, verbose=False)
+                print(f"[DEBUG] Extraction Result: {response}")
                 return response.strip().split('\n')[0].strip() # Take first line
             except Exception as e:
                 print(f"Extraction failed: {e}")
@@ -314,4 +316,4 @@ if __name__ == '__main__':
     port = 8001
     if len(sys.argv) > 1 and sys.argv[1] == '--port':
         port = int(sys.argv[2])
-    app.run(port=port, debug=False, use_reloader=False)
+    app.run(port=port, debug=False, use_reloader=False, threaded=False)
