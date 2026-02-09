@@ -20,7 +20,34 @@ function generateSessionId() {
     return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
-async function startNewChat() {
+async function startNewChat(skipAutoSave = false) {
+    console.log("startNewChat called. skipAutoSave:", skipAutoSave);
+    console.log("Current Session:", currentSessionId);
+    console.log("History Length:", messageHistory.length);
+
+    // Auto-Save Previous Session (Background)
+    if (!skipAutoSave && currentSessionId && messageHistory.length > 0) {
+        const hasUserMessages = messageHistory.some(m => m.role === 'user');
+        console.log("Has user messages:", hasUserMessages);
+
+        if (hasUserMessages) {
+            console.log("Auto-analyzing session:", currentSessionId);
+            // Fire and forget
+            fetch('/end_session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: currentSessionId })
+            })
+                .then(res => res.json())
+                .then(data => console.log("Auto-save response:", data))
+                .catch(e => console.error("Auto-save failed:", e));
+        } else {
+            console.log("Skipping auto-save: No user messages.");
+        }
+    } else {
+        console.log("Skipping auto-save: Condition failed.");
+    }
+
     currentSessionId = generateSessionId();
     messageHistory = [];
     chatContainer.innerHTML = ''; // Start empty
@@ -222,7 +249,7 @@ async function endSession() {
             setTimeout(() => {
                 btn.textContent = originalText;
                 btn.disabled = false;
-                startNewChat(); // Optionally start fresh
+                startNewChat(true); // Skip duplicate auto-save since we just saved
             }, 2000);
         } else {
             alert("Error: " + data.error);
@@ -370,4 +397,164 @@ function addLoadingIndicator() {
 function removeLoadingIndicator(id) {
     const el = document.getElementById(id);
     if (el) el.remove();
+}
+
+/* --- Quick Tools & Sidebar Logic --- */
+
+function toggleSidebar(toolId) {
+    const sidebar = document.getElementById('quick-sidebar');
+    const title = document.getElementById('sidebar-title');
+
+    // 1. Open Sidebar if closed
+    sidebar.classList.add('open');
+
+    // 2. Hide all widgets
+    document.querySelectorAll('.widget').forEach(w => w.classList.remove('active'));
+
+    // 3. Show selected widget
+    const widget = document.getElementById(`widget-${toolId}`);
+    if (widget) {
+        widget.classList.add('active');
+    }
+
+    // 4. Set Title
+    const titles = {
+        'breathing': 'Breathing Bubble',
+        'grounding': '5-4-3-2-1 Grounding',
+        'crisis': 'Crisis Resources'
+    };
+    title.textContent = titles[toolId];
+
+    // 5. Initialize specific tool logic
+    if (toolId === 'breathing') resetBreathing();
+    if (toolId === 'grounding') initGrounding();
+}
+
+function closeSidebar() {
+    document.getElementById('quick-sidebar').classList.remove('open');
+    stopBreathing(); // Ensure breathing stops
+}
+
+/* --- Breathing Tool --- */
+let breathingInterval;
+let breathState = 'idle'; // idle, inhale, hold, exhale
+
+function toggleBreathing() {
+    const btn = document.getElementById('breath-toggle');
+    if (breathState === 'idle') {
+        startBreathing();
+        btn.textContent = "Stop";
+    } else {
+        stopBreathing();
+        btn.textContent = "Start";
+    }
+}
+
+function startBreathing() {
+    const circle = document.querySelector('.breathing-circle');
+    const text = document.getElementById('breath-text');
+
+    breathState = 'inhale';
+    runPropagate(circle, text);
+}
+
+function runPropagate(circle, text) {
+    if (breathState === 'idle') return;
+
+    // Inhale (4s)
+    circle.className = 'breathing-circle inhale';
+    text.textContent = "Inhale...";
+
+    setTimeout(() => {
+        if (breathState === 'idle') return;
+
+        // Hold (7s)
+        circle.className = 'breathing-circle hold';
+        text.textContent = "Hold...";
+
+        setTimeout(() => {
+            if (breathState === 'idle') return;
+
+            // Exhale (8s)
+            circle.className = 'breathing-circle exhale';
+            text.textContent = "Exhale...";
+
+            setTimeout(() => {
+                if (breathState === 'idle') return;
+                runPropagate(circle, text); // Loop
+            }, 8000);
+
+        }, 7000);
+
+    }, 4000);
+}
+
+function stopBreathing() {
+    breathState = 'idle';
+    resetBreathing();
+}
+
+function resetBreathing() {
+    const circle = document.querySelector('.breathing-circle');
+    const text = document.getElementById('breath-text');
+    const btn = document.getElementById('breath-toggle');
+
+    if (circle) circle.className = 'breathing-circle';
+    if (text) text.textContent = "Ready";
+    if (btn) btn.textContent = "Start";
+    breathState = 'idle';
+}
+
+/* --- Grounding Tool --- */
+let groundingStep = 5;
+
+function initGrounding() {
+    groundingStep = 5;
+    renderGroundingStep();
+}
+
+function renderGroundingStep() {
+    const container = document.getElementById('grounding-step-container');
+    container.innerHTML = '';
+
+    if (groundingStep === 0) {
+        container.innerHTML = `
+            <div class="grounding-step">
+                <h4>Great job.</h4>
+                <p>You are safe. You are here.</p>
+            </div>
+        `;
+        document.querySelector('.grounding-controls').style.display = 'none';
+        return;
+    }
+
+    document.querySelector('.grounding-controls').style.display = 'block';
+
+    const prompts = {
+        5: { text: "List 5 things you see", inputs: 5 },
+        4: { text: "List 4 things you feel", inputs: 4 },
+        3: { text: "List 3 things you hear", inputs: 3 },
+        2: { text: "List 2 things you smell", inputs: 2 },
+        1: { text: "List 1 thing you taste", inputs: 1 }
+    };
+
+    const current = prompts[groundingStep];
+
+    let html = `
+        <div class="grounding-step">
+            <h4>${current.text}</h4>
+            <div class="grounding-inputs">
+    `;
+
+    for (let i = 0; i < current.inputs; i++) {
+        html += `<input type="text" placeholder="Item ${i + 1}">`;
+    }
+
+    html += `</div></div>`;
+    container.innerHTML = html;
+}
+
+function nextGroundingStep() {
+    groundingStep--;
+    renderGroundingStep();
 }

@@ -19,9 +19,9 @@ if not PROMPT_PATH.exists():
 
 app = Flask(__name__, static_url_path='', static_folder='.')
 
-# Global variables for model
-model = None
-tokenizer = None
+from model_service import service
+
+# Global variables for model (handled by service)
 system_prompt = ""
 
 def ensure_best_adapter_active():
@@ -43,14 +43,15 @@ def load_system_prompt():
         return "You are MindMate, an empathetic AI companion."
 
 def init_model():
-    global model, tokenizer, system_prompt
-    print("Initializing model...")
+    global system_prompt
+    print("Initializing model service...")
     ensure_best_adapter_active()
-    print(f"Loading model from {MODEL_PATH}")
-    print(f"Loading adapter from {ADAPTER_DIR}")
-    model, tokenizer = load(str(MODEL_PATH), adapter_path=str(ADAPTER_DIR))
+    
+    # Initialize Service (Background Thread)
+    service.start(str(MODEL_PATH), str(ADAPTER_DIR))
+    
     system_prompt = load_system_prompt()
-    print("Model initialized.")
+    print("Model service initialized.")
 
 @app.route('/')
 def index():
@@ -88,9 +89,18 @@ def chat():
 Input: {text}
 Extracted {field_desc}: [/INST]"""
                 print(f"[DEBUG] Extracting {field_desc} from: {text}")
-                response = generate(model, tokenizer, prompt=extraction_prompt, max_tokens=20, verbose=False)
+                
+                # Use Service
+                response = service.generate_chat(extraction_prompt, max_tokens=20)
                 print(f"[DEBUG] Extraction Result: {response}")
-                return response.strip().split('\n')[0].strip() # Take first line
+                
+                # Robust cleaning
+                cleaned = response.strip()
+                if "[/INST]" in cleaned:
+                    cleaned = cleaned.replace("[/INST]", "")
+                cleaned = cleaned.split('\n')[0].strip()
+                
+                return cleaned
             except Exception as e:
                 print(f"Extraction failed: {e}")
                 return text # Fallback to raw
@@ -170,51 +180,47 @@ Extracted {field_desc}: [/INST]"""
     
     # Streaming response
     def generate_stream():
-        response_text = ""
+        # Use Service (Blocking call, but we wrap in stream for API compatibility)
+        # Note: MLX doesn't support true streaming via generate() easily in this queue setup without iterators
+        # For now, we will wait for full response and yield it at once (pseudo-stream)
+        # mimicking the previous behavior where `generate` was blocking anyway.
         
-        output = generate(
-            model=model,
-            tokenizer=tokenizer,
-            prompt=prompt,
-            max_tokens=1024,
-            verbose=False
-        )
-        text = output
-        
-        reply = text
-        if isinstance(text, dict) and "text" in text:
-            reply = text["text"]
-        
-        if reply.startswith(prompt):
-             reply = reply[len(prompt):]
-        
-        # Clean up response
-        final_reply = reply.strip()
-        
-        # SAVE SESSION
-        if session_id:
-            try:
-                # Append AI response to messages
-                messages.append({"role": "assistant", "content": final_reply})
-                
-                # Ensure log directory exists
-                log_dir = PROJECT_ROOT / "web" / "chat_logs"
-                log_dir.mkdir(parents=True, exist_ok=True)
-                
-                session_file = log_dir / f"{session_id}.json"
-                
-                # Save to file
-                session_data = {
-                    "id": session_id,
-                    "timestamp": import_time_now_iso(),
-                    "messages": messages
-                }
-                with open(session_file, 'w') as f:
-                    json.dump(session_data, f, indent=2)
-            except Exception as e:
-                print(f"Error saving session: {e}")
+        try:
+            final_reply = service.generate_chat(prompt, max_tokens=1024)
+            
+            # Clean up response if it echoes prompt (sometimes happens)
+            if final_reply.startswith(prompt):
+                 final_reply = final_reply[len(prompt):]
+            final_reply = final_reply.strip()
 
-        yield json.dumps({"role": "assistant", "content": final_reply})
+            # SAVE SESSION
+            if session_id:
+                try:
+                    # Append AI response to messages
+                    messages.append({"role": "assistant", "content": final_reply})
+                    
+                    # Ensure log directory exists
+                    log_dir = PROJECT_ROOT / "web" / "chat_logs"
+                    log_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    session_file = log_dir / f"{session_id}.json"
+                    
+                    # Save to file
+                    session_data = {
+                        "id": session_id,
+                        "timestamp": import_time_now_iso(),
+                        "messages": messages
+                    }
+                    with open(session_file, 'w') as f:
+                        json.dump(session_data, f, indent=2)
+                except Exception as e:
+                    print(f"Error saving session: {e}")
+
+            yield json.dumps({"role": "assistant", "content": final_reply})
+            
+        except Exception as e:
+            print(f"Generation error: {e}")
+            yield json.dumps({"error": str(e)})
 
     return Response(generate_stream(), mimetype='application/json')
 
@@ -271,6 +277,7 @@ def get_session(session_id):
 def end_session():
     data = request.json
     session_id = data.get('session_id')
+    print(f"[DEBUG] /end_session called for {session_id}")
     if not session_id:
         return jsonify({"error": "Missing session_id"}), 400
     
@@ -287,11 +294,11 @@ def end_session():
             messages = session_data.get('messages', [])
             
         # Trigger background processing
-        if model and tokenizer:
-            memory_engine.process_post_session(messages, model, tokenizer)
+        if service._model: # Basic check if service is running
+            memory_engine.process_post_session(session_id)
             return jsonify({"status": "processing_started"})
         else:
-             return jsonify({"error": "Model not initialized"}), 500
+             return jsonify({"error": "Model service not initialized"}), 500
              
     except Exception as e:
         print(f"Error in end_session: {e}")
@@ -316,4 +323,4 @@ if __name__ == '__main__':
     port = 8001
     if len(sys.argv) > 1 and sys.argv[1] == '--port':
         port = int(sys.argv[2])
-    app.run(port=port, debug=False, use_reloader=False, threaded=False)
+    app.run(port=port, debug=False, use_reloader=False)
