@@ -139,27 +139,31 @@ def process_post_session(session_id):
     global analysis_active
     analysis_active = True
     
-    SESSION_FILE = PROJCT_ROOT / "web" / "chat_logs" / f"{session_id}.json" # Typo PROJCT fixed below
-    SESSION_FILE = PROJECT_ROOT / "web" / "chat_logs" / f"{session_id}.json"
-
-    # 1. Load Session Data
     try:
-        with open(SESSION_FILE, 'r') as f:
-            data = json.load(f)
-            messages = data.get('messages', [])
+        SESSION_FILE = PROJECT_ROOT / "web" / "chat_logs" / f"{session_id}.json"
+
+        # 1. Load Session Data
+        try:
+            with open(SESSION_FILE, 'r') as f:
+                data = json.load(f)
+                messages = data.get('messages', [])
+        except Exception as e:
+            print(f"[MemoryEngine] Failed to load session: {e}")
+            analysis_active = False # Reset here since we return early
+            return
+
+        # 2. Filter system prompts
+        conversation_text = ""
+        for msg in messages:
+            role = msg.get("role", "unknown")
+            if role == "system":
+                continue
+            content = msg.get("content", "")
+            conversation_text += f"{role.upper()}: {content}\n"
     except Exception as e:
-        print(f"[MemoryEngine] Failed to load session: {e}")
+        print(f"[MemoryEngine] Error in process_post_session setup: {e}")
         analysis_active = False
         return
-
-    # 2. Filter system prompts
-    conversation_text = ""
-    for msg in messages:
-        role = msg.get("role", "unknown")
-        if role == "system":
-            continue
-        content = msg.get("content", "")
-        conversation_text += f"{role.upper()}: {content}\n"
 
     # 3. Construct Prompt (Analyst Persona)
     prompt = f"""
@@ -180,7 +184,7 @@ FORMAT:
 MOOD: (1-2 words describing the user's current mood)
 TOPICS: (Comma-separated list of main topics)
 RISK_LEVEL: (Low/Medium/High)
-SUMMARY: (Concise 1-3 sentences summary of the session)
+SUMMARY: (Concise 1-3 sentences stating ONLY what the user shared about their life/situation. Do NOT include advice, recommendations, or future plans.)
 """
 
     print(f"[MemoryEngine] queueing analysis for {session_id}...")
@@ -303,3 +307,89 @@ def _update_user_profile(parsed_data):
         # Save atomically
         save_profile_atomic(profile)
         print("[MemoryEngine] Profile saved safely.")
+
+def sync_session_history():
+    """
+    Scans chat_logs directory and adds missing sessions to user_profile.
+    Uses a heuristic for mood if not already analyzed.
+    """
+    with profile_lock:
+        profile = load_profile()
+        if not profile: return # Should exist by now
+        
+        log_dir = PROJECT_ROOT / "web" / "chat_logs"
+        if not log_dir.exists(): return
+        
+        # Get existing IDs
+        existing_ids = set()
+        for s in profile.get('session_history', []):
+            if 'id' in s:
+                existing_ids.add(s['id'])
+                
+        # Scan logs
+        changes_made = False
+        for log_file in log_dir.glob("*.json"):
+            try:
+                with open(log_file, 'r') as f:
+                    data = json.load(f)
+                    
+                sess_id = data.get('id', log_file.stem)
+                if sess_id in existing_ids:
+                    continue
+                    
+                # New Session Found - Backfill
+                timestamp = data.get('timestamp', datetime.now().isoformat())
+                messages = data.get('messages', [])
+                
+                # Heuristic Analysis
+                user_text = " ".join([m['content'] for m in messages if m['role'] == 'user']).lower()
+                
+                mood = "Neutral"
+                risk = "Low"
+                if "panic" in user_text or "dying" in user_text or "scared" in user_text:
+                    mood = "Panic"
+                    risk = "High"
+                elif "anxious" in user_text or "worried" in user_text:
+                    mood = "Anxious"
+                elif "sad" in user_text or "tired" in user_text:
+                    mood = "Sad"
+                elif "thank" in user_text or "good" in user_text or "happy" in user_text:
+                    mood = "Happy"
+                elif "calm" in user_text or "better" in user_text:
+                    mood = "Calm"
+                    
+                summary = "Legacy session (auto-synced)."
+                if messages:
+                    first_user = next((m['content'] for m in messages if m['role'] == 'user'), "No user input")
+                    summary = first_user[:50] + "..."
+                    
+                new_entry = {
+                    "id": sess_id,
+                    "date": timestamp,
+                    "summary": summary,
+                    "mood": mood,
+                    "topics": ["legacy"],
+                    "risk_level": risk
+                }
+                
+                profile['session_history'].append(new_entry)
+                existing_ids.add(sess_id)
+                changes_made = True
+                print(f"[MemoryEngine] Backfilled session {sess_id} with mood {mood}")
+                
+            except Exception as e:
+                print(f"Error syncing log {log_file}: {e}")
+                
+        if changes_made:
+            # Sort by date
+            profile['session_history'].sort(key=lambda x: x['date'])
+            
+            # Update current mood from latest session
+            if profile['session_history']:
+                last_session = profile['session_history'][-1]
+                if last_session.get('mood'):
+                     profile['emotional_state']['current_mood'] = last_session['mood']
+                     profile['emotional_state']['last_updated'] = last_session['date']
+                     print(f"[MemoryEngine] Updated current mood to {last_session['mood']} from backfill.")
+
+            save_profile_atomic(profile)

@@ -23,6 +23,10 @@ class ModelService:
         self._worker_thread.start()
         print("[ModelService] Worker thread started.")
 
+    def get_tokenizer(self):
+        """Returns the loaded tokenizer."""
+        return self._tokenizer
+
     def stop(self):
         """Stops the worker thread."""
         self._stop_event.set()

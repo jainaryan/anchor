@@ -32,15 +32,18 @@ async function startNewChat(skipAutoSave = false) {
 
         if (hasUserMessages) {
             console.log("Auto-analyzing session:", currentSessionId);
-            // Fire and forget
-            fetch('/end_session', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ session_id: currentSessionId })
-            })
-                .then(res => res.json())
-                .then(data => console.log("Auto-save response:", data))
-                .catch(e => console.error("Auto-save failed:", e));
+            console.log("Auto-analyzing session:", currentSessionId);
+            // Await to ensure analysis lock is active before starting new chat
+            try {
+                await fetch('/end_session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: currentSessionId })
+                });
+                console.log("Auto-save trigger sent.");
+            } catch (e) {
+                console.error("Auto-save failed:", e);
+            }
         } else {
             console.log("Skipping auto-save: No user messages.");
         }
@@ -320,6 +323,21 @@ async function sendMessage() {
         // Update local history
         messageHistory.push({ role: 'assistant', content: data.content });
 
+        // Check for Trigger Tool
+        if (data.trigger_tool === 'breathing') {
+            console.log("Triggering Breathing Tool...");
+            // Open sidebar
+            toggleSidebar('breathing');
+            // Start breathing exercise automatically
+            setTimeout(() => {
+                // Ensure we are in the right state
+                const btn = document.getElementById('breath-toggle');
+                if (btn && btn.textContent === "Start") {
+                    toggleBreathing();
+                }
+            }, 500);
+        }
+
         // Reload history list to show update summary
         loadSessionHistory();
 
@@ -433,6 +451,10 @@ function toggleSidebar(toolId) {
 function closeSidebar() {
     document.getElementById('quick-sidebar').classList.remove('open');
     stopBreathing(); // Ensure breathing stops
+
+    // Reset toggle button text
+    const btn = document.getElementById('breath-toggle');
+    if (btn) btn.textContent = "Start";
 }
 
 /* --- Breathing Tool --- */
@@ -557,4 +579,116 @@ function renderGroundingStep() {
 function nextGroundingStep() {
     groundingStep--;
     renderGroundingStep();
+}
+
+/* --- My Journey Modal & Chart --- */
+let moodChart = null;
+
+async function openJourneyModal() {
+    const modal = document.getElementById('journey-modal');
+    modal.classList.remove('hidden');
+
+    // Fetch Data
+    try {
+        const res = await fetch('/profile');
+        if (!res.ok) throw new Error("Failed to load profile");
+
+        const profile = await res.json();
+        const history = profile.session_history || [];
+
+        renderMoodChart(history);
+
+    } catch (e) {
+        console.error("Error loading journey:", e);
+        // Show error in modal?
+    }
+}
+
+function closeJourneyModal() {
+    document.getElementById('journey-modal').classList.add('hidden');
+}
+
+function renderMoodChart(history) {
+    const ctx = document.getElementById('moodChart').getContext('2d');
+
+    // 1. Process Data
+    // Sort by date just in case
+    const sorted = [...history].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Map Moods to Scores
+    const moodScores = {
+        "Happy": 5, "Hopeful": 5, "Excited": 5,
+        "Calm": 4, "Good": 4, "Relaxed": 4,
+        "Neutral": 3, "Okay": 3, "Fine": 3,
+        "Sad": 2, "Tired": 2, "Lonely": 2, "Bored": 2,
+        "Anxious": 1, "Panic": 1, "Angry": 1, "Frustrated": 1, "Stress": 1
+    };
+
+    const labels = sorted.map(s => new Date(s.date).toLocaleDateString());
+    const dataPoints = sorted.map(s => {
+        // Simple fuzzy match or direct lookup
+        const m = s.mood ? s.mood.split(' ')[0] : "Neutral"; // Take first word
+        return moodScores[m] || 3; // Default to Neutral
+    });
+
+    // 2. Destroy previous chart if exists
+    if (moodChart) moodChart.destroy();
+
+    // 3. Create Chart
+    moodChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Mood Score',
+                data: dataPoints,
+                borderColor: '#4facfe',
+                backgroundColor: 'rgba(79, 172, 254, 0.2)',
+                tension: 0.4,
+                fill: true,
+                pointRadius: 5,
+                pointHoverRadius: 7
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    min: 0,
+                    max: 6,
+                    ticks: {
+                        callback: function (value) {
+                            const labels = { 1: "Distress", 2: "Low", 3: "Neutral", 4: "Good", 5: "Great" };
+                            return labels[value] || "";
+                        }
+                    },
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            const idx = context.dataIndex;
+                            const mood = sorted[idx].mood || "Unknown";
+                            const summary = sorted[idx].summary || "";
+                            return [`Mood: ${mood}`, `Summary: ${summary.substring(0, 40)}...`];
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+// Close modal on click outside
+window.onclick = function (event) {
+    const modal = document.getElementById('journey-modal');
+    if (event.target == modal) {
+        closeJourneyModal();
+    }
 }
