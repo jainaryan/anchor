@@ -1,0 +1,22 @@
+{
+    "vitals": {
+        "heart_rate": "72 bpm",
+        "blood_pressure": "120/80",
+        "oxygen_level": "98%"
+    },
+    "activity": {
+        "steps_today": 8500,
+        "calories_burned": 2100,
+        "last_workout": "30 min jogging"
+    },
+    "sleep": {
+        "hours_slept": 7.5,
+        "quality": "Good"
+    },
+    "medical_history": {
+        "allergies": [
+            "Peanuts"
+        ],
+        "recent_checkup": "2026-01-15 (Normal)"
+    }
+}

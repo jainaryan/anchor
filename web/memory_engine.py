@@ -52,6 +52,23 @@ def get_profile_context():
     top_patterns = sorted(patterns, key=lambda x: x.get('count', 0), reverse=True)[:5]
     pattern_str = ", ".join([p['topic'] for p in top_patterns]) if top_patterns else "None detected yet"
     
+    # NEW: Fetch recent session history (Last 3 sessions)
+    history = profile.get('session_history', [])
+    recent_sessions = history[-3:] 
+    
+    history_str = ""
+    if recent_sessions:
+        history_str = "\nRECENT CONVERSATIONS (Context for continuity):"
+        for i, session in enumerate(recent_sessions):
+            # Parse date for readability
+            date_val = session.get('date', 'Unknown')
+            if 'T' in date_val:
+                date_val = date_val.split('T')[0]
+            
+            summary = session.get('summary', 'No summary available.')
+            topics = ", ".join(session.get('topics', []))
+            history_str += f"\n- [{date_val}] Summary: {summary} (Topics: {topics})"
+
     context = f"""
 [USER PROFILE]
 Name: {name}
@@ -60,8 +77,23 @@ Interaction Style: {style}
 Additional Notes: {additional}
 Current Mood: {mood}
 Recurring Themes: {pattern_str}
+{history_str}
+
+[HEALTHCARE DATA]
+{json.dumps(load_healthcare_data(), indent=2)}
 """
     return context.strip()
+
+def load_healthcare_data():
+    """Loads healthcare data from json file."""
+    try:
+        data_path = PROJECT_ROOT / "web" / "healthcare_data.json"
+        if data_path.exists():
+            with open(data_path, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[MemoryEngine] Failed to load healthcare data: {e}")
+    return {}
 
 def init_profile():
     """Ensures user_profile.json exists with the correct schema."""
