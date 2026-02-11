@@ -1,9 +1,8 @@
-import sys
+from mlx_lm import load, generate
 from pathlib import Path
 from flask import Flask, request, jsonify, Response, stream_with_context
 import json
 import shutil
-from mlx_lm import load, generate
 import memory_engine
 
 # Define paths (consistent with inference/chat_mindmate.py)
@@ -185,7 +184,9 @@ Extracted {field_desc}: [/INST]"""
         # Refresh context to get latest mood/patterns
         memory_context = memory_engine.get_profile_context()
         
-        if "[USER PROFILE]" in base_prompt:
+        # FIX: The instruction "[USER PROFILE]" is in the prompt text, so simple inclusion check fails.
+        # We need to check if the *content* is there. We assume the content always starts with the header on a new line.
+        if "\n[USER PROFILE]" in base_prompt:
              full_system_prompt = base_prompt
         else:
              full_system_prompt = f"{base_prompt}\n\n{memory_context}"
@@ -266,7 +267,9 @@ def import_time_now_iso():
 @app.route('/sessions', methods=['GET'])
 def get_sessions():
     log_dir = PROJECT_ROOT / "web" / "chat_logs"
+    print(f"[DEBUG] Fetching sessions from {log_dir}")
     if not log_dir.exists():
+        print("[DEBUG] Log dir does not exist")
         return jsonify([])
     
     sessions = []

@@ -78,9 +78,23 @@ def init_profile():
 def save_profile_atomic(data):
     """Saves data to user_profile.json atomically to prevent corruption."""
     temp_path = PROFILE_PATH.with_suffix(".tmp")
-    with open(temp_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2)
-    shutil.move(temp_path, PROFILE_PATH)
+    try:
+        with open(temp_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        
+        # Atomic replacement
+        os.replace(temp_path, PROFILE_PATH)
+        # print(f"[DEBUG] Profile saved to {PROFILE_PATH}")
+    except Exception as e:
+        print(f"[ERROR] Failed to save profile atomically: {e}")
+        # Attempt minimal recovery or logging
+        if temp_path.exists():
+            try:
+                os.replace(temp_path, PROFILE_PATH)
+            except:
+                pass
 
 def profile_exists():
     """Checks if user_profile.json exists."""
@@ -165,11 +179,11 @@ def process_post_session(session_id):
         analysis_active = False
         return
 
-    # 3. Construct Prompt (Analyst Persona)
-    prompt = f"""
-You are an expert psychologist AI. Analyze the following conversation deeply.
-
-CONVERSATION:
+    # 3. Construct Messages for Chat Template
+    system_instruction = "You are an expert psychologist AI. Your task is to analyze conversations deeply and extract emotional insights."
+    
+    user_content = f"""
+ANALYZE THIS CONVERSATION:
 {conversation_text}
 
 INSTRUCTIONS:
@@ -187,7 +201,20 @@ RISK_LEVEL: (Low/Medium/High)
 SUMMARY: (Concise 1-3 sentences stating ONLY what the user shared about their life/situation. Do NOT include advice, recommendations, or future plans.)
 """
 
+    messages = [
+        {"role": "system", "content": system_instruction},
+        {"role": "user", "content": user_content}
+    ]
+    
     print(f"[MemoryEngine] queueing analysis for {session_id}...")
+
+    # Apply Template
+    tokenizer = service.get_tokenizer()
+    if tokenizer:
+        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    else:
+        # Fallback if tokenizer not ready (shouldn't happen if service started)
+        prompt = f"{system_instruction}\n\n{user_content}"
 
     # 4. Define Callback 
     def on_analysis_complete(response_text):
@@ -196,7 +223,7 @@ SUMMARY: (Concise 1-3 sentences stating ONLY what the user shared about their li
             parsed_data = _parse_llm_output(response_text)
             
             if not parsed_data:
-                print("[MemoryEngine] Failed to parse LLM output.")
+                print(f"[MemoryEngine] Failed to parse LLM output. Raw: {response_text}")
                 return
 
             # Pattern Detection & Update

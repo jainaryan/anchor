@@ -38,3 +38,8 @@ llama.cpp/
 exports/
 exports.zip
 mlx_export/
+
+# Logs
+*.log
+web/chat_logs/
+web/user_profile.json
