@@ -6,28 +6,17 @@
     "key_facts": []
   },
   "emotional_state": {
-    "current_mood": "Anxious",
-    "last_updated": "2026-02-09T20:44:14.538954"
+    "current_mood": "Neutral",
+    "last_updated": "2026-02-11T00:21:19.612043"
   },
   "preferences": {
     "interaction_style": "Listener"
   },
-  "recurring_patterns": [
-    {
-      "topic": "legacy",
-      "count": 3,
-      "first_detected": "2026-02-09T20:44:14.539634"
-    },
-    {
-      "topic": "stress",
-      "count": 2,
-      "first_detected": "2026-02-09T20:44:14.539648"
-    }
-  ],
+  "recurring_patterns": [],
   "session_history": [
     {
-      "id": "session_1770638583089_eop4q281d",
-      "date": "2026-02-09T20:04:14.528055",
+      "id": "session_1770739452431_h58p2bkh3",
+      "date": "2026-02-11T00:04:40.381047",
       "summary": "aryan...",
       "mood": "Panic",
       "topics": [
@@ -36,19 +25,9 @@
       "risk_level": "High"
     },
     {
-      "date": "2026-02-09T20:04:30.151087",
-      "summary": "Aryan is stressed about his CS coursework, which is causing anxiety. He is overwhelmed with assignments and is seeking support.\nRECOMMENDATIONS: 1) Break down the assignments into manageable tasks, 2) Seek help from peers or a tutor.\n... (your final analysis)",
-      "mood": "Anxious",
-      "topics": [
-        "CS coursework",
-        "stress"
-      ],
-      "risk_level": "Medium"
-    },
-    {
-      "id": "session_1770638661637_vzafzpsw2",
-      "date": "2026-02-09T20:09:25.870031",
-      "summary": "still stressed...",
+      "id": "session_1770740072059_63zn53jcl",
+      "date": "2026-02-11T00:14:36.916413",
+      "summary": "No user input...",
       "mood": "Neutral",
       "topics": [
         "legacy"
@@ -56,37 +35,14 @@
       "risk_level": "Low"
     },
     {
-      "date": "2026-02-09T20:10:04.789474",
-      "summary": "The user is stressed about their assignments and is overwhelmed by the pressure.\nRecommendations: I would recommend to talk to a friend or family member about the stress, and to take breaks to relax.",
-      "mood": "Overwhelmed",
-      "topics": [
-        "stress",
-        "assignments",
-        "pressure"
-      ],
-      "risk_level": "Low"
-    },
-    {
-      "id": "session_1770638960969_urssz7h28",
-      "date": "2026-02-09T20:12:52.184560",
-      "summary": "no i want to talk...",
+      "id": "session_1770740359449_p1dkrkhbn",
+      "date": "2026-02-11T00:21:19.612043",
+      "summary": "still distracted...",
       "mood": "Neutral",
       "topics": [
         "legacy"
       ],
       "risk_level": "Low"
-    },
-    {
-      "date": "2026-02-09T20:44:14.538954",
-      "summary": "The user is anxious and has a past history of issues with school, friends, and family, which may be relevant to their current situation.",
-      "mood": "Anxious",
-      "topics": [
-        "Past issues",
-        "school",
-        "friends",
-        "family"
-      ],
-      "risk_level": "Medium"
     }
   ]
 }

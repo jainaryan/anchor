@@ -3,9 +3,27 @@ import requests
 import time
 import json
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:8001"
+
+
+def ensure_profile():
+    profile_path = "web/user_profile.json"
+    try:
+        with open(profile_path, 'r') as f:
+            pass
+    except FileNotFoundError:
+        print("Creating dummy profile...")
+        dummy_data = {
+            "static_profile": {"name": "TestUser", "key_facts": []},
+            "emotional_state": {"current_mood": "Neutral", "last_updated": ""},
+            "recurring_patterns": [],
+            "session_history": []
+        }
+        with open(profile_path, 'w') as f:
+            json.dump(dummy_data, f)
 
 def test_auto_analysis():
+    ensure_profile()
     print("Testing /end_session endpoint...")
     
     # 1. Create a fake session via /chat to generate a log file

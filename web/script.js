@@ -123,10 +123,17 @@ async function startNewChat(skipAutoSave = false) {
 
 async function loadSessionHistory() {
     try {
-        const res = await fetch('/sessions');
+        console.log("Loading session history...");
+        const res = await fetch('/sessions?t=' + Date.now());
         const sessions = await res.json();
+        console.log("Sessions loaded:", sessions);
 
         historyList.innerHTML = '';
+        if (sessions.length === 0) {
+            historyList.innerHTML = '<div style="padding:10px; color:#999; font-size:0.8rem;">No recent chats</div>';
+            return;
+        }
+
         sessions.forEach(session => {
             const div = document.createElement('div');
             div.className = 'history-item';
@@ -137,6 +144,7 @@ async function loadSessionHistory() {
         });
     } catch (e) {
         console.error("Failed to load history:", e);
+        historyList.innerHTML = '<div style="padding:10px; color:red; font-size:0.8rem;">Error loading history</div>';
     }
 }
 
