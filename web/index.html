@@ -18,7 +18,9 @@
         <aside class="sidebar">
             <div class="sidebar-top">
                 <div class="brand">
-                    <div class="logo-icon">⚓</div>
+                    <div class="logo-icon">
+                        <img src="anchor_logo.png" alt="Anchor Logo" class="logo-img">
+                    </div>
                     <h1>Anchor</h1>
                 </div>
 
@@ -114,8 +116,10 @@
         <div class="sidebar-content">
             <!-- Breathing Widget -->
             <div id="widget-breathing" class="widget hidden">
-                <div class="breathing-circle">
-                    <span id="breath-text">Ready</span>
+                <div class="breathing-container">
+                    <div class="breathing-circle">
+                        <span id="breath-text">Ready</span>
+                    </div>
                 </div>
                 <button id="breath-toggle" onclick="toggleBreathing()">Start</button>
                 <p class="breath-instruction">Follow the circle size.</p>
