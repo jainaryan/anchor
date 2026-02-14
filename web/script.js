@@ -200,8 +200,8 @@ function setupSpeechRecognition() {
             userInput.value = transcript;
             resizeTextarea();
             sendBtn.disabled = false;
-            // Optional: Auto-send if desired, but safer to let user confirm
-            // sendMessage(true); 
+            // Auto-send voice input
+            sendMessage();
         };
 
         micBtn.addEventListener('click', () => {
@@ -307,6 +307,9 @@ async function sendMessage() {
 
     // Add Loading Indicator
     const loadingId = addLoadingIndicator();
+    let fullResponse = "";
+    let ttsBuffer = "";
+    let isFirstChunk = true;
 
     try {
         const response = await fetch('/chat', {
@@ -320,33 +323,100 @@ async function sendMessage() {
             })
         });
 
-        const data = await response.json();
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
 
-        // Remove Loading Indicator
+        // Remove loading indicator immediately when stream starts
         removeLoadingIndicator(loadingId);
 
-        // Add AI Response
-        addMessageToUI('assistant', data.content);
+        // Creation of AI message bubble
+        const aiMsgDiv = document.createElement('div');
+        aiMsgDiv.className = 'message ai-message';
+        aiMsgDiv.innerHTML = `<div class="message-content"></div>`;
+        chatContainer.appendChild(aiMsgDiv);
+        const contentDiv = aiMsgDiv.querySelector('.message-content');
 
-        // Update local history
-        messageHistory.push({ role: 'assistant', content: data.content });
+        window.currentTTSQueue = [];
+        window.isTTSPlaying = false;
 
-        // Check for Trigger Tool
-        if (data.trigger_tool === 'breathing') {
-            console.log("Triggering Breathing Tool...");
-            // Open sidebar
-            toggleSidebar('breathing');
-            // Start breathing exercise automatically
-            setTimeout(() => {
-                // Ensure we are in the right state
-                const btn = document.getElementById('breath-toggle');
-                if (btn && btn.textContent === "Start") {
-                    toggleBreathing();
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const data = JSON.parse(line);
+
+                    if (data.error) {
+                        console.error("Stream Error:", data.error);
+                        continue;
+                    }
+
+                    if (data.content) {
+                        fullResponse += data.content;
+                        ttsBuffer += data.content;
+
+                        // Render Markdown incrementally (simple append for now, proper markdown streaming is complex)
+                        // For simplicity, we just update text content or simple HTML
+                        // Re-parsing full markdown on every chunk can be jittery, but acceptable for short texts
+                        contentDiv.innerHTML = marked.parse(fullResponse);
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+                        // Check for sentence completion
+                        // Simple regex for ending punctuation followed by space or end of string
+                        const sentenceMatch = ttsBuffer.match(/[.!?]+[\s\n]+$/);
+                        if (sentenceMatch) {
+                            queueTTS(ttsBuffer);
+                            ttsBuffer = "";
+                        }
+                    }
+
+                    if (data.trigger_tool) {
+                        if (data.trigger_tool === 'breathing') {
+                            console.log("Triggering Breathing Tool...");
+                            toggleSidebar('breathing');
+                            setTimeout(() => {
+                                const btn = document.getElementById('breath-toggle');
+                                if (btn && btn.textContent === "Start") {
+                                    toggleBreathing();
+                                }
+                            }, 500);
+                        }
+                    }
+
+                } catch (e) {
+                    console.error("JSON Parse Error", e);
                 }
-            }, 500);
+            }
         }
 
-        // Reload history list to show update summary
+        // Flush remaining TTS buffer
+        if (ttsBuffer.trim()) {
+            queueTTS(ttsBuffer);
+        }
+
+        // Update local history
+        messageHistory.push({ role: 'assistant', content: fullResponse });
+
+        // Add Speaker Button to finished message
+        // Re-render final content cleanly
+        contentDiv.innerHTML = marked.parse(fullResponse);
+
+        // Add speaker button code (reused from addMessageToUI logic, simplified)
+        const cleanText = fullResponse.replace(/[*#_`]/g, '').replace(/"/g, "&quot;").replace(/'/g, "\\'");
+        const btnHtml = `
+            <button class="speaker-btn" onclick="speakText('${cleanText}')" title="Read aloud">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+            </button>
+        `;
+        contentDiv.insertAdjacentHTML('beforeend', btnHtml);
+
         loadSessionHistory();
 
     } catch (error) {
@@ -356,14 +426,44 @@ async function sendMessage() {
     }
 }
 
-function speakText(text) {
-    if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel(); // Stop previous
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        // utterance.voice = ... (Choose a nice voice if available)
-        window.speechSynthesis.speak(utterance);
+async function speakText(text) {
+    if (!text) return;
+
+    // Stop previous audio
+    if (window.currentAudio) {
+        window.currentAudio.pause();
+        window.currentAudio = null;
+    }
+
+    try {
+        const response = await fetch('/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text })
+        });
+
+        if (!response.ok) throw new Error("TTS Failed");
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+
+        window.currentAudio = audio; // Keep reference to stop later
+        audio.play();
+
+        audio.onended = () => {
+            URL.revokeObjectURL(url);
+            window.currentAudio = null;
+        };
+
+    } catch (e) {
+        console.error("TTS Error:", e);
+        // Fallback to browser TTS
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            window.speechSynthesis.speak(utterance);
+        }
     }
 }
 
