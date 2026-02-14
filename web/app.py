@@ -20,8 +20,21 @@ app = Flask(__name__, static_url_path='', static_folder='.')
 
 from model_service import service
 
+import os
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Hume AI Credentials
+HUME_API_KEY = os.getenv("HUME_API_KEY")
+HUME_SECRET_KEY = os.getenv("HUME_SECRET_KEY")
+
 # Global variables for model (handled by service)
 system_prompt = ""
+
+# Model Configuration
+USE_ADAPTER = False # Set to False to use base model, True for finetuned
 
 def ensure_best_adapter_active():
     if not ADAPTER_DIR.exists():
@@ -44,10 +57,17 @@ def load_system_prompt():
 def init_model():
     global system_prompt
     print("Initializing model service...")
-    ensure_best_adapter_active()
+    
+    adapter_path_arg = None
+    if USE_ADAPTER:
+        print("[INFO] Adapter enabled. Loading fine-tuned weights.")
+        ensure_best_adapter_active()
+        adapter_path_arg = str(ADAPTER_DIR)
+    else:
+        print("[INFO] Adapter disabled. Loading base model.")
     
     # Initialize Service (Background Thread)
-    service.start(str(MODEL_PATH), str(ADAPTER_DIR))
+    service.start(str(MODEL_PATH), adapter_path_arg)
     
     system_prompt = load_system_prompt()
     print("Model service initialized.")
@@ -106,19 +126,27 @@ def chat():
         def extract_info(text, field_desc):
             if not text: return ""
             try:
-                extraction_prompt = f"""[INST] Extract the user's {field_desc} from the text below. Return ONLY the extracted value. No other text.
-Input: {text}
-Extracted {field_desc}: [/INST]"""
+                tokenizer = service.get_tokenizer()
+                messages = [
+                    {"role": "user", "content": f"Extract the user's {field_desc} from the text below. Return ONLY the extracted value. No other text.\nInput: {text}"}
+                ]
+                extraction_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                
                 print(f"[DEBUG] Extracting {field_desc} from: {text}")
                 
                 # Use Service
-                response = service.generate_chat(extraction_prompt, max_tokens=20)
+                # generate_chat now returns a generator, so we must consume it
+                response_generator = service.generate_chat(extraction_prompt, max_tokens=20)
+                response = "".join([token for token in response_generator])
+                
                 print(f"[DEBUG] Extraction Result: {response}")
                 
                 # Robust cleaning
                 cleaned = response.strip()
-                if "[/INST]" in cleaned:
-                    cleaned = cleaned.replace("[/INST]", "")
+                # Remove common artifacts if they appear (just in case)
+                for tag in ["[/INST]", "<|eot_id|>", "<|start_header_id|>", "assistant"]:
+                    if tag in cleaned:
+                        cleaned = cleaned.replace(tag, "")
                 cleaned = cleaned.split('\n')[0].strip()
                 
                 return cleaned
@@ -210,24 +238,43 @@ Extracted {field_desc}: [/INST]"""
     prompt = tokenizer.apply_chat_template(gen_messages, tokenize=False, add_generation_prompt=True)
     
     # Streaming response
+    @stream_with_context
     def generate_stream():
-        # Use Service (Blocking call, but we wrap in stream for API compatibility)
-        # Note: MLX doesn't support true streaming via generate() easily in this queue setup without iterators
-        # For now, we will wait for full response and yield it at once (pseudo-stream)
-        # mimicking the previous behavior where `generate` was blocking anyway.
+        final_reply = ""
         
         try:
-            final_reply = service.generate_chat(prompt, max_tokens=1024)
+            # Iterate over the generator from ModelService
+            for token in service.generate_chat(prompt, max_tokens=1024):
+                final_reply += token
+                
+                # Yield chunk as JSON line
+                chunk_data = {"role": "assistant", "content": token}
+                yield json.dumps(chunk_data) + "\n"
             
-            # Clean up response if it echoes prompt (sometimes happens)
+            # Post-generation: check triggers and save session
+            
+            # Clean up response if it echoes prompt
             if final_reply.startswith(prompt):
                  final_reply = final_reply[len(prompt):]
             final_reply = final_reply.strip()
+
+            # Trigger Tool Check (on full text)
+            trigger_tool_found = None
+            # Re-check trigger phrases on final response? 
+            # Actually, user input trigger checking was done before generation.
+            # If we want to send the trigger tool signal, we should do it at the start or end.
+            # Let's send it at the end for now, or as a separate event.
+            
+            if trigger_tool:
+                yield json.dumps({"trigger_tool": trigger_tool}) + "\n"
 
             # SAVE SESSION
             if session_id:
                 try:
                     # Append AI response to messages
+                    gen_messages.append({"role": "assistant", "content": final_reply})
+                    # Note: We append to gen_messages which was local, but we need to save the full session
+                    # The original 'messages' list is what we want to save + new reply
                     messages.append({"role": "assistant", "content": final_reply})
                     
                     # Ensure log directory exists
@@ -247,18 +294,11 @@ Extracted {field_desc}: [/INST]"""
                 except Exception as e:
                     print(f"Error saving session: {e}")
 
-            # Construct response dict
-            response_data = {"role": "assistant", "content": final_reply}
-            if trigger_tool:
-                response_data["trigger_tool"] = trigger_tool
-                
-            yield json.dumps(response_data)
-            
         except Exception as e:
             print(f"Generation error: {e}")
-            yield json.dumps({"error": str(e)})
+            yield json.dumps({"error": str(e)}) + "\n"
 
-    return Response(generate_stream(), mimetype='application/json')
+    return Response(generate_stream(), mimetype='application/x-ndjson')
 
 def import_time_now_iso():
     from datetime import datetime
@@ -361,6 +401,64 @@ def get_profile():
     if not profile:
         return jsonify({"error": "Profile not found"}), 404
     return jsonify(profile)
+
+@app.route('/tts', methods=['POST'])
+def tts():
+    import base64 # Import locally to avoid messing up top-level diffs
+    
+    data = request.json
+    text = data.get('text')
+    
+    if not text:
+        return jsonify({"error": "Missing text"}), 400
+        
+    if not HUME_API_KEY:
+        print("[Error] HUME_API_KEY not set")
+        return jsonify({"error": "TTS not configured"}), 500
+
+    try:
+        # Hume TTS API (Standard)
+        # Docs: https://dev.hume.ai/reference/tts-synthesize-json
+        url = "https://api.hume.ai/v0/tts"
+        headers = {
+            "X-Hume-Api-Key": HUME_API_KEY,
+            "Content-Type": "application/json"
+        }
+        
+        # Construct payload with utterances list
+        payload = {
+            "utterances": [
+                {
+                    "text": text,
+                }
+            ]
+        }
+        
+        # Request
+        response = requests.post(url, json=payload, headers=headers)
+        
+        if response.status_code != 200:
+            print(f"[TTS Error] {response.status_code} - {response.text}")
+            return jsonify({"error": "TTS generation failed"}), response.status_code
+
+        # Parse JSON to get audio
+        try:
+            res_data = response.json()
+            if "generations" not in res_data or not res_data["generations"]:
+                return jsonify({"error": "No audio generated"}), 500
+                
+            b64_audio = res_data["generations"][0]["audio"]
+            audio_bytes = base64.b64decode(b64_audio)
+            
+            return Response(audio_bytes, mimetype="audio/mpeg")
+            
+        except Exception as e:
+            print(f"[TTS Parse Error] {e}")
+            return jsonify({"error": "Failed to parse TTS response"}), 500
+
+    except Exception as e:
+        print(f"[TTS Exception] {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     init_model()
