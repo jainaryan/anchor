@@ -2,7 +2,7 @@ import threading
 import queue
 import json
 from pathlib import Path
-from mlx_lm import load, generate
+from mlx_lm import load, generate, stream_generate
 
 class ModelService:
     def __init__(self):
@@ -34,11 +34,19 @@ class ModelService:
             self._worker_thread.join()
 
     def generate_chat(self, prompt, max_tokens=1024):
-        """Blocking call for chat generation (high priority)."""
+        """Blocking/Streaming call for chat generation."""
         result_queue = queue.Queue()
         # Message format: (type, prompt, max_tokens, result_queue)
         self._queue.put(("chat", prompt, max_tokens, result_queue))
-        return result_queue.get()
+        
+        # Yield results as they come in
+        while True:
+            chunk = result_queue.get()
+            if chunk is None: # Sentinel for end
+                break
+            if isinstance(chunk, Exception):
+                raise chunk
+            yield chunk
 
     def submit_analysis(self, prompt, callback):
         """Non-blocking call for background analysis (low priority)."""
@@ -57,30 +65,33 @@ class ModelService:
             msg_type, prompt, max_tokens, output_handler = item
             
             try:
-                # print(f"[ModelService] Processing {msg_type} job...")
-                response = generate(
-                    model=self._model,
-                    tokenizer=self._tokenizer,
-                    prompt=prompt,
-                    max_tokens=max_tokens,
-                    verbose=False
-                )
-                
-                # Extract text if needed
-                text = response
-                if isinstance(response, dict) and "text" in response:
-                    text = response["text"]
-                
-                # Cleanup
-                if text.startswith(prompt):
-                    text = text[len(prompt):].strip()
-
-                # Handle Output
                 if msg_type == "chat":
-                    # For chat, output_handler is a Queue
-                    output_handler.put(text)
+                    # Streaming Generation
+                    for response in stream_generate(
+                        model=self._model,
+                        tokenizer=self._tokenizer,
+                        prompt=prompt,
+                        max_tokens=max_tokens
+                    ):
+                        output_handler.put(response.text)
+                    
+                    # Signal end
+                    output_handler.put(None)
+                    
                 elif msg_type == "analysis":
-                    # For analysis, output_handler is a callback function
+                    # Blocking Generation (for backward compatibility / simplicity for analysis)
+                    response = generate(
+                        model=self._model,
+                        tokenizer=self._tokenizer,
+                        prompt=prompt,
+                        max_tokens=max_tokens,
+                        verbose=False
+                    )
+                    text = response.text if hasattr(response, 'text') else response
+                    # Cleanup prompt echo if needed (generate sometimes echoes)
+                    if text.startswith(prompt):
+                         text = text[len(prompt):].strip()
+                         
                     try:
                         output_handler(text)
                     except Exception as e:
@@ -89,7 +100,8 @@ class ModelService:
             except Exception as e:
                 print(f"[ModelService] Error processing job: {e}")
                 if msg_type == "chat":
-                    output_handler.put(f"Error: {e}")
+                    output_handler.put(e)
+                    output_handler.put(None)
             
             finally:
                 self._queue.task_done()
