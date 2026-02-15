@@ -47,3 +47,6 @@ set_target_properties(llama-android PROPERTIES
     LINK_FLAGS_RELEASE "-s"
 )
 
+# Fix for 16KB page alignment (required for some newer Android devices)
+target_link_options(llama-android PRIVATE "-Wl,-z,max-page-size=16384")
+
