@@ -18,8 +18,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--iters", type=int, default=1500)
 args_parsed = parser.parse_args()
 
+print(f'Version: {torch.__version__}') 
+print(f'CUDA available: {torch.cuda.is_available()}') 
+print(f'CUDA version: {torch.version.cuda}')
+
 if not torch.cuda.is_available():
     raise RuntimeError("CUDA not available")
+    
 
 BASE_MODEL_DIR = "models/CUDA_llama-3.2-3b-instruct"
 DATA_DIR = "data/conversations_cleaned"
