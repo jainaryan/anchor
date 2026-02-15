@@ -1,110 +1,79 @@
-
 import torch
-import re
 from transformers import AutoTokenizer
+import os
 
+# Use the same model as the pipeline
 BASE_MODEL_DIR = "models/CUDA_llama-3.2-3b-instruct"
 
-def debug_masking():
-    print(f"Loading tokenizer from {BASE_MODEL_DIR}...")
-    tokenizer = AutoTokenizer.from_pretrained(
-        BASE_MODEL_DIR, 
-        local_files_only=True, 
-        fix_mistral_regex=True
-    )
-    
-    # 1. Sample input representing Chunker output
-    raw_text = "<|user|> Help me <|assistant|> Sure thing <|user|> Thanks <|assistant|> You're welcome"
-    print(f"\n[Input Raw Text]:\n{raw_text!r}\n")
-    
-    # --- LOGIC FROM CUDA_train_qlora.py ---
-    
-    formatted_texts = []
-    
-    # Parse back to messages
-    conversation = []
-    parts = re.split(r"(<\|user\|>|<\|assistant\|>)", raw_text)
-    role = None
-    for p in parts:
-        p = p.strip()
-        if p == "<|user|>":
-            role = "user"
-        elif p == "<|assistant|>":
-            role = "assistant"
-        elif role and p:
-            conversation.append({"role": role, "content": p})
-            
-    print("[Parsed Conversation]:")
-    for msg in conversation:
-        print(f"  {msg}")
-        
-    # Apply Template
-    formatted = tokenizer.apply_chat_template(
-        conversation, 
-        tokenize=False, 
-        add_generation_prompt=False
-    )
-    print(f"\n[Templated Text]:\n{formatted!r}\n")
-    
-    # Tokenize
-    tokenized = tokenizer(
-        [formatted],
-        truncation=True,
-        max_length=2048,
-        padding=False,
-        return_offsets_mapping=True,
-        add_special_tokens=False
-    )
-    
-    input_ids = tokenized["input_ids"][0]
-    offsets = tokenized["offset_mapping"][0]
-    labels = list(input_ids)
-    
-    # Mask Init
-    for j in range(len(labels)):
-        labels[j] = -100
-        
-    # Pattern Match
-    # Matches: <|start_header_id|>assistant<|end_header_id|>\n\n(AGENTS RESPONSE)<|eot_id|>
-    # Capture group 1 is content.
-    # We want to unmask content + EOT.
-    # regex matches header...content...eot.
-    # m.start(1) is start of content.
-    # m.end(0) is end of the match (which includes EOT).
-    pattern = r"<\|start_header_id\|>assistant<\|end_header_id\|>\n\n(.*?)(?:<\|eot_id\|>|$)"
-    
-    assistant_ranges = []
-    for m in re.finditer(pattern, formatted, re.DOTALL):
-        # Unmask from start of content to end of EOT
-        assistant_ranges.append((m.start(1), m.end(0)))
-        print(f"  [Found Turn]: {m.group(1)!r} (Length: {m.end(0)-m.start(1)})")
+tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_DIR)
 
-    # Apply Logic
-    for j, (start, end) in enumerate(offsets):
-        for a_start, a_end in assistant_ranges:
-            if start >= a_start and end <= a_end and start < end:
+# Sample Multi-turn Conversation
+sample_conv = [
+    {"role": "user", "content": "Hello, I am feeling sad today."},
+    {"role": "assistant", "content": "I'm so sorry to hear that. What's been on your mind?"},
+    {"role": "user", "content": "Just a lot of work stress."},
+    {"role": "assistant", "content": "Work can be really overwhelming. Can you tell me more about it?"}
+]
+
+# Apply Template
+formatted = tokenizer.apply_chat_template(
+    sample_conv, 
+    tokenize=False, 
+    add_generation_prompt=False
+)
+
+print("--- Formatted Text ---")
+print(formatted)
+print("-" * 20)
+
+# Tokenize
+tokenized = tokenizer(
+    formatted,
+    truncation=True,
+    max_length=2048,
+    padding=False,
+    return_offsets_mapping=True,
+    add_special_tokens=False
+)
+
+input_ids = tokenized["input_ids"]
+offsets = tokenized["offset_mapping"]
+labels = [-100] * len(input_ids)
+
+header_token = "<|start_header_id|>assistant<|end_header_id|>\n\n"
+eot_token = "<|eot_id|>"
+
+search_start = 0
+while True:
+    start_idx = formatted.find(header_token, search_start)
+    if start_idx == -1:
+        break
+    
+    content_start = start_idx + len(header_token)
+    
+    end_idx = formatted.find(eot_token, content_start)
+    if end_idx == -1:
+        content_end = len(formatted)
+    else:
+        content_end = end_idx + len(eot_token)
+    
+    for j, (tok_start, tok_end) in enumerate(offsets):
+        if tok_start >= content_start and tok_end <= content_end:
+            if tok_start < tok_end:
                 labels[j] = input_ids[j]
-                break
-                
-    # EOS Check logic
-    if labels[-1] == -100:
-         if input_ids[-1] == tokenizer.eos_token_id or input_ids[-1] == 128009:
-             labels[-1] = input_ids[-1]
-             print("  [EOS Logic]: Forcing unmask of last token (EOS)")
+    
+    search_start = content_end
+    if end_idx == -1: break
 
-    # --- VERIFICATION ---
-    print("\n[Token Analysis]:")
-    for idx, (tid, lid) in enumerate(zip(input_ids, labels)):
-        token_str = tokenizer.decode([tid])
-        lbl_str = tokenizer.decode([lid]) if lid != -100 else "<MASKED>"
-        
-        # Check integrity
-        status = "✅"
-        if "Sure thing" in token_str and lid == -100: status = "❌ MISSED CONTENT"
-        if "Help me" in token_str and lid != -100: status = "❌ LEAKED USER"
-        if ("<|eot_id|>" in token_str) and lid == -100: status = "⚠️ MASKED EOT (Check if intended)"
-        
-        print(f"{idx:3} | {tid:6} | {token_str:20} | {lbl_str:20} | {status}")
+# Print Verification
+print("\n--- Masking Audit Results ---")
+for i, (tid, label) in enumerate(zip(input_ids, labels)):
+    token_str = tokenizer.decode([tid])
+    status = "UNMASKED" if label != -100 else "MASKED"
+    # Escaping special chars for display
+    display_token = token_str.replace("\n", "\\n")
+    print(f"Token {i:3}: ID {tid:6} | Label {label:6} | {status:8} | '{display_token}'")
 
-if __name__ == "__main__":
-    debug_masking()
+print("-" * 20)
+print(f"Total Tokens: {len(input_ids)}")
+print(f"Unmasked Tokens: {sum(1 for l in labels if l != -100)}")

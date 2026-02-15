@@ -9,7 +9,7 @@ Outputs:
   ./data/mindmate_train.jsonl
   ./data/mindmate_val.jsonl
 
-Format: each line is {"text": "<|user|> ...\n<|assistant|> ..."}
+Format: each line is {"conversations": [{"role": "user", "content": "..."}, ...]}
 """
 
 import os
@@ -21,6 +21,7 @@ from pathlib import Path
 import pandas as pd
 from datasets import load_dataset
 from pathlib import Path
+import re
 
 # --------------------------
 # Repro + paths
@@ -31,7 +32,7 @@ random.seed(SEED)
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 
-OUT_DIR = PROJECT_ROOT / "data" / "new_raw_data"
+OUT_DIR = PROJECT_ROOT / "data" / "conversations_raw"
 extra_path = PROJECT_ROOT / "data" / "additional_training_samples.jsonl"
 
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -46,14 +47,14 @@ VAL_MIN   = 300    # at least this many per source (capped by available)
 MAX_TOTAL = None
 
 def to_example(turns: List[Tuple[str, str]]) -> dict:
-    """Pack [(role,text), ...] into one SFT example with role tags."""
-    lines = []
+    """Pack [(role,text), ...] into one SFT example with structured messages."""
+    conversations = []
     for role, text in turns:
         text = (text or "").strip()
         if not text:
             continue
-        lines.append(("<|user|> " if role == "user" else "<|assistant|> ") + text)
-    return {"text": "\n".join(lines)}
+        conversations.append({"role": role, "content": text})
+    return {"conversations": conversations}
 
 # =========================================================
 # ESConv (robust loader; many snapshots present it as a 'text' blob)
@@ -288,8 +289,19 @@ def main():
             except Exception:
                 # skip bad lines
                 continue
-            if "text" in obj and isinstance(obj["text"], str):
-                extra.append({"text": obj["text"]})
+            if "conversations" in obj and isinstance(obj["conversations"], list):
+                extra.append({"conversations": obj["conversations"]})
+            elif "text" in obj and isinstance(obj["text"], str):
+                # Fallback for old format if mixed in
+                parts = re.split(r"(<\|user\|>|<\|assistant\|>)", obj["text"])
+                conv = []
+                role = "user"
+                for p in parts:
+                    p = p.strip()
+                    if p == "<|user|>": role = "user"
+                    elif p == "<|assistant|>": role = "assistant"
+                    elif p: conv.append({"role": role, "content": p})
+                extra.append({"conversations": conv})
 
     print(f"Loaded {len(extra)} extra training samples from {extra_path}")
     train.extend(extra)

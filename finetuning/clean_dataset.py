@@ -32,9 +32,9 @@ import os
 import re
 from typing import List, Tuple, Iterable
 
-# Role tags (must match your make_dataset_mindmate.py)
-TAG_USER = "<|user|>"
-TAG_ASSIST = "<|assistant|>"
+# Role mapping (must match your build_dataset.py)
+ROLE_USER = "user"
+ROLE_ASSIST = "assistant"
 
 # ESConv-style token artifacts to restore back to normal punctuation.
 PUNCT_MAP = {
@@ -45,7 +45,6 @@ PUNCT_MAP = {
     "_quote_": '"',
     "_apos_": "'",
     "_dash_": "-",
-    # Add more tokens here if you encounter them in samples
 }
 
 
@@ -56,135 +55,62 @@ def clean_text(s: str) -> str:
     """HTML-unescape, strip HTML tags, restore ESConv tokens, normalize spacing."""
     if not s:
         return s
-    # Convert HTML entities (&amp;, &nbsp;, &quot;, etc.)
     s = html.unescape(s)
-
-    # Remove any HTML tags like <p>, <a href=...>, <br>, etc.
     s = re.sub(r"<[^>]+>", "", s)
-
-    # Restore ESConv token artifacts back to punctuation
     for k, v in PUNCT_MAP.items():
         s = s.replace(k, v)
-
-    # Collapse runs of spaces/tabs and strip line ends
     s = re.sub(r"[ \t]+", " ", s).strip()
-
-    # Tighten spaces before punctuation: "hello !" -> "hello!"
     s = re.sub(r"\s+([,.\?!:;])", r"\1", s)
-
     return s
 
 
 # ---------------------------
-# Parsing / Serialization
+# Optional flows
 # ---------------------------
-def parse_tagged_lines(block: str) -> List[Tuple[str, str]]:
-    """
-    Parse a single JSONL 'text' block into [(role, content), ...].
+def ensure_assistant_last(messages: List[dict]) -> List[dict]:
+    """Drop trailing user lines so each sample ends on assistant."""
+    last_assist_idx = None
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == ROLE_ASSIST:
+            last_assist_idx = i
+            break
 
-    IMPORTANT: We do NOT change roles here. We just read what’s present.
-    """
-    turns: List[Tuple[str, str]] = []
-    for raw in block.splitlines():
-        line = raw.strip()
-        if not line:
+    if last_assist_idx is None:
+        return messages
+
+    return messages[: last_assist_idx + 1]
+
+
+def drop_min_turns(messages: List[dict], min_turns: int) -> bool:
+    """Returns True if the example should be DROPPED due to low turn count."""
+    tagged = sum(1 for m in messages if m.get("role") in {ROLE_USER, ROLE_ASSIST})
+    return tagged < min_turns
+
+
+def merge_consecutive_user_turns(messages: List[dict]) -> List[dict]:
+    """Merges adjacent user turns into a single user turn."""
+    if not messages:
+        return []
+    
+    merged = []
+    for m in messages:
+        role = m.get("role")
+        text = m.get("content", "")
+        if not merged:
+            merged.append({"role": role, "content": text})
             continue
-
-        if line.startswith(TAG_USER):
-            turns.append(("user", line[len(TAG_USER):].strip()))
-        elif line.startswith(TAG_ASSIST):
-            turns.append(("assistant", line[len(TAG_ASSIST):].strip()))
+        
+        last = merged[-1]
+        if role == ROLE_USER and last["role"] == ROLE_USER:
+            last["content"] = f"{last['content']}\n{text}"
         else:
-            # A line without a tag is unexpected given your generator, but keep it as unknown.
-            # We store it as role="" and will preserve content during serialization.
-            turns.append(("", line))
-    return turns
-
-
-def serialize_tagged_lines(turns: List[Tuple[str, str]]) -> str:
-    """
-    Convert [(role,text),...] back to a multi-line tagged string.
-
-    NOTE: We DO NOT change roles here. Whatever role is present is what we write.
-    Unknown role "" (empty) lines are written back *as-is* (no tag added).
-    """
-    out_lines: List[str] = []
-    for role, text in turns:
-        if role == "user":
-            out_lines.append(f"{TAG_USER} {text}")
-        elif role == "assistant":
-            out_lines.append(f"{TAG_ASSIST} {text}")
-        else:
-            # Unknown role: write raw line without adding a tag
-            out_lines.append(text)
-    return "\n".join(out_lines)
+            merged.append({"role": role, "content": text})
+    return merged
 
 
 # ---------------------------
 # Optional utilities
 # ---------------------------
-def ensure_assistant_last(turns: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
-    """
-    If the last tagged line is <|user|>, drop trailing user lines until the last
-    tagged line is an <|assistant|>, if such a line exists. This does NOT alter
-    any remaining content or roles; it only removes trailing user lines.
-    """
-    # Find last assistant index
-    last_assist_idx = None
-    for i in range(len(turns) - 1, -1, -1):
-        if turns[i][0] == "assistant":
-            last_assist_idx = i
-            break
-
-    if last_assist_idx is None:
-        # No assistant at all -> return as-is (do not invent/normalize roles)
-        return turns
-
-    # If the final turn is already assistant, nothing to do
-    if turns[-1][0] == "assistant":
-        return turns
-
-    # Otherwise, cut at the last assistant turn (drop trailing user lines)
-    return turns[: last_assist_idx + 1]
-
-
-def drop_min_turns(turns: List[Tuple[str, str]], min_turns: int) -> bool:
-    """
-    Returns True if the example should be DROPPED because it has fewer than
-    min_turns tagged lines (user/assistant). Unknown-role lines don't count.
-    """
-    tagged = sum(1 for r, _ in turns if r in {"user", "assistant"})
-    return tagged < min_turns
-
-
-def token_count(s: str) -> int:
-    """Very rough token count by whitespace; good enough for quick stats."""
-    return len(s.split())
-
-
-def merge_consecutive_user_turns(turns: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
-    """
-    Merges adjacent user turns into a single user turn with newline-separated content.
-    Sequence: (user, A), (user, B), (assistant, C) -> (user, A\nB), (assistant, C)
-    """
-    if not turns:
-        return []
-    
-    merged = []
-    for role, text in turns:
-        if not merged:
-            merged.append((role, text))
-            continue
-        
-        last_role, last_text = merged[-1]
-        
-        if role == "user" and last_role == "user":
-            # Merge with previous user turn
-            new_text = f"{last_text}\n{text}"
-            merged[-1] = (last_role, new_text)
-        else:
-            merged.append((role, text))
-    return merged
 
 # ---------------------------
 # File processing
@@ -222,54 +148,41 @@ def process_file(
             except Exception:
                 continue
 
-            raw = obj.get("text", "")
-            if not raw:
+            msgs = obj.get("conversations", [])
+            if not msgs:
                 continue
 
-            # Save a tiny preview of the raw record (for console peek)
-            if len(samples_before) < sample_peek:
-                samples_before.append(raw[:300])
-
-            # Parse tags (no role normalization)
-            turns = parse_tagged_lines(raw)
-
-            # Clean ONLY the text content; leave roles untouched
+            # Clean ONLY the text content
             cleaned = []
-            for r, t in turns:
-                ct = clean_text(t)
-                if ct:
-                    cleaned.append((r, ct))
-            turns = cleaned
+            for m in msgs:
+                m["content"] = clean_text(m.get("content", ""))
+                if m["content"]:
+                    cleaned.append(m)
+            msgs = cleaned
 
-            # Optional: merge consecutive user turns
             if merge_user:
-                turns = merge_consecutive_user_turns(turns)
+                msgs = merge_consecutive_user_turns(msgs)
 
-            # Optional: ensure we end on an assistant reply (just drops trailing user lines)
             if ensure_assistant_final:
-                turns = ensure_assistant_last(turns)
+                msgs = ensure_assistant_last(msgs)
 
-            # Optional: drop examples with too few tagged turns (user/assistant lines)
-            if min_turns_to_keep > 0 and drop_min_turns(turns, min_turns_to_keep):
+            if min_turns_to_keep > 0 and drop_min_turns(msgs, min_turns_to_keep):
                 continue
 
-            # Serialize back
-            serialized = serialize_tagged_lines(turns)
-
-            # Optional: deduplicate exact matches across this file
+            # dedupe check (simple stringify)
+            serialized = json.dumps(msgs, ensure_ascii=False)
             if dedup:
                 if serialized in uniq_guard:
                     continue
                 uniq_guard.add(serialized)
 
-            # Write out
-            fout.write(json.dumps({"text": serialized}, ensure_ascii=False) + "\n")
+            fout.write(json.dumps({"conversations": msgs}, ensure_ascii=False) + "\n")
             kept += 1
 
             # Stats
-            tagged_only = [t for r, t in turns if r in {"user", "assistant"}]
+            tagged_only = [m for m in msgs if m.get("role") in {ROLE_USER, ROLE_ASSIST}]
             turn_counts.append(len(tagged_only))
-            token_counts.append(token_count(serialized))
+            token_counts.append(len(serialized.split()))
 
             # Save tiny preview of cleaned record
             if len(samples_after) < sample_peek:
