@@ -36,21 +36,18 @@ FINETUNING_DIR = PROJECT_ROOT / "finetuning"
 
 # Data dirs
 DATA_DIR = PROJECT_ROOT / "data"
-RAW_DATA_DIR = DATA_DIR / "new_raw_data"
-CLEAN_DATA_DIR = DATA_DIR / "cleaned_data"
-CHUNK_DATA_DIR = CLEAN_DATA_DIR / "chunked_3072"
+# Data dirs
+DATA_DIR = PROJECT_ROOT / "data"
+RAW_DATA_DIR = DATA_DIR / "conversations_raw"
+CLEAN_DATA_DIR = DATA_DIR / "conversations_cleaned"
 
 # Raw data filenames (output of build_dataset.py)
 RAW_TRAIN = RAW_DATA_DIR / "mindmate_train.jsonl"
 RAW_VAL = RAW_DATA_DIR / "mindmate_val.jsonl"
 
 # Clean data filenames (output of clean_dataset.py)
-CLEAN_TRAIN = CLEAN_DATA_DIR / "mindmate_train_clean.jsonl"
-CLEAN_VAL = CLEAN_DATA_DIR / "mindmate_val_clean.jsonl"
-
-# Chunked files (output of chunk.py)
-CHUNK_TRAIN = CHUNK_DATA_DIR / "train.jsonl"
-CHUNK_VAL   = CHUNK_DATA_DIR / "valid.jsonl"
+CLEAN_TRAIN = CLEAN_DATA_DIR / "mindmate_train.jsonl"
+CLEAN_VAL = CLEAN_DATA_DIR / "mindmate_val.jsonl"
 
 # Base model dir for tokenizer + MLX
 # BASE_MODEL_DIR = PROJECT_ROOT / "mlx_llama32_3b"                      #MAC
@@ -171,52 +168,6 @@ def step_clean_dataset():
     print(f"[clean_dataset] #clean val samples  : {val_count}")
 
 
-def step_chunk_dataset():
-    """
-    Step 3: chunk cleaned JSONL into 3072-token windows,
-    stored under data/cleaned_data/chunked_3072/.
-    """
-    CHUNK_DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    script = script_path("CUDA_chunk.py")
-
-    cmd_train = [
-        sys.executable,
-        str(script),
-        "--in", str(CLEAN_TRAIN),
-        "--out", str(CHUNK_TRAIN),
-        "--tokenizer", str(BASE_MODEL_DIR),
-        "--max-len", str(MAX_LEN),
-        "--overlap", str(OVERLAP),
-    ]
-
-    cmd_val = [
-        sys.executable,
-        str(script),
-        "--in",
-        str(CLEAN_VAL),
-        "--out",
-        str(CHUNK_VAL),
-        "--tokenizer",
-        str(BASE_MODEL_DIR),
-        "--max-len",
-        str(MAX_LEN),
-        "--overlap",
-        str(OVERLAP),
-    ]
-
-    run(cmd_train, cwd=PROJECT_ROOT)
-    run(cmd_val, cwd=PROJECT_ROOT)
-
-    if not CHUNK_TRAIN.exists() or not CHUNK_VAL.exists():
-        raise FileNotFoundError(
-            f"[chunk_dataset] Expected {CHUNK_TRAIN} and {CHUNK_VAL} but did not find them."
-        )
-    print(
-        "[chunk_dataset] Done. Chunked files:\n"
-        f"  {CHUNK_TRAIN}\n"
-        f"  {CHUNK_VAL}"
-    )
 
 def step_train_qlora():
     """
@@ -290,7 +241,6 @@ def main():
 
     step_build_dataset()
     step_clean_dataset()
-    step_chunk_dataset()
     step_train_qlora()
 
     print("\nAll steps completed successfully.\n")

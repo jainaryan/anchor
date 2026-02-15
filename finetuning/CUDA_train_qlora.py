@@ -6,6 +6,7 @@ from transformers import (
     TrainingArguments,
     Trainer,
     DataCollatorForLanguageModeling,
+    BitsAndBytesConfig,
 )
 from peft import LoraConfig, get_peft_model
 import bitsandbytes as bnb
@@ -21,20 +22,24 @@ if not torch.cuda.is_available():
     raise RuntimeError("CUDA not available")
 
 BASE_MODEL_DIR = "models/CUDA_llama-3.2-3b-instruct"
-DATA_DIR = "data/cleaned_data/chunked_3072"
+DATA_DIR = "data/conversations_cleaned"
 OUT_DIR = "adapters/CUDA_mindmate_llama32b"
 
 tokenizer = AutoTokenizer.from_pretrained(
     BASE_MODEL_DIR,
-    use_fast=False,
-    fix_mistral_regex=True,
 )
 tokenizer.pad_token = tokenizer.eos_token
 
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_use_double_quant=True,
+)
+
 model = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL_DIR,
-    load_in_4bit=True,
-    torch_dtype=torch.float16,
+    quantization_config=bnb_config,
     device_map="auto",
 )
 
@@ -52,50 +57,36 @@ model.enable_input_require_grads()
 dataset = load_dataset(
     "json",
     data_files={
-        "train": f"{DATA_DIR}/train.jsonl",
-        "validation": f"{DATA_DIR}/valid.jsonl",
+        "train": f"{DATA_DIR}/mindmate_train.jsonl",
+        "validation": f"{DATA_DIR}/mindmate_val.jsonl",
     },
 )
 
 import re
 
 def tokenize(batch):
-    # This function implements "Prompt-Loss Masking" for multi-turn conversations
-    # using Llama 3 native chat templates to prevent hallucinations.
+    # This function implements robust "Assistant-Only Loss Masking"
+    # using structured 'conversations' and Llama 3 native templates.
     
     formatted_texts = []
+    conversations = batch["conversations"]
     
-    # 1. Convert text to chat format and apply template
-    for text in batch["text"]:
-        # Parse our flat text back into a conversation list
-        conversation = []
-        parts = re.split(r"(<\|user\|>|<\|assistant\|>)", text)
-        role = None
-        for p in parts:
-            p = p.strip()
-            if p == "<|user|>":
-                role = "user"
-            elif p == "<|assistant|>":
-                role = "assistant"
-            elif role and p:
-                conversation.append({"role": role, "content": p})
-        
-        # Apply Llama 3 template securely
+    for conv in conversations:
+        # conv is already a list of {"role": "...", "content": "..."}
         formatted = tokenizer.apply_chat_template(
-            conversation, 
+            conv, 
             tokenize=False, 
             add_generation_prompt=False
         )
         formatted_texts.append(formatted)
 
-    # 2. Tokenize the NEW formatted text
     tokenized = tokenizer(
         formatted_texts,
         truncation=True,
         max_length=2048,
         padding=False,
         return_offsets_mapping=True,
-        add_special_tokens=False # Template adds BOS already
+        add_special_tokens=False
     )
     
     all_labels = []
@@ -104,46 +95,56 @@ def tokenize(batch):
         offsets = tokenized["offset_mapping"][i]
         labels = list(input_ids)
         
-        # Mask everything by default
+        # 1. Start by masking everything
         for j in range(len(labels)):
             labels[j] = -100
         
-        # Unmask assistant turns using Llama 3 header structure
-        # Matches: <|start_header_id|>assistant<|end_header_id|>\n\n(AGENTS RESPONSE)<|eot_id|>
-        pattern = r"<\|start_header_id\|>assistant<\|end_header_id\|>\n\n(.*?)(?:<\|eot_id\|>|$)"
+        # 2. Identify Assistant Response Boundaries
+        # Llama 3 template: <|start_header_id|>assistant<|end_header_id|>\n\n(CONTENT)<|eot_id|>
+        # We want to unmask everything BETWEEN <|end_header_id|>\n\n and <|eot_id|>
         
-        assistant_ranges = []
-        for m in re.finditer(pattern, text, re.DOTALL):
-            assistant_ranges.append((m.start(1), m.end(1)))
-
-        # Unmask tokens that fall within assistant ranges
-        for j, (start, end) in enumerate(offsets):
-            for a_start, a_end in assistant_ranges:
-                if start >= a_start and end <= a_end and start < end:
-                    labels[j] = input_ids[j]
-                    break
+        header_token = "<|start_header_id|>assistant<|end_header_id|>\n\n"
+        eot_token = "<|eot_id|>"
         
-        # ALWAYS Train on the EOS token (last token in a sequence should be EOS)
-        if labels[-1] == -100:
-             # Check if last token is indeed EOS
-             if input_ids[-1] == tokenizer.eos_token_id or input_ids[-1] == 128009:
-                 labels[-1] = input_ids[-1]
+        search_start = 0
+        while True:
+            start_idx = text.find(header_token, search_start)
+            if start_idx == -1:
+                break
+            
+            # The actual content starts AFTER the header tokens
+            content_start = start_idx + len(header_token)
+            
+            end_idx = text.find(eot_token, content_start)
+            if end_idx == -1:
+                # Content goes to end of string if EOT is missing
+                content_end = len(text)
+            else:
+                # Include the EOT token in the loss calculation so model learns to stop
+                content_end = end_idx + len(eot_token)
+            
+            # Unmask tokens whose character offsets fall within this range
+            for j, (tok_start, tok_end) in enumerate(offsets):
+                if tok_start >= content_start and tok_end <= content_end:
+                    if tok_start < tok_end: # valid token
+                        labels[j] = input_ids[j]
+            
+            search_start = content_end
+            if end_idx == -1: break
 
         all_labels.append(labels)
         
     tokenized["labels"] = all_labels
-    tokenized["input_ids"] = tokenized["input_ids"] # ensure list of lists
     del tokenized["offset_mapping"]
     return tokenized
 
-dataset = dataset.map(tokenize, batched=True, remove_columns=["text"])
+dataset = dataset.map(tokenize, batched=True, remove_columns=["conversations"])
 
 args = TrainingArguments(
     output_dir=OUT_DIR,
-    overwrite_output_dir=True,
     per_device_train_batch_size=1,
     per_device_eval_batch_size=1,
-    gradient_accumulation_steps=1,
+    gradient_accumulation_steps=4,
     learning_rate=3e-5,
     max_steps=args_parsed.iters,
     logging_steps=10,
@@ -153,6 +154,9 @@ args = TrainingArguments(
     fp16=True,
     gradient_checkpointing=True,
     report_to="none",
+    warmup_ratio=0.03,
+    lr_scheduler_type="cosine",
+    optim="paged_adamw_32bit",
 )
 
 

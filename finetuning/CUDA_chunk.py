@@ -134,8 +134,6 @@ def main():
     tok_src = args.tokenizer or args.model_dir
     tok = AutoTokenizer.from_pretrained(
     tok_src,
-    use_fast=False,
-    fix_mistral_regex=True,
 )
 
     total = overs = written = 0

@@ -1,9 +1,11 @@
 import json
 import torch
 import os
+import time
 from datetime import datetime
 from pathlib import Path
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from threading import Thread
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, TextIteratorStreamer
 from peft import PeftModel
 
 # ========= CONFIG: EDIT HERE IF NEEDED =========
@@ -20,9 +22,12 @@ ADAPTER_DIR = PROJECT_ROOT / "adapters" / "CUDA_mindmate_llama32b"
 PROMPT_PATH = PROJECT_ROOT / "system_prompt.txt"
 
 # Generation settings
-TEMPERATURE = 0.7
+
+TEMPERATURE = 0.4  
 TOP_P = 0.9
+TOP_K = 50         
 MAX_NEW_TOKENS = 256
+REPETITION_PENALTY = 1.25 
 
 # Conversation logs directory
 LOG_DIR = PROJECT_ROOT / "logs"
@@ -30,14 +35,18 @@ LOG_DIR = PROJECT_ROOT / "logs"
 # ========= END CONFIG =========
 
 def load_system_prompt():
-    try:
-        with PROMPT_PATH.open("r", encoding="utf-8") as f:
-            system = f.read().strip()
-        print(f"[info] loaded system prompt from {PROMPT_PATH}")
-        return system
-    except FileNotFoundError:
-        print(f"[warn] system prompt not found at {PROMPT_PATH}.")
-        return ""
+    encodings = ["utf-8-sig", "utf-16", "utf-8", "cp1252"]
+    for enc in encodings:
+        try:
+            with PROMPT_PATH.open("r", encoding=enc) as f:
+                system = f.read().strip()
+            print(f"[info] loaded system prompt from {PROMPT_PATH} (encoding: {enc})")
+            return system
+        except (UnicodeDecodeError, FileNotFoundError):
+            continue
+    
+    print(f"[warn] system prompt not found or undecodable at {PROMPT_PATH}. Using fallback.")
+    return "You are MindMate, a helpful and empathetic AI assistant specialized in emotional support and conversation."
 
 def save_conversation(history: list, log_dir: Path):
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -60,7 +69,6 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         str(MODEL_DIR), 
         local_files_only=True,
-        fix_mistral_regex=True
     )
     tokenizer.pad_token = tokenizer.eos_token
     
@@ -74,7 +82,7 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(
         str(MODEL_DIR),
         quantization_config=quant_config,
-        device_map={"": 0},
+        device_map="cuda", # Changed from {"":0} to "cuda"
         torch_dtype=torch.float16,
         low_cpu_mem_usage=True,
         attn_implementation="sdpa",
@@ -83,7 +91,7 @@ def main():
     model.config.use_cache = True
     
     print(f"[info] loading adapters from: {ADAPTER_DIR}")
-    model = PeftModel.from_pretrained(model, str(ADAPTER_DIR), adapter_name="mindmate")
+    model = PeftModel.from_pretrained(model, str(ADAPTER_DIR))
     model.eval()
 
     system = load_system_prompt()
@@ -120,28 +128,48 @@ def main():
         import time
         t0 = time.time()
         inputs = tokenizer(prompt, return_tensors="pt").to(device)
-        t1 = time.time()
-        print(f"[debug] Tokenization took: {t1 - t0:.4f}s")
-        
-        with torch.no_grad():
-            output_ids = model.generate(
-                **inputs,
-                max_new_tokens=MAX_NEW_TOKENS,
-                temperature=TEMPERATURE,
-                top_p=TOP_P,
-                do_sample=True,
-                eos_token_id=tokenizer.eos_token_id,
-                pad_token_id=tokenizer.eos_token_id,
-                repetition_penalty=1.2,
-                no_repeat_ngram_size=3,
-            )
-        t2 = time.time()
-        print(f"[debug] Generation took: {t2 - t1:.4f}s")
+        terminators = [
+            tokenizer.eos_token_id,
+            tokenizer.convert_tokens_to_ids("<|eot_id|>"),
+            128001,
+            128009
+        ]
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
-        new_tokens = output_ids[0][inputs['input_ids'].shape[1]:]
-        response = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        t1 = time.time()
         
-        print(f"\nMindmate: {response}\n")
+        streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
+        
+        generate_kwargs = dict(
+            **inputs,
+            max_new_tokens=MAX_NEW_TOKENS,
+            temperature=TEMPERATURE,
+            top_p=TOP_P,
+            top_k=TOP_K,
+            do_sample=True,
+            eos_token_id=terminators,
+            pad_token_id=tokenizer.eos_token_id,
+            repetition_penalty=REPETITION_PENALTY,
+            use_cache=True,
+            streamer=streamer,
+        )
+
+        thread = Thread(target=model.generate, kwargs=generate_kwargs)
+        thread.start()
+
+        print("\nMindmate: ", end="", flush=True)
+        response = ""
+        for new_text in streamer:
+            print(new_text, end="", flush=True)
+            response += new_text
+        print("\n")
+        
+        t2 = time.time()
+        # print(f"[debug] Generation took: {t2 - t1:.4f}s")
         history_list.append({"role": "assistant", "content": response})
         
         # History string is no longer needed as we use history_list directly
