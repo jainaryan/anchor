@@ -43,4 +43,5 @@ mlx_export/
 *.log
 web/chat_logs/
 web/user_profile.json
+android/serve_apk/*.gguf
 .env
