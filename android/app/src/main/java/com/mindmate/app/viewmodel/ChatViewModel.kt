@@ -10,6 +10,7 @@ import com.mindmate.app.model.ChatState
 import com.mindmate.app.model.ChatUiState
 import com.mindmate.app.model.Message
 import com.mindmate.app.model.MessageRole
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -245,17 +246,44 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             
             // Mark generation as complete
+            val finalResponse = fullResponse.trim()
             _uiState.update { state ->
                 val updatedMessages = state.messages.dropLast(1) + Message(
                     id = assistantMessage.id,
                     role = MessageRole.ASSISTANT,
-                    content = fullResponse.trim(),
+                    content = finalResponse,
                     isStreaming = false
                 )
                 state.copy(
                     messages = updatedMessages,
                     chatState = ChatState.Ready
                 )
+            }
+            
+            // Log conversation to file
+            logToDownloads(content, finalResponse)
+        }
+    }
+    
+    private fun logToDownloads(userMessage: String, assistantResponse: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                val logFile = File(downloadsDir, "mindmate_logs.txt")
+                
+                val timestamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                val logEntry = """
+                    [Time: $timestamp]
+                    User: $userMessage
+                    MindMate: $assistantResponse
+                    --------------------------------------------------
+                    
+                """.trimIndent()
+                
+                logFile.appendText(logEntry)
+                Log.d(TAG, "Logged chat to ${logFile.absolutePath}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to log chat", e)
             }
         }
     }
