@@ -1,0 +1,20 @@
+Review this therapy conversation.
+
+Evaluate:
+- Empathy (1-10)
+- Naturalness
+- Tone consistency
+- Over-advising?
+- Clichés?
+- Repetition?
+
+If quality < 8, rewrite entire conversation to improve it.
+
+Return only final improved JSON in same format:
+
+{
+  "conversations": [
+    {"role": "user", "content": "..."},
+    {"role": "assistant", "content": "..."}
+  ]
+}

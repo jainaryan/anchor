@@ -1,0 +1,17 @@
+Generate a unique, highly specific emotional scenario for a therapeutic conversation. 
+Avoid clichés. Surprise me with a complex, realistic situation that involves nuanced human emotions.
+
+RECENTLY GENERATED (DO NOT REPEAT):
+{RECENT_CONTEXTS}
+
+Return JSON only:
+{
+  "core_emotion": "Primary underlying emotion (e.g., 'existential dread', 'anticipatory grief')",
+  "context": "Specific life situation providing background",
+  "complicating_factor": "A detail or relationship dynamic that makes this unique",
+  "intensity": "mild | moderate | severe | very severe",
+  "personality": "A specific trait influencing expression",
+  "conversation_length": 6-12
+}
+
+No trauma, no suicide, no self-harm.
