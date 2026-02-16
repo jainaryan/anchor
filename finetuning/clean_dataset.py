@@ -122,6 +122,7 @@ def process_file(
     min_turns_to_keep: int = 0,
     dedup: bool = False,
     merge_user: bool = False,
+    drop_no_assist: bool = False,
     sample_peek: int = 2,
 ):
     """
@@ -231,6 +232,8 @@ def main():
                     help="If set, drop exact duplicate examples within each file.")
     ap.add_argument("--merge-consecutive-user", action="store_true",
                     help="If set, merge consecutive user turns into a single turn separated by newline.")
+    ap.add_argument("--drop-no-assistant", action="store_true",
+                    help="If set, drop examples that have ZERO assistant turns.")
 
     args = ap.parse_args()
 
@@ -241,6 +244,7 @@ def main():
         min_turns_to_keep=args.drop_min_turns,
         dedup=args.dedup,
         merge_user=args.merge_consecutive_user,
+        drop_no_assist=args.drop_no_assistant,
     )
     process_file(
         inp_path=args.val_in,
@@ -249,6 +253,7 @@ def main():
         min_turns_to_keep=args.drop_min_turns,
         dedup=args.dedup,
         merge_user=args.merge_consecutive_user,
+        drop_no_assist=args.drop_no_assistant,
     )
 
 

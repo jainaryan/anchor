@@ -26,8 +26,10 @@ import re
 # --------------------------
 # Repro + paths
 # --------------------------
-SEED = 13
+SEED = 10
+rng = random.Random(SEED)
 random.seed(SEED)
+
 
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
@@ -240,12 +242,13 @@ def stratified_split(rows: List[dict], ratio: float, val_min: int):
 
     train, val = [], []
     for src, lst in by_src.items():
-        random.shuffle(lst)
+        rng.shuffle(lst)
         v = min(len(lst), max(val_min, int(len(lst) * ratio)))
         val.extend(lst[:v])
         train.extend(lst[v:])
-    random.shuffle(train)
-    random.shuffle(val)
+    rng.shuffle(train)
+    rng.shuffle(val)
+
     # drop tag
     for r in train: r.pop("_src", None)
     for r in val:   r.pop("_src", None)
@@ -255,25 +258,24 @@ def stratified_split(rows: List[dict], ratio: float, val_min: int):
 def main():
     # ----- Load each dataset -----
     esconv_rows = tag_rows(load_esconv(), "ESConv")
-    #ed_rows     = tag_rows(load_empathetic_dialogues(), "ED")
     cc_rows     = tag_rows(load_counselchat(), "CounselChat")
-
-    # print(f"Loaded: ESConv={len(esconv_rows)}, ED={len(ed_rows)}, CounselChat={len(cc_rows)}")
-    print(f"Loaded: ESConv={len(esconv_rows)}, CounselChat={len(cc_rows)}")
-    # ----- Optional global cap (keeps relative proportions) -----
-    # all_rows = esconv_rows + ed_rows + cc_rows
-    all_rows = esconv_rows + cc_rows
+    ed_rows     = tag_rows(load_empathetic_dialogues(), "ED")
+    print(f"Loaded: ESConv={len(esconv_rows)}, ED={len(ed_rows)}, CounselChat={len(cc_rows)}")
+    # print(f"Loaded: ESConv={len(esconv_rows)}, CounselChat={len(cc_rows)}")
+    all_rows = esconv_rows + ed_rows + cc_rows
+    # all_rows = esconv_rows + cc_rows
     if MAX_TOTAL is not None and len(all_rows) > MAX_TOTAL:
-        random.shuffle(all_rows)
+        rng.shuffle(all_rows)
         all_rows = all_rows[:MAX_TOTAL]
+
         # rebuild per-source lists after cap
         esconv_rows = [r for r in all_rows if r["_src"] == "ESConv"]
-        # ed_rows     = [r for r in all_rows if r["_src"] == "ED"]
+        ed_rows     = [r for r in all_rows if r["_src"] == "ED"]
         cc_rows     = [r for r in all_rows if r["_src"] == "CounselChat"]
 
-    # all_rows = esconv_rows + ed_rows + cc_rows
-    all_rows = esconv_rows  + cc_rows
-
+    all_rows = esconv_rows + ed_rows + cc_rows
+    # all_rows = esconv_rows  + cc_rows
+ 
     # ----- Stratified split per source -----
     train, val = stratified_split(all_rows, VAL_RATIO, VAL_MIN)
 
@@ -305,7 +307,8 @@ def main():
 
     print(f"Loaded {len(extra)} extra training samples from {extra_path}")
     train.extend(extra)
-    random.shuffle(train)
+    rng.shuffle(train)
+
 
     # ----- Save -----
     train_path = os.path.join(OUT_DIR, "mindmate_train.jsonl")

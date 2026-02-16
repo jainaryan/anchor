@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anchor Chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="brand">
+                    <div class="logo-icon">
+                        <img src="anchor_logo.png" alt="Anchor Logo" class="logo-img">
+                    </div>
+                    <h1>Anchor</h1>
+                </div>
+
+                <button class="nav-item new-chat-btn" onclick="startNewChat()">
+                    <span class="icon">+</span> New Chat
+                </button>
+
+                <div class="nav-group">
+                    <div class="nav-label">
+                        <span class="icon">🕒</span> Recent
+                    </div>
+                    <div id="history-list" class="history-list">
+                        <!-- History items will be populated here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-bottom">
+                <button class="nav-item settings-btn" onclick="resetMemory()" title="Reset Memory">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
+                        <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+                    </svg>
+                    Settings (Reset)
+                </button>
+
+                <button class="nav-item journey-btn" onclick="openJourneyModal()" title="My Journey">
+                    <span class="icon">📈</span> My Journey
+                </button>
+
+                <div class="user-profile-mini">
+                    <div class="avatar-mini">A</div>
+                    <div class="user-info-mini">
+                        <span class="name">Guest</span>
+                        <span class="status">Free</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-interface">
+            <header class="chat-header">
+                <h2>Anchor</h2>
+                <button id="finish-btn" class="finish-btn" onclick="endSession()">Finish & Analyze</button>
+            </header>
+
+            <div id="chat-container" class="chat-container">
+                <div class="message ai-message">
+                    <div class="message-content">
+                        Hello! I'm MindMate, your empathetic companion. How are you feeling today?
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <button id="mic-btn" class="mic-btn" title="Speak">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.66 9 5v6c0 1.66 1.34 3 3 3z" />
+                            <path
+                                d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                        </svg>
+                    </button>
+                    <textarea id="user-input" placeholder="Type your message..." rows="1"></textarea>
+                    <button id="send-btn" disabled>
+                        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                        </svg>
+                    </button>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Quick Tools Floating Bar -->
+    <div class="quick-tools-fab">
+        <button class="tool-btn" onclick="toggleSidebar('breathing')" title="Breathing">💨</button>
+        <button class="tool-btn" onclick="toggleSidebar('grounding')" title="Grounding">⚓</button>
+        <button class="tool-btn" onclick="toggleSidebar('crisis')" title="Crisis Resources">🆘</button>
+    </div>
+
+    <!-- Quick Sidebar Panel -->
+    <aside id="quick-sidebar" class="quick-sidebar">
+        <!-- ... (existing content) ... -->
+        <div class="sidebar-header">
+            <h3 id="sidebar-title">Tool Name</h3>
+            <button class="close-sidebar" onclick="closeSidebar()">×</button>
+        </div>
+
+        <div class="sidebar-content">
+            <!-- Breathing Widget -->
+            <div id="widget-breathing" class="widget hidden">
+                <div class="breathing-container">
+                    <div class="breathing-circle">
+                        <span id="breath-text">Ready</span>
+                    </div>
+                </div>
+                <button id="breath-toggle" onclick="toggleBreathing()">Start</button>
+                <p class="breath-instruction">Follow the circle size.</p>
+            </div>
+
+            <!-- Grounding Widget -->
+            <div id="widget-grounding" class="widget hidden">
+                <div id="grounding-step-container">
+                    <!-- Steps injected via JS -->
+                </div>
+                <div class="grounding-controls">
+                    <button onclick="nextGroundingStep()">Next</button>
+                </div>
+            </div>
+
+            <!-- Crisis Widget -->
+            <div id="widget-crisis" class="widget hidden">
+                <ul class="crisis-list">
+                    <li>
+                        <strong>Suicide & Crisis Lifeline</strong>
+                        <a href="tel:988">988</a>
+                    </li>
+                    <li>
+                        <strong>Crisis Text Line</strong>
+                        <span>Text HOME to 741741</span>
+                    </li>
+                    <li>
+                        <strong>Emergency</strong>
+                        <a href="tel:911">911</a>
+                    </li>
+                </ul>
+                <p class="crisis-note">You are not alone.</p>
+            </div>
+        </div>
+    </aside>
+
+    <!-- My Journey Modal -->
+    <div id="journey-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>My Emotional Journey</h2>
+                <button class="close-modal" onclick="closeJourneyModal()">×</button>
+            </div>
+            <div class="chart-container">
+                <canvas id="moodChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
