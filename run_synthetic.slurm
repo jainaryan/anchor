@@ -21,8 +21,8 @@ module load python/3.12.1  # Make sure Python >= 3.12 is loaded
 # source $HOME/.cargo/env
 
 echo "Creating environment and installing dependencies via uv..."
-uv venv
-source .venv/bin/activate
+uv venv mindmatenv
+source mindmatenv/bin/activate
 uv pip install -e .
 
 echo "Starting synthetic data pipeline..."
