@@ -7,7 +7,7 @@ from typing import List, Dict, Optional
 import time
 
 # Configuration
-MODEL_PATH = Path(__file__).resolve().parents[1] / "models/CUDA_llama-3.2-3b-instruct"
+MODEL_ID = "Qwen/Qwen3-30B-A3B-Instruct-2507"
 VLLM_URL = "http://localhost:8000/v1"
 USE_VLLM = False # Set to True for A100 deployment
 
@@ -21,8 +21,8 @@ class TeacherModel:
             self._load_local_model()
 
     def _load_local_model(self):
-        print(f"[Teacher] Loading local model from {MODEL_PATH}...")
-        self.tokenizer = AutoTokenizer.from_pretrained(str(MODEL_PATH), local_files_only=True)
+        print(f"[Teacher] Loading model from HuggingFace: {MODEL_ID}...")
+        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         self.tokenizer.pad_token = self.tokenizer.eos_token
         
         quant_config = BitsAndBytesConfig(
@@ -33,12 +33,12 @@ class TeacherModel:
         )
         
         self.model = AutoModelForCausalLM.from_pretrained(
-            str(MODEL_PATH),
+            MODEL_ID,
             quantization_config=quant_config,
-            device_map="cuda",
+            device_map="auto",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
-            local_files_only=True,
+            trust_remote_code=True,
         )
         self.model.eval()
         print("[Teacher] Model loaded.")
