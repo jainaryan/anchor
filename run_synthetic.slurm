@@ -15,18 +15,19 @@
 module load cuda/12.1
 module load python/3.12.1  # Make sure Python >= 3.12 is loaded
 
-# Use uv for fast dependency management and execution
-# If uv is not installed globally, you can install it locally:
-# curl -LsSf https://astral.sh/uv/install.sh | sh
-# source $HOME/.cargo/env
+# Force clear any inherited virtual environment from the login node
+unset VIRTUAL_ENV
 
 echo "Creating environment and checking dependencies..."
-uv venv mindmatenv --python 3.12
+if [ ! -d "mindmatenv" ]; then
+    uv venv mindmatenv --python 3.12
+fi
+
 source mindmatenv/bin/activate
-pip install -e . --break-system-packages
+mindmatenv/bin/pip install -e . --break-system-packages
 
 echo "Starting synthetic data pipeline..."
-# Run the pipeline
-python synthetic/pipeline.py
+# Run the pipelne explicitly using the precise python binary
+mindmatenv/bin/python synthetic/pipeline.py
 
 echo "Pipeline finished!"
