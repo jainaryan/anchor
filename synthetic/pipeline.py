@@ -1,12 +1,14 @@
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 def run_step(script_name):
     print(f"\n[Pipeline] Running {script_name}...")
     try:
-        # Run python script in logical order
-        subprocess.check_call([sys.executable, script_name])
+        # Run python script in logical order within the synthetic directory
+        script_dir = Path(__file__).resolve().parent
+        subprocess.check_call([sys.executable, script_name], cwd=script_dir)
         print(f"[Pipeline] {script_name} completed successfully.")
     except subprocess.CalledProcessError as e:
         print(f"[Pipeline] Error running {script_name}: {e}")
