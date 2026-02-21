@@ -20,10 +20,10 @@ module load python/3.12.1  # Make sure Python >= 3.12 is loaded
 # curl -LsSf https://astral.sh/uv/install.sh | sh
 # source $HOME/.cargo/env
 
-echo "Creating environment and installing dependencies via uv..."
+echo "Creating environment and checking dependencies..."
 uv venv mindmatenv --python 3.12
 source mindmatenv/bin/activate
-uv pip install -e .
+pip install -e . --break-system-packages
 
 echo "Starting synthetic data pipeline..."
 # Run the pipeline
