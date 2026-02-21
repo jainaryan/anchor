@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:a100-80:1
 #SBATCH --time=04:00:00
 
 # Load necessary modules (Adjust these based on NUS cluster available modules)
@@ -27,6 +27,6 @@ pip install -e . --break-system-packages
 
 echo "Starting synthetic data pipeline..."
 # Run the pipeline
-uv run python synthetic/pipeline.py
+python synthetic/pipeline.py
 
 echo "Pipeline finished!"
