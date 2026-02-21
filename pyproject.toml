@@ -20,9 +20,8 @@ dependencies = [
     "unsloth>=2026.1.4",
 ]
 
-[tool.uv]
-managed = true
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "ipykernel>=6.29.5",
 ]
 
