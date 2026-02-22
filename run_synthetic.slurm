@@ -10,11 +10,6 @@
 #SBATCH --gres=gpu:a100-80:1
 #SBATCH --time=04:00:00
 
-# Load necessary modules (Adjust these based on NUS cluster available modules)
-# Example for NUS HPC/SoC Cluster:
-module load cuda/12.1
-module load python/3.12.1  # Make sure Python >= 3.12 is loaded
-
 # Force clear any inherited virtual environment from the login node
 unset VIRTUAL_ENV
 
@@ -24,10 +19,12 @@ if [ ! -d "mindmatenv" ]; then
 fi
 
 source mindmatenv/bin/activate
-mindmatenv/bin/pip install -e . --break-system-packages
+
+# Use uv pip (not pip) since uv venv doesn't install pip
+uv pip install torch transformers bitsandbytes tqdm accelerate
+
 
 echo "Starting synthetic data pipeline..."
-# Run the pipelne explicitly using the precise python binary
 mindmatenv/bin/python synthetic/pipeline.py
 
 echo "Pipeline finished!"

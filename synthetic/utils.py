@@ -89,8 +89,9 @@ class TeacherModel:
             self.tokenizer.eos_token_id,
             self.tokenizer.convert_tokens_to_ids("<|eot_id|>")
         ]
-        # Filter out None values (e.g. <|eot_id|> doesn't exist in Qwen3)
+	 # Filter out None values (e.g. <|eot_id|> doesn't exist in Qwen3)
         terminators = [t for t in terminators if t is not None]
+
 
         with torch.no_grad():
             output_ids = self.model.generate(
@@ -208,4 +209,5 @@ def save_jsonl(data: List[Dict], filename: str):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8") as f:
         for entry in data:
-            f.write(json.dumps(entry) + "\n")
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
