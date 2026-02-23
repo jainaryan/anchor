@@ -4,7 +4,7 @@ import json
 import re
 
 # Configuration
-NUM_SCENARIOS = 4 # 2 mock scenarios
+NUM_SCENARIOS =  # 2 mock scenarios
 OUTPUT_FILE = "scenarios.jsonl"
 SIMILARITY_THRESHOLD = 0.45 
 

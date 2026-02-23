@@ -6,7 +6,7 @@ from pathlib import Path
 INPUT_FILE = "scenarios.jsonl"
 RAW_FILE = "dialogues_raw.jsonl"
 OUTPUT_FILE = "../../data/synthetic_train.jsonl"
-DIALOGUES_PER_SCENARIO = 1
+DIALOGUES_PER_SCENARIO = 2
 PROMPT_FILE = "friend_dialogue.txt"
 
 def heuristic_check(conv: list) -> bool:
@@ -122,7 +122,8 @@ def main():
     print(f"\nSaving {len(final_data)} high-quality dialogues to {output_path}...")
     with open(output_path, "w", encoding="utf-8") as f:
         for entry in final_data:
-            f.write(json.dumps(entry) + "\n")
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
 
 if __name__ == "__main__":
     main()

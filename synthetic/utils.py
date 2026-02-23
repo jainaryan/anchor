@@ -207,7 +207,7 @@ def load_prompt(filename: str) -> str:
 def save_jsonl(data: List[Dict], filename: str):
     path = Path(__file__).resolve().parent / "outputs" / filename
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as f:
+    with open(path, "w", encoding="utf-8") as f:
         for entry in data:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
