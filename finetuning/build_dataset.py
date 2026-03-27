@@ -46,7 +46,7 @@ os.makedirs(OUT_DIR, exist_ok=True)
 # --------------------------
 # Val split controls (per-source)
 # --------------------------
-VAL_RATIO = 0.08   # 8% per source
+VAL_RATIO = 0.15   # 15% per source
 VAL_MIN   = 300    # at least this many per source (capped by available)
 
 # Optional global prototype cap (None = use all)
