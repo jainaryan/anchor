@@ -49,10 +49,10 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 lora_config = LoraConfig(
-    r=4,
-    lora_alpha=8,
-    lora_dropout=0.0,
-    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+    r=16,
+    lora_alpha=32,
+    lora_dropout=0.05,
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
     task_type="CAUSAL_LM",
 )
 
@@ -147,16 +147,16 @@ dataset = dataset.map(tokenize, batched=True, remove_columns=["conversations"])
 
 args = TrainingArguments(
     output_dir=OUT_DIR,
-    per_device_train_batch_size=1,
-    per_device_eval_batch_size=1,
-    gradient_accumulation_steps=4,
+    per_device_train_batch_size=4,
+    per_device_eval_batch_size=4,
+    gradient_accumulation_steps=2,
     learning_rate=3e-5,
     max_steps=args_parsed.iters,
     logging_steps=10,
-    save_steps=300,
+    save_steps=200,
     eval_strategy="steps",
-    eval_steps=300,
-    fp16=True,
+    eval_steps=200,
+    bf16=True,
     gradient_checkpointing=True,
     report_to="none",
     warmup_ratio=0.03,
