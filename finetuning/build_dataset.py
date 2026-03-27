@@ -35,7 +35,10 @@ PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 
 OUT_DIR = PROJECT_ROOT / "data" / "conversations_raw"
-extra_path = PROJECT_ROOT / "data" / "additional_training_samples.jsonl"
+extra_paths = [
+    PROJECT_ROOT / "data" / "synthetic_train_therapist_.jsonl",
+    PROJECT_ROOT / "data" / "synthetic_train_friend_1.jsonl"
+]
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -281,31 +284,37 @@ def main():
 
     # adding extra synthetic data
     extra = []
-    with open(extra_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except Exception:
-                # skip bad lines
-                continue
-            if "conversations" in obj and isinstance(obj["conversations"], list):
-                extra.append({"conversations": obj["conversations"]})
-            elif "text" in obj and isinstance(obj["text"], str):
-                # Fallback for old format if mixed in
-                parts = re.split(r"(<\|user\|>|<\|assistant\|>)", obj["text"])
-                conv = []
-                role = "user"
-                for p in parts:
-                    p = p.strip()
-                    if p == "<|user|>": role = "user"
-                    elif p == "<|assistant|>": role = "assistant"
-                    elif p: conv.append({"role": role, "content": p})
-                extra.append({"conversations": conv})
+    for ep in extra_paths:
+        if not ep.exists():
+            print(f"Warning: {ep} does not exist. Skipping.")
+            continue
+        
+        count_before = len(extra)
+        with open(ep, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    # skip bad lines
+                    continue
+                if "conversations" in obj and isinstance(obj["conversations"], list):
+                    extra.append({"conversations": obj["conversations"]})
+                elif "text" in obj and isinstance(obj["text"], str):
+                    # Fallback for old format if mixed in
+                    parts = re.split(r"(<\|user\|>|<\|assistant\|>)", obj["text"])
+                    conv = []
+                    role = "user"
+                    for p in parts:
+                        p = p.strip()
+                        if p == "<|user|>": role = "user"
+                        elif p == "<|assistant|>": role = "assistant"
+                        elif p: conv.append({"role": role, "content": p})
+                    extra.append({"conversations": conv})
 
-    print(f"Loaded {len(extra)} extra training samples from {extra_path}")
+        print(f"Loaded {len(extra) - count_before} extra training samples from {ep}")
     train.extend(extra)
     rng.shuffle(train)
 
