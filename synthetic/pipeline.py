@@ -20,7 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent
 OUTPUTS_DIR = BASE_DIR / "outputs"
 SCENARIOS_FILE = OUTPUTS_DIR / "scenarios.jsonl"
 RAW_FILE = OUTPUTS_DIR / "dialogues_raw.jsonl"
-TRAIN_FILE = BASE_DIR.parent / "data" / "synthetic_train.jsonl"
+TRAIN_FILE = BASE_DIR.parent / "data" / "synthetic_train_therapist_.jsonl"
 # Graceful shutdown flag
 shutdown_requested = False
 def signal_handler(sig, frame):
@@ -131,38 +131,44 @@ def main():
     # Load model once
     teacher = TeacherModel()
     scenario_prompt = load_prompt("scenario.txt")
-    gen_prompt = load_prompt("friend_dialogue.txt")
+    gen_prompt = load_prompt("therapist_dialogue.txt")
     critique_prompt = load_prompt("critique.txt")
     # Track all generated scenarios for diversity
     all_scenarios = []
     total_dialogues = 0
     scenario_count = 0
     while not shutdown_requested:
-        scenario_count += 1
-        elapsed = time.time() - start_time
-        elapsed_hrs = elapsed / 3600
-        print(f"\n{'='*50}")
-        print(f"[Scenario {scenario_count}] (Elapsed: {elapsed_hrs:.1f}h | Dialogues so far: {total_dialogues})")
-        print(f"{'='*50}")
-        # 1. Generate a unique scenario
-        scenario = generate_one_scenario(teacher, scenario_prompt, all_scenarios)
-        if not scenario:
-            print("[Skip] Could not generate a unique scenario after 5 attempts.")
+        try:
+            scenario_count += 1
+            elapsed = time.time() - start_time
+            elapsed_hrs = elapsed / 3600
+            print(f"\n{'='*50}")
+            print(f"[Scenario {scenario_count}] (Elapsed: {elapsed_hrs:.1f}h | Dialogues so far: {total_dialogues})")
+            print(f"{'='*50}")
+            # 1. Generate a unique scenario
+            scenario = generate_one_scenario(teacher, scenario_prompt, all_scenarios)
+            if not scenario:
+                print("[Skip] Could not generate a unique scenario after 5 attempts.")
+                continue
+            all_scenarios.append(scenario)
+            append_jsonl(scenario, SCENARIOS_FILE)
+            print(f"[Scenario] {scenario.get('core_emotion', '?')} - {scenario.get('context', '?')[:60]}...")
+            # 2. Generate dialogues for this scenario
+            dialogues = generate_dialogues_for_scenario(
+                teacher, scenario, gen_prompt, critique_prompt
+            )
+            # 3. Save each dialogue immediately
+            for d in dialogues:
+                append_jsonl(d, TRAIN_FILE)
+                total_dialogues += 1
+            print(f"[Progress] +{len(dialogues)} dialogues | Total: {total_dialogues}")
+            if shutdown_requested:
+                break
+        except Exception as e:
+            print(f"\n[ERROR] {type(e).__name__}: {e}")
+            print("[Recovery] Continuing to next scenario...")
+            time.sleep(5)  # Brief pause before retrying
             continue
-        all_scenarios.append(scenario)
-        append_jsonl(scenario, SCENARIOS_FILE)
-        print(f"[Scenario] {scenario.get('core_emotion', '?')} - {scenario.get('context', '?')[:60]}...")
-        # 2. Generate dialogues for this scenario
-        dialogues = generate_dialogues_for_scenario(
-            teacher, scenario, gen_prompt, critique_prompt
-        )
-        # 3. Save each dialogue immediately
-        for d in dialogues:
-            append_jsonl(d, TRAIN_FILE)
-            total_dialogues += 1
-        print(f"[Progress] +{len(dialogues)} dialogues | Total: {total_dialogues}")
-        if shutdown_requested:
-            break
     # Final summary
     elapsed = time.time() - start_time
     print(f"\n{'='*50}")
