@@ -26,7 +26,7 @@ if not torch.cuda.is_available():
     raise RuntimeError("CUDA not available")
     
 
-BASE_MODEL_DIR = "models/CUDA_llama-3.2-3b-instruct"
+BASE_MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
 DATA_DIR = "data/conversations_cleaned"
 OUT_DIR = "adapters/CUDA_mindmate_llama32b"
 

@@ -52,7 +52,7 @@ CLEAN_VAL = CLEAN_DATA_DIR / "mindmate_val.jsonl"
 # Base model dir for tokenizer + MLX
 # BASE_MODEL_DIR = PROJECT_ROOT / "mlx_llama32_3b"                      #MAC
 BASE_MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"                      #WINDOWS
-BASE_MODEL_DIR = PROJECT_ROOT / "models" / "CUDA_llama-3.2-3b-instruct"      #WINDOWS
+BASE_MODEL_DIR = BASE_MODEL_ID
 
 # Path to mlx_lm.lora binary
 # MLX_LORA_BIN = Path("/Users/aryanjain/miniconda3/envs/mindmatenv/bin/mlx_lm.lora")    #MAC
