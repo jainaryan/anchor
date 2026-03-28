@@ -16,6 +16,7 @@ source mindmatenv/bin/activate
 # Ensure training dependencies are installed
 uv pip install peft trl bitsandbytes transformers accelerate datasets pandas wandb
 
+export HF_TOKEN="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"
 echo "Starting CUDA finetuning pipeline..."
 mindmatenv/bin/python finetuning/CUDA_run_pipeline.py
 
