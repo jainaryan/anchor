@@ -13,7 +13,7 @@ from peft import PeftModel
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # Base model (your Llama 3.2 3B)
-MODEL_DIR = PROJECT_ROOT / "models" / "CUDA_llama-3.2-3b-instruct"
+MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
 
 # QLoRA adapter directory (newly trained windows version)
 ADAPTER_DIR = PROJECT_ROOT / "adapters" / "CUDA_mindmate_llama32b"
@@ -68,7 +68,6 @@ def main():
     print(f"[info] loading tokenizer and model (4-bit NF4)...")
     tokenizer = AutoTokenizer.from_pretrained(
         str(MODEL_DIR), 
-        local_files_only=True,
     )
     tokenizer.pad_token = tokenizer.eos_token
     
@@ -86,7 +85,6 @@ def main():
         torch_dtype=torch.float16,
         low_cpu_mem_usage=True,
         attn_implementation="sdpa",
-        local_files_only=True,
     )
     model.config.use_cache = True
     
