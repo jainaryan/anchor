@@ -5,13 +5,14 @@ from transformers import (
     AutoModelForCausalLM,
     TrainingArguments,
     Trainer,
-    DataCollatorForLanguageModeling,
+    DataCollatorForSeq2Seq,
     BitsAndBytesConfig,
 )
 from peft import LoraConfig, get_peft_model
 import bitsandbytes as bnb
 import os
 import argparse
+from pathlib import Path
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 parser = argparse.ArgumentParser()
@@ -29,6 +30,16 @@ if not torch.cuda.is_available():
 BASE_MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
 DATA_DIR = "data/conversations_cleaned"
 OUT_DIR = "adapters/CUDA_mindmate_llama32b"
+TRAIN_FILE = Path(DATA_DIR) / "mindmate_train.jsonl"
+VAL_FILE = Path(DATA_DIR) / "mindmate_val.jsonl"
+
+if not TRAIN_FILE.exists() or not VAL_FILE.exists():
+    raise FileNotFoundError(
+        "Expected cleaned dataset files were not found:\n"
+        f" - {TRAIN_FILE}\n"
+        f" - {VAL_FILE}\n"
+        "Run finetuning/CUDA_run_pipeline.py (build + clean) before training."
+    )
 
 tokenizer = AutoTokenizer.from_pretrained(
     BASE_MODEL_DIR,
@@ -62,8 +73,8 @@ model.enable_input_require_grads()
 dataset = load_dataset(
     "json",
     data_files={
-        "train": f"{DATA_DIR}/mindmate_train.jsonl",
-        "validation": f"{DATA_DIR}/mindmate_val.jsonl",
+        "train": str(TRAIN_FILE),
+        "validation": str(VAL_FILE),
     },
 )
 
@@ -137,6 +148,19 @@ def tokenize(batch):
             search_start = content_end
             if end_idx == -1: break
 
+        if len(labels) != len(input_ids):
+            raise ValueError(
+                f"Label/input length mismatch at sample {i}: "
+                f"labels={len(labels)} input_ids={len(input_ids)}"
+            )
+        
+        supervised = sum(1 for x in labels if x != -100)
+        if supervised == 0:
+            raise ValueError(
+                f"No assistant-supervised tokens detected at sample {i}. "
+                "Check chat template / masking boundaries."
+            )
+
         all_labels.append(labels)
         
     tokenized["labels"] = all_labels
@@ -144,6 +168,23 @@ def tokenize(batch):
     return tokenized
 
 dataset = dataset.map(tokenize, batched=True, remove_columns=["conversations"])
+
+def validate_tokenized_split(split, split_name: str, sample_limit: int = 128):
+    n = min(len(split), sample_limit)
+    for i in range(n):
+        ex = split[i]
+        li = len(ex["input_ids"])
+        la = len(ex["attention_mask"])
+        ll = len(ex["labels"])
+        if not (li == la == ll):
+            raise ValueError(
+                f"{split_name}[{i}] has inconsistent lengths: "
+                f"input_ids={li}, attention_mask={la}, labels={ll}"
+            )
+    print(f"[preflight] {split_name}: validated {n} samples for length consistency")
+
+validate_tokenized_split(dataset["train"], "train")
+validate_tokenized_split(dataset["validation"], "validation")
 
 args = TrainingArguments(
     output_dir=OUT_DIR,
@@ -164,13 +205,34 @@ args = TrainingArguments(
     optim="paged_adamw_32bit",
 )
 
+collator = DataCollatorForSeq2Seq(
+    tokenizer=tokenizer,
+    model=model,
+    padding=True,
+    pad_to_multiple_of=8,
+    label_pad_token_id=-100,
+)
+
+# Fail fast before launching Trainer if collation is malformed.
+_smoke = [dataset["train"][j] for j in range(min(4, len(dataset["train"])))]
+if _smoke:
+    smoke_batch = collator(_smoke)
+    if smoke_batch["input_ids"].shape != smoke_batch["labels"].shape:
+        raise ValueError(
+            f"Collator output mismatch: input_ids {smoke_batch['input_ids'].shape} "
+            f"vs labels {smoke_batch['labels'].shape}"
+        )
+    print(
+        "[preflight] collator smoke test passed with shape "
+        f"{tuple(smoke_batch['input_ids'].shape)}"
+    )
 
 trainer = Trainer(
     model=model,
     args=args,
     train_dataset=dataset["train"],
     eval_dataset=dataset["validation"],
-    data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
+    data_collator=collator,
 )
 
 trainer.train()
