@@ -1,0 +1,66 @@
+Using Python 3.12.3 environment at: mindmatenv
+Resolved 88 packages in 1.11s
+Downloading pydantic-core (2.0MiB)
+Downloading wandb (24.4MiB)
+ Downloaded pydantic-core
+ Downloaded wandb
+Prepared 19 packages in 51.51s
+Installed 32 packages in 2.30s
+ + aiohappyeyeballs==2.6.1
+ + aiohttp==3.13.3
+ + aiosignal==1.4.0
+ + annotated-types==0.7.0
+ + attrs==26.1.0
+ + charset-normalizer==3.4.6
+ + datasets==4.8.4
+ + dill==0.4.1
+ + frozenlist==1.8.0
+ + gitdb==4.0.12
+ + gitpython==3.1.46
+ + multidict==6.7.1
+ + multiprocess==0.70.19
+ + pandas==3.0.1
+ + peft==0.18.1
+ + platformdirs==4.9.4
+ + propcache==0.4.1
+ + protobuf==6.33.6
+ + pyarrow==23.0.1
+ + pydantic==2.12.5
+ + pydantic-core==2.41.5
+ + python-dateutil==2.9.0.post0
+ + requests==2.33.0
+ + sentry-sdk==2.56.0
+ + six==1.17.0
+ + smmap==5.0.3
+ + trl==0.29.1
+ + typing-inspection==0.4.2
+ + urllib3==2.6.3
+ + wandb==0.25.1
+ + xxhash==3.6.0
+ + yarl==1.23.0
+Traceback (most recent call last):
+  File "/home/a/aryanj/projects/mindmate/finetuning/CUDA_train_qlora.py", line 45, in <module>
+    model = AutoModelForCausalLM.from_pretrained(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a/aryanj/projects/mindmate/mindmatenv/lib/python3.12/site-packages/transformers/models/auto/auto_factory.py", line 374, in from_pretrained
+    return model_class.from_pretrained(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a/aryanj/projects/mindmate/mindmatenv/lib/python3.12/site-packages/transformers/modeling_utils.py", line 4072, in from_pretrained
+    loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/a/aryanj/projects/mindmate/mindmatenv/lib/python3.12/site-packages/transformers/modeling_utils.py", line 4179, in _load_pretrained_model
+    file_pointer = safe_open(file, framework="pt", device="cpu")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: No such file or directory: models/CUDA_llama-3.2-3b-instruct/model-00001-of-00002.safetensors
+Traceback (most recent call last):
+  File "/home/a/aryanj/projects/mindmate/finetuning/CUDA_run_pipeline.py", line 250, in <module>
+    main()
+  File "/home/a/aryanj/projects/mindmate/finetuning/CUDA_run_pipeline.py", line 244, in main
+    step_train_qlora()
+  File "/home/a/aryanj/projects/mindmate/finetuning/CUDA_run_pipeline.py", line 176, in step_train_qlora
+    run(
+  File "/home/a/aryanj/projects/mindmate/finetuning/CUDA_run_pipeline.py", line 82, in run
+    subprocess.run(cmd, cwd=cwd, check=True, env=env)
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/home/a/aryanj/projects/mindmate/mindmatenv/bin/python', '/home/a/aryanj/projects/mindmate/finetuning/CUDA_train_qlora.py', '--iters', '1500']' returned non-zero exit status 1.
