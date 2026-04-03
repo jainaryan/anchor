@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --partition=gpu-long
-#SBATCH --gres=gpu:h200-141:1
+#SBATCH --gres=gpu:h100-96:1
 #SBATCH --time=36:00:00
 
 unset VIRTUAL_ENV
