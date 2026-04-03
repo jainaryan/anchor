@@ -16,7 +16,7 @@ from pathlib import Path
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--iters", type=int, default=1500)
+parser.add_argument("--iters", type=int, default=1600)
 args_parsed = parser.parse_args()
 
 print(f'Version: {torch.__version__}') 
@@ -32,6 +32,7 @@ DATA_DIR = "data/conversations_cleaned"
 OUT_DIR = "adapters/CUDA_mindmate_llama32b"
 TRAIN_FILE = Path(DATA_DIR) / "mindmate_train.jsonl"
 VAL_FILE = Path(DATA_DIR) / "mindmate_val.jsonl"
+SYSTEM_PROMPT_PATH = Path("system_prompt.txt")
 
 if not TRAIN_FILE.exists() or not VAL_FILE.exists():
     raise FileNotFoundError(
@@ -40,6 +41,14 @@ if not TRAIN_FILE.exists() or not VAL_FILE.exists():
         f" - {VAL_FILE}\n"
         "Run finetuning/CUDA_run_pipeline.py (build + clean) before training."
     )
+
+if not SYSTEM_PROMPT_PATH.exists():
+    raise FileNotFoundError(f"System prompt not found at {SYSTEM_PROMPT_PATH}")
+
+with open(SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
+    SYSTEM_PROMPT = f.read().strip()
+
+print(f"[info] Loaded system prompt ({len(SYSTEM_PROMPT)} chars)")
 
 tokenizer = AutoTokenizer.from_pretrained(
     BASE_MODEL_DIR,
@@ -60,8 +69,8 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 lora_config = LoraConfig(
-    r=16,
-    lora_alpha=32,
+    r=8,
+    lora_alpha=16,
     lora_dropout=0.05,
     target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
     task_type="CAUSAL_LM",
@@ -88,10 +97,11 @@ def tokenize(batch):
     conversations = batch["conversations"]
     
     for conv in conversations:
-        # conv is already a list of {"role": "...", "content": "..."}
+        # Prepend system prompt so model learns to follow it during training
+        conv_with_system = [{"role": "system", "content": SYSTEM_PROMPT}] + conv
         formatted = tokenizer.apply_chat_template(
-            conv, 
-            tokenize=False, 
+            conv_with_system,
+            tokenize=False,
             add_generation_prompt=False
         )
         formatted_texts.append(formatted)
@@ -191,7 +201,7 @@ args = TrainingArguments(
     per_device_train_batch_size=4,
     per_device_eval_batch_size=4,
     gradient_accumulation_steps=2,
-    learning_rate=3e-5,
+    learning_rate=1e-5,
     max_steps=args_parsed.iters,
     logging_steps=10,
     save_steps=200,

@@ -38,7 +38,8 @@ OUT_DIR = PROJECT_ROOT / "data" / "conversations_raw"
 extra_paths = [
     PROJECT_ROOT / "data" / "synthetic_train_therapist_.jsonl",
     PROJECT_ROOT / "data" / "synthetic_train_friend_1.jsonl",
-    PROJECT_ROOT / "data" / "synthetic_train.jsonl"
+    PROJECT_ROOT / "data" / "synthetic_train.jsonl",
+    PROJECT_ROOT / "data" / "synthetic_train_casual.jsonl",
 ]
 
 os.makedirs(OUT_DIR, exist_ok=True)
