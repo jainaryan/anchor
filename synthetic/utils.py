@@ -11,35 +11,49 @@ MODEL_ID = "Qwen/Qwen3-30B-A3B-Instruct-2507"
 VLLM_URL = "http://localhost:8000/v1"
 USE_VLLM = False # Set to True for A100 deployment
 
+# Set USE_4BIT=1 in environment to load in 4-bit (fits on H100-96/smaller GPUs)
+# Default: bfloat16 full precision (higher quality, requires ~60GB VRAM e.g. A100-80)
+USE_4BIT = os.environ.get("USE_4BIT", "0") == "1"
+
 class TeacherModel:
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.tokenizer = None
         self.model = None
-        
+
         if not USE_VLLM:
             self._load_local_model()
 
     def _load_local_model(self):
         print(f"[Teacher] Loading model from HuggingFace: {MODEL_ID}...")
+        print(f"[Teacher] Quantization: {'4-bit NF4' if USE_4BIT else 'bfloat16 full precision'}")
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         self.tokenizer.pad_token = self.tokenizer.eos_token
-        
-        quant_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_use_double_quant=True
-        )
-        
-        self.model = AutoModelForCausalLM.from_pretrained(
-            MODEL_ID,
-            quantization_config=quant_config,
-            device_map="auto",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-            trust_remote_code=True,
-        )
+
+        if USE_4BIT:
+            quant_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True
+            )
+            self.model = AutoModelForCausalLM.from_pretrained(
+                MODEL_ID,
+                quantization_config=quant_config,
+                device_map="auto",
+                torch_dtype=torch.float16,
+                low_cpu_mem_usage=True,
+                trust_remote_code=True,
+            )
+        else:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                MODEL_ID,
+                device_map="auto",
+                torch_dtype=torch.bfloat16,
+                low_cpu_mem_usage=True,
+                trust_remote_code=True,
+            )
+
         self.model.eval()
         print("[Teacher] Model loaded.")
 

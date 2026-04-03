@@ -28,6 +28,9 @@ echo "Clearing old outputs..."
 > synthetic/outputs/scenarios.jsonl
 > synthetic/outputs/dialogues_raw.jsonl
 
+# H100-96 has 96GB VRAM but Qwen3-30B bf16 uses ~60GB — use 4-bit to be safe
+export USE_4BIT=1
+
 echo "Starting synthetic data pipeline..."
 mindmatenv/bin/python synthetic/pipeline.py
 

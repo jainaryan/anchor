@@ -20,6 +20,9 @@ source mindmatenv/bin/activate
 
 uv pip install torch transformers bitsandbytes tqdm accelerate
 
+# A100-80 has 80GB VRAM — run full bfloat16 for higher quality outputs
+export USE_4BIT=0
+
 echo "Starting casual conversation data pipeline..."
 mindmatenv/bin/python synthetic/casual_pipeline.py
 
