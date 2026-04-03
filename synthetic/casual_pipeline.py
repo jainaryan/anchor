@@ -14,7 +14,7 @@ from utils import (
 )
 
 # Configuration
-TARGET_COUNT = 2000          # Stop after this many saved dialogues
+TARGET_COUNT = 5000          # Stop after this many saved dialogues
 SIMILARITY_THRESHOLD = 0.45
 
 # Paths
