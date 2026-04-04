@@ -40,16 +40,18 @@ extra_paths = [
     PROJECT_ROOT / "data" / "synthetic_train_friend_1.jsonl",
     PROJECT_ROOT / "data" / "synthetic_train.jsonl",
     PROJECT_ROOT / "data" / "synthetic_train_casual.jsonl",
+    PROJECT_ROOT / "data" / "synthetic_train_transition.jsonl",
 ]
 
-# Cap per-source to achieve ~50% casual / 50% distress balance.
-# Distress sources are capped proportionally to their original sizes so they
-# collectively match the casual count (5000). Casual is uncapped (None).
+# Target mix: 33% casual, 33% transition, 33% distress
+# Distress sources capped proportionally to sum to ~5000.
+# Casual and transition uncapped (use all available).
 SOURCE_CAPS = {
     "synthetic_train_therapist_.jsonl": 1645,
     "synthetic_train_friend_1.jsonl":   1912,
     "synthetic_train.jsonl":            1443,
     "synthetic_train_casual.jsonl":     None,  # use all 5000
+    "synthetic_train_transition.jsonl": None,  # use all generated
 }
 
 os.makedirs(OUT_DIR, exist_ok=True)
