@@ -42,6 +42,16 @@ extra_paths = [
     PROJECT_ROOT / "data" / "synthetic_train_casual.jsonl",
 ]
 
+# Cap per-source to achieve ~50% casual / 50% distress balance.
+# Distress sources are capped proportionally to their original sizes so they
+# collectively match the casual count (5000). Casual is uncapped (None).
+SOURCE_CAPS = {
+    "synthetic_train_therapist_.jsonl": 1645,
+    "synthetic_train_friend_1.jsonl":   1912,
+    "synthetic_train.jsonl":            1443,
+    "synthetic_train_casual.jsonl":     None,  # use all 5000
+}
+
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # --------------------------
@@ -271,6 +281,8 @@ def main():
             continue
         
         count_before = len(extra)
+        cap = SOURCE_CAPS.get(ep.name)
+        rows_from_file = []
         with open(ep, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -282,7 +294,7 @@ def main():
                     # skip bad lines
                     continue
                 if "conversations" in obj and isinstance(obj["conversations"], list):
-                    extra.append({"conversations": obj["conversations"]})
+                    rows_from_file.append({"conversations": obj["conversations"]})
                 elif "text" in obj and isinstance(obj["text"], str):
                     # Fallback for old format if mixed in
                     parts = re.split(r"(<\|user\|>|<\|assistant\|>)", obj["text"])
@@ -293,8 +305,12 @@ def main():
                         if p == "<|user|>": role = "user"
                         elif p == "<|assistant|>": role = "assistant"
                         elif p: conv.append({"role": role, "content": p})
-                    extra.append({"conversations": conv})
+                    rows_from_file.append({"conversations": conv})
 
+        if cap is not None and len(rows_from_file) > cap:
+            rng.shuffle(rows_from_file)
+            rows_from_file = rows_from_file[:cap]
+        extra.extend(rows_from_file)
         print(f"Loaded {len(extra) - count_before} extra training samples from {ep}")
 
     # Split synthetic data into train and eval
