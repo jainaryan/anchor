@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
 
 # QLoRA adapter directory (newly trained windows version)
-ADAPTER_DIR = PROJECT_ROOT / "adapters" / "CUDA_mindmate_llama32b"
+ADAPTER_DIR = PROJECT_ROOT / "adapters" / "CUDA_mindmate_llama32b" / "checkpoint-600"
 
 # System prompt
 PROMPT_PATH = PROJECT_ROOT / "system_prompt.txt"
