@@ -43,14 +43,13 @@ extra_paths = [
     PROJECT_ROOT / "data" / "synthetic_train_transition.jsonl",
 ]
 
-# Target mix: 33% casual, 33% transition, 33% distress
-# Distress sources capped proportionally to sum to ~5000.
-# Casual and transition uncapped (use all available).
+# Target mix (Option B): 40% casual, 25% therapist, 22% friend, 13% grief
+# Total ~10,000 distress samples; casual and transition uncapped.
 SOURCE_CAPS = {
-    "synthetic_train_therapist_.jsonl": 1645,
-    "synthetic_train_friend_1.jsonl":   1912,
-    "synthetic_train.jsonl":            1443,
-    "synthetic_train_casual.jsonl":     None,  # use all 5000
+    "synthetic_train_therapist_.jsonl": 2500,
+    "synthetic_train_friend_1.jsonl":   2200,
+    "synthetic_train.jsonl":            1300,
+    "synthetic_train_casual.jsonl":     4000,
     "synthetic_train_transition.jsonl": None,  # use all generated
 }
 
