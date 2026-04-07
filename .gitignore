@@ -51,4 +51,3 @@ server.log
 .env
 
 # Local internal project knowledge base (do not commit)
-MINDMATE_DETAILED_INTERNAL_NOTES.md
