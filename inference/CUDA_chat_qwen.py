@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = "Qwen/Qwen3-1.7B"
 
 # QLoRA adapter directory (Qwen version)
-ADAPTER_DIR = PROJECT_ROOT / "adapters" / "CUDA_mindmate_qwen3_1p7b"
+ADAPTER_DIR = PROJECT_ROOT / "adapters" / "CUDA_mindmate_qwen3_1p7b_v2"
 
 # System prompt
 PROMPT_PATH = PROJECT_ROOT / "system_prompt.txt"
