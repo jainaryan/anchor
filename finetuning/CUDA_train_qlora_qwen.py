@@ -28,7 +28,7 @@ if not torch.cuda.is_available():
 
 BASE_MODEL_DIR = "Qwen/Qwen3-1.7B"
 DATA_DIR = "data/conversations_cleaned"
-OUT_DIR = "adapters/CUDA_mindmate_qwen3_1p7b"
+OUT_DIR = "adapters/CUDA_mindmate_qwen3_1p7b_v2"
 TRAIN_FILE = Path(DATA_DIR) / "mindmate_train.jsonl"
 VAL_FILE = Path(DATA_DIR) / "mindmate_val.jsonl"
 

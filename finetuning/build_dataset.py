@@ -43,14 +43,14 @@ extra_paths = [
     PROJECT_ROOT / "data" / "synthetic_train_transition.jsonl",
 ]
 
-# Target mix (Option B): 40% casual, 25% therapist, 22% friend, 13% grief
-# Total ~10,000 distress samples; casual and transition uncapped.
+# Data mix v2 (2026-04-07): transition-first, unified for Llama + Qwen
+# transition=30%, therapist=25%, casual=20%, grief=15%, friend=10%
 SOURCE_CAPS = {
+    "synthetic_train_transition.jsonl": 3000,
     "synthetic_train_therapist_.jsonl": 2500,
-    "synthetic_train_friend_1.jsonl":   2200,
-    "synthetic_train.jsonl":            1300,
-    "synthetic_train_casual.jsonl":     4000,
-    "synthetic_train_transition.jsonl": None,  # use all generated
+    "synthetic_train_casual.jsonl":     2000,
+    "synthetic_train.jsonl":            1500,
+    "synthetic_train_friend_1.jsonl":   1000,
 }
 
 os.makedirs(OUT_DIR, exist_ok=True)

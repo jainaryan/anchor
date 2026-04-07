@@ -116,11 +116,12 @@ def main():
 
         history_list.append({"role": "user", "content": user_input})
         
-        # Use template for inference
+        # Use template for inference — disable Qwen3 thinking mode
         prompt = tokenizer.apply_chat_template(
-            history_list, 
-            tokenize=False, 
-            add_generation_prompt=True
+            history_list,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False
         )
         
         t0 = time.time()

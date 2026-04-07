@@ -109,6 +109,26 @@ def step_train_qlora():
     )
 
 
+def write_metadata():
+    from datetime import datetime
+    adapter_dir = PROJECT_ROOT / "adapters" / "CUDA_mindmate_qwen3_1p7b_v2"
+    adapter_dir.mkdir(parents=True, exist_ok=True)
+    meta = adapter_dir / "training_info.txt"
+    with open(meta, "w") as f:
+        f.write(f"Model: Qwen3-1.7B\n")
+        f.write(f"Date trained: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+        f.write(f"Base model: Qwen/Qwen3-1.7B\n")
+        f.write(f"Method: QLoRA (4-bit NF4), lora_r=8, lora_alpha=16, lr=1e-5, steps=1600\n\n")
+        f.write("Data mix:\n")
+        f.write("  transition    3000  30%\n")
+        f.write("  therapist     2500  25%\n")
+        f.write("  casual        2000  20%\n")
+        f.write("  grief/loss    1500  15%\n")
+        f.write("  friend        1000  10%\n")
+        f.write("  TOTAL        10000 100%\n")
+    print(f"[metadata] Written to {meta}")
+
+
 def main():
     print("=== MindMate QLoRA Pipeline — Qwen3-1.7B ===")
     print(check_cuda())
@@ -119,6 +139,7 @@ def main():
     step_build_dataset()
     step_clean_dataset()
     step_train_qlora()
+    write_metadata()
 
     print("\nAll steps completed successfully.\n")
 

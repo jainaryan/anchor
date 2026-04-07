@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=mindmate-finetune
-#SBATCH --output=logs/finetune_%j.log
-#SBATCH --error=logs/finetune_%j.err
+#SBATCH --job-name=mindmate-llama-v2
+#SBATCH --output=/home/a/aryanj/logs/finetune_llama_v2_%j.log
+#SBATCH --error=/home/a/aryanj/logs/finetune_llama_v2_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=48G
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:h100-96:1
+#SBATCH --partition=gpu-long
+#SBATCH --gres=gpu:a100-40:1
 #SBATCH --time=24:00:00
 
 set -euo pipefail
@@ -44,7 +44,9 @@ else
   echo "Skipping preflight checks (SKIP_PREFLIGHT=1)."
 fi
 
-echo "Starting CUDA finetuning pipeline..."
+cd ~/projects/mindmate
+
+echo "Starting CUDA finetuning pipeline (Llama v2)..."
 mindmatenv/bin/python finetuning/CUDA_run_pipeline.py
 
 echo "Finetuning complete!"

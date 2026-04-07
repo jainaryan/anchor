@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=mindmate-qwen
-#SBATCH --output=logs/finetune_qwen_%j.log
-#SBATCH --error=logs/finetune_qwen_%j.err
+#SBATCH --job-name=mindmate-qwen-v2
+#SBATCH --output=/home/a/aryanj/logs/finetune_qwen_v2_%j.log
+#SBATCH --error=/home/a/aryanj/logs/finetune_qwen_v2_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=48G
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:h100-96:1
+#SBATCH --partition=gpu-long
+#SBATCH --gres=gpu:a100-40:1
 #SBATCH --time=24:00:00
 
 set -euo pipefail
@@ -28,7 +28,9 @@ if [ -z "${HF_TOKEN:-}" ]; then
   fi
 fi
 
-echo "Starting Qwen3-1.7B finetuning pipeline..."
+cd ~/projects/mindmate
+
+echo "Starting Qwen3-1.7B finetuning pipeline (v2)..."
 mindmatenv/bin/python finetuning/CUDA_run_pipeline_qwen.py
 
 echo "Finetuning complete!"

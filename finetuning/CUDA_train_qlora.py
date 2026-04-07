@@ -29,10 +29,9 @@ if not torch.cuda.is_available():
 
 BASE_MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
 DATA_DIR = "data/conversations_cleaned"
-OUT_DIR = "adapters/CUDA_mindmate_llama32b"
+OUT_DIR = "adapters/CUDA_mindmate_llama32b_v2"
 TRAIN_FILE = Path(DATA_DIR) / "mindmate_train.jsonl"
 VAL_FILE = Path(DATA_DIR) / "mindmate_val.jsonl"
-SYSTEM_PROMPT_PATH = Path("system_prompt.txt")
 
 if not TRAIN_FILE.exists() or not VAL_FILE.exists():
     raise FileNotFoundError(
@@ -41,14 +40,6 @@ if not TRAIN_FILE.exists() or not VAL_FILE.exists():
         f" - {VAL_FILE}\n"
         "Run finetuning/CUDA_run_pipeline.py (build + clean) before training."
     )
-
-if not SYSTEM_PROMPT_PATH.exists():
-    raise FileNotFoundError(f"System prompt not found at {SYSTEM_PROMPT_PATH}")
-
-with open(SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
-    SYSTEM_PROMPT = f.read().strip()
-
-print(f"[info] Loaded system prompt ({len(SYSTEM_PROMPT)} chars)")
 
 tokenizer = AutoTokenizer.from_pretrained(
     BASE_MODEL_DIR,
@@ -97,10 +88,9 @@ def tokenize(batch):
     conversations = batch["conversations"]
     
     for conv in conversations:
-        # Prepend system prompt so model learns to follow it during training
-        conv_with_system = [{"role": "system", "content": SYSTEM_PROMPT}] + conv
+        # conv is already a list of {"role": "...", "content": "..."}
         formatted = tokenizer.apply_chat_template(
-            conv_with_system,
+            conv,
             tokenize=False,
             add_generation_prompt=False
         )
