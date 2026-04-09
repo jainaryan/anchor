@@ -1,14 +1,22 @@
 # MindMate
 
-MindMate is a fine-tuned **Llama 3.2 3B** model optimized for **mental health support** interactions. It is trained using **QLoRA** on a custom dataset to provide empathetic, detailed, and supportive responses.
+MindMate is a finetuned local mental-health wellness assistant. Multiple model variants are trained via QLoRA and exported to GGUF for on-device Android inference.
+
+## Models
+
+| Model | Size | Adapter | Notes |
+|---|---|---|---|
+| Llama 3.2 3B Instruct | 3B | `adapters/CUDA_mindmate_llama32b/` | Primary; best instruction following |
+| Qwen3-1.7B | 1.7B | `adapters/CUDA_mindmate_qwen3_1p7b/` | Smallest; fastest on-device |
+| Qwen2.5-3B Instruct | 3B | `adapters/CUDA_mindmate_qwen25_3b/` | Standard instruct; no thinking mode |
 
 ## 🚀 Features
-- **Base Model**: Llama 3.2 3B Instruct
-- **Fine-tuning**: QLoRA (4-bit quantization) via [MLX](https://github.com/ml-explore/mlx)
+- **Fine-tuning**: QLoRA (4-bit NF4) on CUDA via HuggingFace PEFT + TRL
+- **DPO**: Preference training on top of SFT adapters using 30B teacher-generated pairs
 - **Platform Support**:
-  - **macOS** (Apple Silicon): Native inference via MLX.
-  - **Windows**: Via LM Studio or Ollama (GGUF).
-  - **Android**: Via Layla or UserLAnd (GGUF).
+  - **CUDA (cluster)**: Full training + inference pipeline
+  - **Android**: On-device GGUF inference via llama.cpp JNI bridge
+  - **macOS** (Apple Silicon): Legacy MLX inference path
 
 ---
 

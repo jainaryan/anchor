@@ -2,11 +2,23 @@ import json
 import torch
 import os
 import time
+import argparse
 from datetime import datetime
 from pathlib import Path
 from threading import Thread
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, TextIteratorStreamer
 from peft import PeftModel
+
+# ========= ARGS =========
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--checkpoint",
+    type=str,
+    default=None,
+    help="Checkpoint subfolder to load, e.g. 'checkpoint-200'. Defaults to final model."
+)
+args = parser.parse_args()
 
 # ========= CONFIG: EDIT HERE IF NEEDED =========
 
@@ -15,8 +27,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # Base model (Qwen3 1.7B)
 MODEL_DIR = "Qwen/Qwen3-1.7B"
 
-# QLoRA adapter directory (Qwen version)
-ADAPTER_DIR = PROJECT_ROOT / "adapters" / "CUDA_mindmate_qwen3_1p7b_v2"
+# QLoRA adapter directory — use checkpoint if specified, otherwise final model
+_BASE_ADAPTER = PROJECT_ROOT / "adapters" / "CUDA_mindmate_qwen3_1p7b_v2"
+ADAPTER_DIR = _BASE_ADAPTER / args.checkpoint if args.checkpoint else _BASE_ADAPTER
 
 # System prompt
 PROMPT_PATH = PROJECT_ROOT / "system_prompt.txt"

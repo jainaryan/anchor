@@ -43,35 +43,15 @@ extra_paths = [
     PROJECT_ROOT / "data" / "synthetic_train_transition.jsonl",
 ]
 
-# Data mix presets
-DATA_MIX_PRESETS = {
-    # v2 (2026-04-07): unified default for Llama v2 + Qwen3-1.7B v2
-    # transition=30%, therapist=25%, casual=20%, grief=15%, friend=10%
-    "v2": {
-        "synthetic_train_transition.jsonl": 3000,
-        "synthetic_train_therapist_.jsonl": 2500,
-        "synthetic_train_casual.jsonl":     2000,
-        "synthetic_train.jsonl":            1500,
-        "synthetic_train_friend_1.jsonl":   1000,
-    },
-    # qwen25_3b (2026-04-08): heavier transition for 3B capacity
-    # transition=35%, therapist=25%, casual=15%, grief=15%, friend=10%
-    "qwen25_3b": {
-        "synthetic_train_transition.jsonl": 3500,
-        "synthetic_train_therapist_.jsonl": 2500,
-        "synthetic_train_casual.jsonl":     1500,
-        "synthetic_train.jsonl":            1500,
-        "synthetic_train_friend_1.jsonl":   1000,
-    },
+# Data mix v2 (2026-04-07): transition-first, unified for Llama + Qwen
+# transition=30%, therapist=25%, casual=20%, grief=15%, friend=10%
+SOURCE_CAPS = {
+    "synthetic_train_transition.jsonl": 3000,
+    "synthetic_train_therapist_.jsonl": 2500,
+    "synthetic_train_casual.jsonl":     2000,
+    "synthetic_train.jsonl":            1500,
+    "synthetic_train_friend_1.jsonl":   1000,
 }
-
-import argparse as _argparse
-_preset_parser = _argparse.ArgumentParser(add_help=False)
-_preset_parser.add_argument("--model", type=str, default="v2", choices=list(DATA_MIX_PRESETS.keys()))
-_preset_args, _ = _preset_parser.parse_known_args()
-
-SOURCE_CAPS = DATA_MIX_PRESETS[_preset_args.model]
-print(f"[build_dataset] Using data mix preset: {_preset_args.model}")
 
 os.makedirs(OUT_DIR, exist_ok=True)
 

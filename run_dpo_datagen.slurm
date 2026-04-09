@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=mindmate_dpo_datagen
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:h200-141:1
+#SBATCH --partition=gpu-long
+#SBATCH --gres=gpu:a100-80:1
 #SBATCH --mem=80G
 #SBATCH --cpus-per-task=8
 #SBATCH --time=2-00:00:00
@@ -20,6 +20,8 @@ echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
 echo "=========================================="
 
 # Use Qwen3-72B 4-bit (requires H100/H200 for ~40GB VRAM)
-TEACHER_MODEL=72b python synthetic/dpo_pipeline.py
+export HF_TOKEN=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
+export HF_TOKEN=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
+TEACHER_MODEL=30b python synthetic/dpo_pipeline.py
 
 echo "Data generation complete."
