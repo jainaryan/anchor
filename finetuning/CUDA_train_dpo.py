@@ -135,9 +135,10 @@ def load_base():
         BASE_MODEL,
         quantization_config=bnb_config,
         device_map="auto",
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
         low_cpu_mem_usage=True,
         trust_remote_code=cfg["trust_remote_code"],
+        attn_implementation="eager",
     )
 
 # ── Policy model: SFT adapter + new trainable DPO LoRA ──────────────────────
