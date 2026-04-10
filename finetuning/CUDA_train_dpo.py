@@ -29,7 +29,7 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model",
-    choices=["llama", "qwen", "qwen25_3b", "llama_ck200", "llama_ck1600"],
+    choices=["llama", "qwen", "qwen25_3b", "llama_ck200", "llama_ck1600", "genz"],
     default="llama",
 )
 parser.add_argument("--steps", type=int, default=800)
@@ -69,6 +69,13 @@ CONFIGS = {
         "base_model": "meta-llama/Llama-3.2-3B-Instruct",
         "sft_adapter": "adapters/CUDA_mindmate_llama32b/checkpoint-1600",
         "dpo_out": "adapters/CUDA_mindmate_llama32b_dpo_ck1600",
+        "trust_remote_code": False,
+        "thinking": False,
+    },
+    "genz": {
+        "base_model": "meta-llama/Llama-3.2-3B-Instruct",
+        "sft_adapter": "adapters/genz",
+        "dpo_out": "adapters/genz_dpo",
         "trust_remote_code": False,
         "thinking": False,
     },
@@ -157,7 +164,7 @@ print(f"  Train: {len(dataset['train'])} pairs | Val: {len(dataset['validation']
 
 
 def format_messages(messages) -> str:
-    if args.model in ("llama", "llama_ck200", "llama_ck1600"):
+    if args.model in ("llama", "llama_ck200", "llama_ck1600", "genz"):
         # Manually construct Llama 3 prompt — bypasses Jinja2 template issues
         result = "<|begin_of_text|>"
         for msg in messages:
