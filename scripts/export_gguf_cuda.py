@@ -49,6 +49,12 @@ MODELS = {
         "adapter": PROJECT_ROOT / "adapters" / "CUDA_mindmate_qwen25_3b_dpo_ck200",
         "out_name": "mindmate_qwen25_dpo_ck200",
     },
+    # SFT only — Llama 3.2 3B checkpoint-1600 (pre-DPO baseline)
+    "llama_sft_ck1600": {
+        "base": "meta-llama/Llama-3.2-3B-Instruct",
+        "adapter": PROJECT_ROOT / "adapters" / "CUDA_mindmate_llama32b" / "checkpoint-1600",
+        "out_name": "mindmate_llama_sft_ck1600",
+    },
     # Legacy
     "genz": {
         "base": "meta-llama/Llama-3.2-3B-Instruct",
