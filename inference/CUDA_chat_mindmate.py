@@ -15,8 +15,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--checkpoint",
     type=str,
-    default=None,
-    help="Checkpoint subfolder to load, e.g. 'checkpoint-600'. Defaults to final model."
+    default="checkpoint-200",
+    help="Checkpoint subfolder to load, e.g. 'checkpoint-600'. Defaults to checkpoint-200."
 )
 args = parser.parse_args()
 
@@ -85,7 +85,7 @@ def main():
         device_map="auto",
         torch_dtype=torch.float16,
         low_cpu_mem_usage=True,
-        attn_implementation="sdpa",
+        attn_implementation="eager",
     )
     model.config.use_cache = True
 

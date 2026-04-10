@@ -267,6 +267,15 @@ These are no longer consumed by the active pipeline — synthetic data only.
 - Final loss: 1.279 after 800 steps on A100-40
 - Load: base → merge SFT ck200 → apply DPO LoRA
 
+### `adapters/CUDA_mindmate_llama32b_dpo_ck1600/` — Llama DPO ck1600 (job 569555) ⏳ TRAINING
+- DPO LoRA on top of SFT ck1600, 800 steps on H100-47
+
+### `adapters/CUDA_mindmate_qwen25_3b_dpo_ck1600/` — Qwen2.5-3B DPO ck1600 (job 569556) ⏳ TRAINING
+- DPO LoRA on top of Qwen2.5-3B SFT ck1600, 800 steps on H100-47
+
+### `adapters/genz_dpo/` — genz DPO (job 569447) ⏳ TRAINING
+- DPO LoRA on top of full genz adapter, 800 steps on A100-80
+
 ### `adapters/CUDA_mindmate_qwen3_1p7b/` — Qwen3-1.7B SFT adapter (job 544016) — ARCHIVED
 - 1.7B capacity causes hallucinations and gender confusion — not pursuing further
 
@@ -287,6 +296,21 @@ These are no longer consumed by the active pipeline — synthetic data only.
 | 562150 | mindmate-export | FAILED | H100-96 | llama_sft_ck200 — wrong script version |
 | 562151 | mindmate-export | FAILED | H100-96 | llama_dpo_ck200 — wrong script version |
 | 562152 | mindmate-export | FAILED | H100-96 | qwen25_dpo_ck200 — wrong script version |
+| 566379 | mindmate-export | FAILED | H100-96 | llama_sft_ck200 — rsync path issue |
+| 566380 | mindmate-export | FAILED | H100-96 | llama_dpo_ck200 — rsync path issue |
+| 566381 | mindmate-export | FAILED | H100-96 | qwen25_dpo_ck200 — rsync path issue |
+| 566583 | mindmate-export | COMPLETED | H100-96 | llama_sft_ck1600 ✅ → uploaded to HF as llama(genz)v2 |
+| 566641 | mindmate-export | COMPLETED | H100-96 | llama_sft_ck200 ✅ |
+| 566642 | mindmate-export | COMPLETED | H100-96 | llama_dpo_ck200 ✅ |
+| 566643 | mindmate-export | COMPLETED | H100-96 | qwen25_dpo_ck200 ✅ |
+| 566567 | mindmate-dpo-llama-ck1600 | FAILED | A100-80 | old script (missing llama_ck1600 config) |
+| 569434 | mindmate-dpo-genz | CANCELLED | A100-40 | switched to A100-80 |
+| 569447 | mindmate-dpo-genz | RUNNING | A100-80 | genz DPO, 800 steps |
+| 569481 | mindmate-dpo-llama-ck1600 | CANCELLED | A100-40 | switched to H100-47 |
+| 569491 | mindmate-dpo-llama-ck1600 | FAILED | H100-47 | CUDNN_STATUS_NOT_INITIALIZED (sdpa) |
+| 569529 | mindmate-dpo-qwen25-ck1600 | FAILED | H100-47 | CUDNN_STATUS_NOT_INITIALIZED (sdpa) |
+| 569555 | mindmate-dpo-llama-ck1600 | RUNNING | H100-47 | fixed (eager attn), 800 steps |
+| 569556 | mindmate-dpo-qwen25-ck1600 | RUNNING | H100-47 | fixed (eager attn), 800 steps |
 
 ---
 
@@ -430,11 +454,9 @@ These are no longer consumed by the active pipeline — synthetic data only.
 ## Practical Roadmap To Reach Goal (Local Finetuned Android Wellness Assistant)
 
 ### Immediate (pending)
-1. ⏳ GGUF export — resubmit after syncing updated `export_gguf_cuda.py` to cluster
-   - `sbatch run_export.slurm llama_sft_ck200`
-   - `sbatch run_export.slurm llama_dpo_ck200`
-   - `sbatch run_export.slurm qwen25_dpo_ck200`
-2. ⏳ Inference testing — compare DPO vs SFT ck200 on same prompts
+1. ⏳ DPO jobs running — Llama ck1600 (569555), Qwen2.5-3B ck1600 (569556), genz (569447)
+2. ⏳ Once DPO done — export GGUFs for ck1600 DPO models
+3. ⏳ Inference testing — compare all models (SFT vs DPO, ck200 vs ck1600)
 
 ### Phase 1: Quality hardening
 1. Evaluate DPO vs SFT models on casual/emotional/panic scenarios

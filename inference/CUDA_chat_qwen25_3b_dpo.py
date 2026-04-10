@@ -1,7 +1,5 @@
 import json
 import torch
-import os
-import time
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -13,35 +11,34 @@ from peft import PeftModel
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--checkpoint",
+    "--sft-checkpoint",
     type=str,
     default="checkpoint-200",
-    help="Checkpoint subfolder to load, e.g. 'checkpoint-200'. Defaults to checkpoint-200."
+    help="SFT checkpoint subfolder, e.g. 'checkpoint-200'."
+)
+parser.add_argument(
+    "--dpo-adapter",
+    type=str,
+    default="CUDA_mindmate_qwen25_3b_dpo_ck200",
+    help="DPO adapter folder name under adapters/."
 )
 args = parser.parse_args()
 
-# ========= CONFIG: EDIT HERE IF NEEDED =========
+# ========= CONFIG =========
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-# Base model (Qwen2.5 3B Instruct)
-MODEL_DIR = "Qwen/Qwen2.5-3B-Instruct"
-
-# QLoRA adapter directory — use checkpoint if specified, otherwise final model
-_BASE_ADAPTER = PROJECT_ROOT / "adapters" / "CUDA_mindmate_qwen25_3b"
-ADAPTER_DIR = _BASE_ADAPTER / args.checkpoint if args.checkpoint else _BASE_ADAPTER
-
-# System prompt
+MODEL_DIR   = "Qwen/Qwen2.5-3B-Instruct"
+SFT_ADAPTER = PROJECT_ROOT / "adapters" / "CUDA_mindmate_qwen25_3b" / args.sft_checkpoint
+DPO_ADAPTER = PROJECT_ROOT / "adapters" / args.dpo_adapter
 PROMPT_PATH = PROJECT_ROOT / "system_prompt.txt"
 
-# Generation settings
-TEMPERATURE = 0.75
-TOP_P = 0.9
-TOP_K = 50
-MAX_NEW_TOKENS = 256
+TEMPERATURE        = 0.75
+TOP_P              = 0.9
+TOP_K              = 50
+MAX_NEW_TOKENS     = 256
 REPETITION_PENALTY = 1.25
 
-# Conversation logs directory
 LOG_DIR = PROJECT_ROOT / "logs"
 
 # ========= END CONFIG =========
@@ -56,40 +53,33 @@ def load_system_prompt():
             return system
         except (UnicodeDecodeError, FileNotFoundError):
             continue
-
-    print(f"[warn] system prompt not found or undecodable at {PROMPT_PATH}. Using fallback.")
-    return "You are MindMate, a helpful and empathetic AI assistant specialized in emotional support and conversation."
+    print("[warn] system prompt not found. Using fallback.")
+    return "You are MindMate, a helpful and empathetic AI assistant specialized in emotional support."
 
 def save_conversation(history: list, log_dir: Path):
     log_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = log_dir / f"chat_qwen25_3b_{timestamp}.json"
-
+    log_file = log_dir / f"chat_qwen25_dpo_{timestamp}.json"
     with log_file.open("w", encoding="utf-8") as f:
-        json.dump({
-            "timestamp": timestamp,
-            "messages": history
-        }, f, indent=2, ensure_ascii=False)
-
+        json.dump({"timestamp": timestamp, "messages": history}, f, indent=2, ensure_ascii=False)
     print(f"[info] conversation saved to {log_file}")
     return log_file
 
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[info] project root: {PROJECT_ROOT}")
+    print(f"[info] project root : {PROJECT_ROOT}")
+    print(f"[info] SFT adapter  : {SFT_ADAPTER}")
+    print(f"[info] DPO adapter  : {DPO_ADAPTER}")
     print(f"[info] loading tokenizer and model (4-bit NF4)...")
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        str(MODEL_DIR),
-        trust_remote_code=True
-    )
+    tokenizer = AutoTokenizer.from_pretrained(str(MODEL_DIR), trust_remote_code=True)
     tokenizer.pad_token = tokenizer.eos_token
 
     quant_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_compute_dtype=torch.float16,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True
+        bnb_4bit_use_double_quant=True,
     )
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -97,20 +87,26 @@ def main():
         quantization_config=quant_config,
         device_map="auto",
         dtype=torch.float16,
-        attn_implementation="eager",
         low_cpu_mem_usage=True,
         trust_remote_code=True,
+        attn_implementation="eager",
     )
     model.config.use_cache = True
 
-    print(f"[info] loading adapters from: {ADAPTER_DIR}")
-    model = PeftModel.from_pretrained(model, str(ADAPTER_DIR))
+    print(f"[info] loading SFT adapter...")
+    model = PeftModel.from_pretrained(model, str(SFT_ADAPTER), adapter_name="sft")
+
+    print(f"[info] loading DPO adapter...")
+    model.load_adapter(str(DPO_ADAPTER), adapter_name="dpo")
+    model.set_adapter("dpo")
+
     model.eval()
 
     system = load_system_prompt()
     history_list = [{"role": "system", "content": system}] if system else []
 
-    print("\n--- MindMate Interactive (Qwen2.5-3B) ---")
+    print("\n--- MindMate Interactive (Qwen2.5-3B — DPO) ---")
+    print(f"SFT: {args.sft_checkpoint} | DPO: {args.dpo_adapter}")
     print("Type your message. Type 'quit' to exit.\n")
 
     while True:
@@ -129,7 +125,6 @@ def main():
 
         history_list.append({"role": "user", "content": user_input})
 
-        # Qwen2.5 does not have thinking mode — no enable_thinking param needed
         prompt = tokenizer.apply_chat_template(
             history_list,
             tokenize=False,
@@ -137,10 +132,9 @@ def main():
         )
 
         inputs = tokenizer(prompt, return_tensors="pt").to(device)
-
         terminators = [tokenizer.eos_token_id]
         im_end_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
-        if im_end_id is not None and im_end_id != tokenizer.unk_token_id:
+        if im_end_id:
             terminators.append(im_end_id)
 
         if torch.cuda.is_available():
