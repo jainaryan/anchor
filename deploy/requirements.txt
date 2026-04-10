@@ -1,0 +1,7 @@
+# Install llama-cpp-python WITH CUDA support (do not use plain pip install):
+#   CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --no-cache-dir
+#
+# Everything else:
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9

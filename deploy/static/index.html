@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anchor</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-brand">
+          <img src="anchor_logo.png" alt="Anchor" class="sidebar-logo" />
+          <span class="sidebar-name">Anchor</span>
+        </div>
+        <button id="new-chat-btn" title="New chat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+      </div>
+      <nav id="chat-list"></nav>
+    </aside>
+
+    <!-- Main -->
+    <div id="main">
+
+      <!-- Header -->
+      <header>
+        <button id="sidebar-toggle" aria-label="Toggle sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <div class="header-right">
+          <button id="feedback-btn" onclick="window.open('https://forms.gle/cQUBm2MouLGobn2h8','_blank','noopener')">Feedback</button>
+          <div class="model-select-wrap">
+            <label for="model-select">Model</label>
+            <select id="model-select"></select>
+          </div>
+        </div>
+      </header>
+
+      <!-- Messages -->
+      <main id="messages" aria-live="polite"></main>
+
+      <!-- Input -->
+      <footer>
+        <div class="input-wrap">
+          <textarea id="input" placeholder="Message Anchor…" rows="1" maxlength="2000" aria-label="Message input"></textarea>
+          <button id="send-btn" aria-label="Send">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+        <p class="disclaimer">Anchor is an AI companion, not a therapist. If you're in crisis, call or text a crisis line.</p>
+      </footer>
+
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
