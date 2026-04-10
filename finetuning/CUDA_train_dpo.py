@@ -29,7 +29,7 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model",
-    choices=["llama", "qwen", "qwen25_3b", "llama_ck200", "llama_ck1600", "genz"],
+    choices=["llama", "qwen", "qwen25_3b", "llama_ck200", "llama_ck1600", "genz", "qwen25_3b_ck1600"],
     default="llama",
 )
 parser.add_argument("--steps", type=int, default=800)
@@ -77,6 +77,13 @@ CONFIGS = {
         "sft_adapter": "adapters/genz",
         "dpo_out": "adapters/genz_dpo",
         "trust_remote_code": False,
+        "thinking": False,
+    },
+    "qwen25_3b_ck1600": {
+        "base_model": "Qwen/Qwen2.5-3B-Instruct",
+        "sft_adapter": "adapters/CUDA_mindmate_qwen25_3b/checkpoint-1600",
+        "dpo_out": "adapters/CUDA_mindmate_qwen25_3b_dpo_ck1600",
+        "trust_remote_code": True,
         "thinking": False,
     },
 }
