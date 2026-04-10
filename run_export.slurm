@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=mindmate-export
-#SBATCH --output=logs/export_%j.log
-#SBATCH --error=logs/export_%j.err
+#SBATCH --output=/home/a/aryanj/logs/export_%j.log
+#SBATCH --error=/home/a/aryanj/logs/export_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8

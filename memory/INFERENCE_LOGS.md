@@ -167,11 +167,98 @@ Mindmate: ohhh yeah. i know how this feels right after work ends 🙃 just sit h
 
 ---
 
+---
+
+## Llama 3.2 3B — v2 SFT adapter (`CUDA_mindmate_llama32b/checkpoint-200`)
+**Date:** 2026-04-09
+**Job:** 554799 (A100-40, gpu-long, ~5h)
+**Data mix:**
+| Source | Samples | % |
+|---|---|---|
+| transition | 3,000 | 30% |
+| therapist | 2,500 | 25% |
+| casual | 2,000 | 20% |
+| grief/loss | 1,500 | 15% |
+| friend | 1,000 | 10% |
+| **Total** | **10,000** | |
+**System prompt:** Simplified 13-line prompt (temperature 0.75)
+
+```
+You: hey
+Mindmate: hey! what's going on?
+
+You: im sad rn
+Mindmate: aw, what happened?
+
+You: my dog died
+Mindmate: oh no… i'm so sorry. that's really hard. how long did you have him?
+
+You: 8 years, he was my best friend
+Mindmate: 8 years is a long time. he was really part of your life. what was he like?
+
+You: he was always there for me. i feel like it was my fault
+Mindmate: that guilt hits different when you lose someone you love. what makes you feel like it was your fault?
+```
+
+**Rating: 8/10**
+
+✅ Good:
+- Natural casual opener ("hey! what's going on?")
+- Immediate pivot on distress ("aw, what happened?")
+- Follow-up questions feel organic, not scripted
+- Guilt handling: validates + gently probes ("what makes you feel like it was your fault?")
+- Correct pronouns throughout
+- No therapy-speak, no breathing exercises
+
+❌ Bad:
+- Occasional over-use of ellipsis (minor)
+
+**Conclusion:** Huge improvement over genz adapter. Transition data fixed joke-mode-lock. checkpoint-200 avoids the hallucination patterns seen at ck-800 and ck-1600.
+
+---
+
+## Qwen2.5-3B — SFT adapter (`CUDA_mindmate_qwen25_3b/checkpoint-200`)
+**Date:** 2026-04-09
+**Data mix:** Same v2 mix as Llama (transition 30%, therapist 25%, casual 20%, grief 15%, friend 10%)
+**System prompt:** Simplified 13-line prompt (temperature 0.75)
+
+```
+You: hey
+Mindmate: Hey! How are you doing?
+
+You: im sad rn
+Mindmate: Oh no, what's going on?
+
+You: my dog died
+Mindmate: I'm so sorry to hear that. Losing a pet is really painful. How are you feeling right now?
+
+You: i feel like it was my fault
+Mindmate: It's understandable to feel that way, but it's important to remember that you did the best you could. What makes you think it was your fault?
+```
+
+**Rating: 5/10**
+
+✅ Good:
+- Does pivot on distress (doesn't stay casual)
+- Correct pronouns
+- No hallucinations
+
+❌ Bad:
+- "it's important to remember" — therapy-speak
+- "you did the best you could" before hearing the story — too quick to reassure
+- More formal/stiff than Llama ("How are you feeling right now?" vs Llama's "that's really hard. how long did you have him?")
+- Uses capital letters throughout — less casual than target persona
+
+**Conclusion:** Qwen2.5-3B handles pivots correctly but sounds more like a therapist bot than a friend. DPO should help reduce the reassurance-before-listening pattern. Llama remains the better model at this checkpoint.
+
+---
+
 ## Pending Tests
 
-- [x] Qwen checkpoint-200
-- [x] Qwen checkpoint-800
-- [x] Qwen checkpoint-1600 (final)
-- [ ] Llama 3.2 3B v2 (job 554799, finishing ~soon)
-- [ ] Llama + DPO adapter
-- [ ] Qwen + DPO adapter
+- [x] Qwen3-1.7B checkpoint-200
+- [x] Qwen3-1.7B checkpoint-800
+- [x] Qwen3-1.7B checkpoint-1600 (final)
+- [x] Llama 3.2 3B v2 SFT checkpoint-200 ← **current best**
+- [x] Qwen2.5-3B SFT checkpoint-200
+- [ ] Llama + DPO adapter (ck200)
+- [ ] Qwen2.5-3B + DPO adapter (ck200)
