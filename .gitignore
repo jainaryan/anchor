@@ -38,6 +38,7 @@ llama.cpp/
 # Large Files & Exports
 *.safetensors
 exports/
+!exports/README.md
 exports.zip
 mlx_export/
 
