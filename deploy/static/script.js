@@ -11,9 +11,17 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
   }
 
+  function uuid() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
   function newChat(modelId) {
     return {
-      id: crypto.randomUUID(),
+      id: uuid(),
       title: "New chat",
       model: modelId,
       messages: [],
@@ -40,7 +48,19 @@
   const toggleBtn    = document.getElementById("sidebar-toggle");
 
   // ── Sidebar toggle ─────────────────────────────────────────────────────
-  toggleBtn.addEventListener("click", () => sidebarEl.classList.toggle("collapsed"));
+  const backdropEl = document.getElementById("sidebar-backdrop");
+
+  function closeSidebar() { sidebarEl.classList.add("collapsed"); }
+  function toggleSidebar() { sidebarEl.classList.toggle("collapsed"); }
+
+  // Collapse by default on mobile
+  if (window.innerWidth <= 600) closeSidebar();
+
+  const closeBtn = document.getElementById("sidebar-close");
+
+  toggleBtn.addEventListener("click", toggleSidebar);
+  backdropEl.addEventListener("click", closeSidebar);
+  closeBtn.addEventListener("click", closeSidebar);
 
   // ── Load models ────────────────────────────────────────────────────────
   async function loadModels() {
@@ -253,6 +273,14 @@
         chat.messages.push({ role: "assistant", content: accumulated });
         chat.updatedAt = Date.now();
         saveChats(chats);
+        if (!toastShown) {
+          messagesSent++;
+          if (messagesSent >= 3) {
+            toastShown = true;
+            feedbackToast.classList.add("show");
+            setTimeout(() => feedbackToast.classList.remove("show"), 6000);
+          }
+        }
       }
       setStreaming(false);
     }
@@ -275,6 +303,18 @@
   });
 
   sendBtn.addEventListener("click", sendMessage);
+
+  // ── Feedback pulse (after 30s) ─────────────────────────────────────────
+  const feedbackBtn = document.getElementById("feedback-btn");
+  setTimeout(() => {
+    feedbackBtn.classList.add("pulsing");
+    feedbackBtn.addEventListener("animationend", () => feedbackBtn.classList.remove("pulsing"), { once: true });
+  }, 30000);
+
+  // ── Feedback toast (after 3rd message sent) ────────────────────────────
+  const feedbackToast = document.getElementById("feedback-toast");
+  let messagesSent = 0;
+  let toastShown = false;
 
   // ── Init ───────────────────────────────────────────────────────────────
   createNewChat();   // synchronous — always starts with a fresh chat

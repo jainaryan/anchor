@@ -23,7 +23,15 @@
         </button>
       </div>
       <nav id="chat-list"></nav>
+      <button id="sidebar-close" aria-label="Close sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
     </aside>
+
+    <!-- Mobile backdrop -->
+    <div id="sidebar-backdrop"></div>
 
     <!-- Main -->
     <div id="main">
@@ -63,6 +71,7 @@
     </div>
   </div>
 
+  <div id="feedback-toast">Enjoying Anchor? <a href="https://forms.gle/cQUBm2MouLGobn2h8" target="_blank" rel="noopener">Leave feedback →</a></div>
   <script src="script.js"></script>
 </body>
 </html>

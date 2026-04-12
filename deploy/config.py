@@ -22,10 +22,10 @@ MODELS = [
 # Inference settings
 # ---------------------------------------------------------------------------
 N_GPU_LAYERS = 0        # 0 = CPU-only; set to -1 for full GPU offload
-N_CTX = 4096            # context window per session
-MAX_TOKENS = 512        # max tokens per response
+N_CTX = 2048            # context window per session
+MAX_TOKENS = 150        # max tokens per response
 TEMPERATURE = 0.75
-INFERENCE_TIMEOUT = 30  # seconds to wait for next token before aborting
+INFERENCE_TIMEOUT = 120  # seconds to wait for next token before aborting
 
 # ---------------------------------------------------------------------------
 # System prompt
