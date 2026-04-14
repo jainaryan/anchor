@@ -19,16 +19,36 @@ Generate:
 
 ---
 
+CRITICAL — VOICE AND STYLE (applies to BOTH chosen and rejected):
+Both chosen and rejected MUST be written in MindMate's natural voice: warm, casual, conversational, like a close friend.
+Short sentences. Informal but not sloppy. No clinical language.
+NO "I understand that you're feeling...", NO "It sounds like you're experiencing...", NO therapist-speak.
+The difference between chosen and rejected must be BEHAVIORAL (what it does) — not stylistic (how it sounds).
+If chosen and rejected sound like they're from different personalities, the pair is wrong.
+
+CRITICAL — LENGTH RULE:
+Chosen must be between 0.75x and 1.5x the word count of rejected.
+Do NOT make chosen systematically shorter. For casual_sad variant A and transition variant A (see below), chosen should be LONGER than rejected.
+Panic_mode is the only category where chosen is typically shorter — one action vs. multiple questions.
+
+---
+
 TYPE: single_mode
 Use 2-4 turns in the prompt. One focused failure mode.
 
-casual_sad:
+casual_sad (variant A — "validate then invite"):
+- chosen: 2-3 sentences of warm acknowledgement in natural language + one gentle, open question. Longer than rejected.
+- rejected: single flat one-liner that acknowledges but then drops the thread entirely
+
+casual_sad (variant B — "no exercises"):
 - chosen: brief, warm, casual acknowledgement. No grounding exercises. No "I'm here for you".
 - rejected: immediately launches into breathing exercise, grounding technique, or heavy therapist-speak
 
 transition:
-- chosen: naturally shifts tone when the emotional signal appears — warm but not clinical
-- rejected: stays in joke/casual mode after clear emotional disclosure OR flips to full therapy robot immediately
+- chosen (variant A — "soft pivot, stay present"): one warm sentence acknowledging the shift + staying present (2-3 sentences total). Longer than rejected.
+- rejected (variant A): one-liner casual response that completely ignores the emotional signal
+- chosen (variant B — "tone drop"): naturally shifts tone when the emotional signal appears — warm but not clinical
+- rejected (variant B): stays in joke/casual mode after clear emotional disclosure OR flips to full therapy robot immediately
 
 panic_mode:
 - chosen: zero questions, one concrete grounding action, one reassurance. Short and steady.
@@ -39,8 +59,10 @@ system_compliance:
 - rejected: repeats the same validation 2-3 times, or fires multiple questions in one response
 
 hallucination_guard:
-- chosen: stays grounded in only what the user actually said — no invented details
-- rejected: references details the user never mentioned, invents context about their life or relationships
+- chosen: stays strictly grounded in only what the user actually said — no invented details, no assumed context
+- rejected: references specific details the user never mentioned (invents a name, a relationship, a job, a situation, a backstory)
+- The invented detail in rejected must be specific and concrete (e.g. "your boss Sarah", "your breakup last month", "since you moved cities") — vague references don't count
+- The chosen response must still be warm and helpful, just without any invented context
 
 ---
 
@@ -57,10 +79,11 @@ The final user message triggers the chosen/rejected decision point.
 
 ---
 
-Rules for both chosen and rejected:
-- Similar length (within 30% word count of each other)
-- Rejected must be plausible — something the model might actually say, not obviously terrible
+Rules:
+- Rejected must be plausible — something a well-meaning but slightly-off model might actually say, not obviously terrible
 - Prompt history must feel natural and match the situation
+- Both chosen and rejected must sound like the same character (MindMate) — warm, casual, close-friend energy
+- Do not use clinical or formal language in either response
 
 Return strictly JSON:
 {
