@@ -40,7 +40,7 @@ echo "  beta=0.2 | max_length=2048 | steps=1200 | LoRA r=16 | GPU: H100-47"
 echo "=========================================="
 
 # Preflight: require at least 5000 training pairs
-TRAIN_LEN=$(wc -l < data/dpo_train.jsonl 2>/dev/null || echo 0)
+TRAIN_LEN=$(wc -l < data/dpo_train_v2.jsonl 2>/dev/null || echo 0)
 echo "Training pairs found: $TRAIN_LEN"
 if [ "$TRAIN_LEN" -lt 5000 ]; then
   echo "ERROR: Fewer than 5000 training pairs ($TRAIN_LEN). Run run_dpo_datagen_v2.slurm first."
