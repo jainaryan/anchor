@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=mindmate-gemma4-e2b
-#SBATCH --output=/home/a/aryanj/logs/finetune_gemma4_e2b_%j.log
-#SBATCH --error=/home/a/aryanj/logs/finetune_gemma4_e2b_%j.err
+#SBATCH --job-name=mindmate-gemma4-e4b
+#SBATCH --output=/home/a/aryanj/logs/finetune_gemma4_e4b_%j.log
+#SBATCH --error=/home/a/aryanj/logs/finetune_gemma4_e4b_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
@@ -28,14 +28,14 @@ if [ -z "${HF_TOKEN:-}" ]; then
   fi
 fi
 
-# Gemma 4 requires accepting the license on HuggingFace — ensure HF_TOKEN is set
+# Gemma 4 is a gated model — HF_TOKEN must be set and have access granted
 if [ -z "${HF_TOKEN:-}" ]; then
   echo "WARNING: HF_TOKEN is not set. Gemma 4 is a gated model — download may fail."
 fi
 
 cd ~/projects/mindmate
 
-echo "Starting Gemma 4 E2B IT finetuning pipeline..."
-mindmatenv/bin/python finetuning/CUDA_run_pipeline_gemma4_e2b.py
+echo "Starting Gemma 4 E4B IT finetuning pipeline..."
+mindmatenv/bin/python finetuning/CUDA_run_pipeline_gemma4_e4b.py
 
 echo "Finetuning complete!"

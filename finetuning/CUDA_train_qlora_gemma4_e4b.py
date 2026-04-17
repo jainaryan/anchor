@@ -25,9 +25,9 @@ print(f'CUDA version: {torch.version.cuda}')
 if not torch.cuda.is_available():
     raise RuntimeError("CUDA not available")
 
-BASE_MODEL_DIR = "google/gemma-4-e2b-it"
+BASE_MODEL_DIR = "google/gemma-4-e4b-it"
 DATA_DIR = "data/conversations_cleaned"
-OUT_DIR = "adapters/CUDA_mindmate_gemma4_e2b"
+OUT_DIR = "adapters/CUDA_mindmate_gemma4_e4b"
 TRAIN_FILE = Path(DATA_DIR) / "mindmate_train.jsonl"
 VAL_FILE = Path(DATA_DIR) / "mindmate_val.jsonl"
 
@@ -36,7 +36,7 @@ if not TRAIN_FILE.exists() or not VAL_FILE.exists():
         "Expected cleaned dataset files were not found:\n"
         f" - {TRAIN_FILE}\n"
         f" - {VAL_FILE}\n"
-        "Run finetuning/CUDA_run_pipeline_gemma4_e2b.py (build + clean) before training."
+        "Run finetuning/CUDA_run_pipeline_gemma4_e4b.py (build + clean) before training."
     )
 
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_DIR)
@@ -53,7 +53,7 @@ model = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL_DIR,
     quantization_config=bnb_config,
     device_map="auto",
-    attn_implementation="eager",
+    attn_implementation="eager",  # required for Gemma 4 — SDPA causes NaN gradients in 4-bit
 )
 
 # Gemma 4 wraps its linear layers in Gemma4ClippableLinear, which PEFT's LoRA
@@ -190,11 +190,13 @@ def validate_tokenized_split(split, split_name: str, sample_limit: int = 128):
 validate_tokenized_split(dataset["train"], "train")
 validate_tokenized_split(dataset["validation"], "validation")
 
+# E4B is twice the size of E2B — use batch=2, accum=4 to keep effective batch=8
+# while staying safely within A100-40 VRAM with 4-bit quantization
 args = TrainingArguments(
     output_dir=OUT_DIR,
-    per_device_train_batch_size=4,
-    per_device_eval_batch_size=4,
-    gradient_accumulation_steps=2,
+    per_device_train_batch_size=2,
+    per_device_eval_batch_size=2,
+    gradient_accumulation_steps=4,
     learning_rate=1e-5,
     max_steps=args_parsed.iters,
     logging_steps=10,

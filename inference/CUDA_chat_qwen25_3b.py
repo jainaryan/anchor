@@ -15,8 +15,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--checkpoint",
     type=str,
-    default="checkpoint-200",
-    help="Checkpoint subfolder to load, e.g. 'checkpoint-200'. Defaults to checkpoint-200."
+    default=None,
+    help="Checkpoint subfolder to load, e.g. 'checkpoint-200'. Defaults to final model."
 )
 args = parser.parse_args()
 
@@ -96,8 +96,7 @@ def main():
         str(MODEL_DIR),
         quantization_config=quant_config,
         device_map="auto",
-        dtype=torch.float16,
-        attn_implementation="eager",
+        torch_dtype=torch.float16,
         low_cpu_mem_usage=True,
         trust_remote_code=True,
     )

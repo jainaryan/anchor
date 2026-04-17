@@ -29,7 +29,7 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model",
-    choices=["llama", "qwen", "qwen25_3b", "llama_ck200", "llama_ck1600", "genz", "qwen25_3b_ck1600", "genz_ck1600"],
+    choices=["llama", "qwen", "qwen25_3b", "llama_ck200"],
     default="llama",
 )
 parser.add_argument("--steps", type=int, default=800)
@@ -62,35 +62,6 @@ CONFIGS = {
         "base_model": "meta-llama/Llama-3.2-3B-Instruct",
         "sft_adapter": "adapters/CUDA_mindmate_llama32b/checkpoint-200",
         "dpo_out": "adapters/CUDA_mindmate_llama32b_dpo_ck200",
-        "trust_remote_code": False,
-        "thinking": False,
-    },
-    "llama_ck1600": {
-        "base_model": "meta-llama/Llama-3.2-3B-Instruct",
-        "sft_adapter": "adapters/CUDA_mindmate_llama32b/checkpoint-1600",
-        "dpo_out": "adapters/CUDA_mindmate_llama32b_dpo_ck1600",
-        "trust_remote_code": False,
-        "thinking": False,
-    },
-    "genz": {
-        "base_model": "meta-llama/Llama-3.2-3B-Instruct",
-        "sft_adapter": "adapters/genz",
-        "dpo_out": "adapters/genz_dpo",
-        "trust_remote_code": False,
-        "thinking": False,
-    },
-    "qwen25_3b_ck1600": {
-        "base_model": "Qwen/Qwen2.5-3B-Instruct",
-        "sft_adapter": "adapters/CUDA_mindmate_qwen25_3b/checkpoint-1600",
-        "dpo_out": "adapters/CUDA_mindmate_qwen25_3b_dpo_ck1600",
-        "trust_remote_code": True,
-        "thinking": False,
-    },
-    # v2: best SFT base (genzv2 ck1600) + fixed DPO data + higher beta to protect genz voice
-    "genz_ck1600": {
-        "base_model": "meta-llama/Llama-3.2-3B-Instruct",
-        "sft_adapter": "adapters/genz/checkpoint-1600",
-        "dpo_out": "adapters/genz_ck1600_dpo_v2",
         "trust_remote_code": False,
         "thinking": False,
     },
@@ -143,18 +114,17 @@ def load_base():
         BASE_MODEL,
         quantization_config=bnb_config,
         device_map="auto",
-        dtype=torch.float16,
+        torch_dtype=torch.float16,
         low_cpu_mem_usage=True,
         trust_remote_code=cfg["trust_remote_code"],
-        attn_implementation="eager",
     )
 
 # ── Policy model: SFT adapter + new trainable DPO LoRA ──────────────────────
 print("[2/5] Loading policy model (SFT + DPO LoRA)...")
 policy_model = PeftModel.from_pretrained(load_base(), str(SFT_ADAPTER), is_trainable=True)
 dpo_lora_config = LoraConfig(
-    r=16,
-    lora_alpha=32,
+    r=8,
+    lora_alpha=16,
     lora_dropout=0.05,
     target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
     task_type="CAUSAL_LM",
@@ -180,7 +150,7 @@ print(f"  Train: {len(dataset['train'])} pairs | Val: {len(dataset['validation']
 
 
 def format_messages(messages) -> str:
-    if args.model in ("llama", "llama_ck200", "llama_ck1600", "genz", "genz_ck1600"):
+    if args.model in ("llama", "llama_ck200"):
         # Manually construct Llama 3 prompt — bypasses Jinja2 template issues
         result = "<|begin_of_text|>"
         for msg in messages:
@@ -251,7 +221,7 @@ DPO_OUT.mkdir(parents=True, exist_ok=True)
 
 dpo_config = DPOConfig(
     output_dir=str(DPO_OUT),
-    beta=0.2,              # raised from 0.1 — stronger KL penalty to protect genz voice
+    beta=0.1,
     loss_type="sigmoid",
     precompute_ref_log_probs=True,  # cache ref logprobs upfront, then free ref_model
     per_device_train_batch_size=2,
@@ -262,7 +232,7 @@ dpo_config = DPOConfig(
     warmup_ratio=0.05,
     lr_scheduler_type="cosine",
     optim="paged_adamw_32bit",
-    max_length=2048,       # raised from 1536 — mixed_mode long prompts were truncating
+    max_length=1536,
     logging_steps=10,
     save_steps=200,
     eval_strategy="steps",

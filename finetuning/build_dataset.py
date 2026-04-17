@@ -72,6 +72,15 @@ DATA_MIX_PRESETS = {
         "synthetic_train.jsonl":            1500,
         "synthetic_train_friend_1.jsonl":   1000,
     },
+    # gemma4_e4b (2026-04-17): 4B model — same mix as e2b for clean A/B comparison
+    # transition=30%, therapist=25%, casual=20%, grief=15%, friend=10%
+    "gemma4_e4b": {
+        "synthetic_train_transition.jsonl": 3000,
+        "synthetic_train_therapist_.jsonl": 2500,
+        "synthetic_train_casual.jsonl":     2000,
+        "synthetic_train.jsonl":            1500,
+        "synthetic_train_friend_1.jsonl":   1000,
+    },
 }
 
 import argparse as _argparse
