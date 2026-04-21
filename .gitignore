@@ -52,3 +52,15 @@ server.log
 .env
 
 # Local internal project knowledge base (do not commit)
+.claude/
+
+# Adapter checkpoints — large model weight directories (safetensors excluded above, but directories themselves)
+adapters/
+android/temp_lib.so
+
+# Scratch forks / local apps not part of main pipeline
+mindmate_app/
+
+# Generated social drafts / images (API output)
+social_media/output/
+social_media/

@@ -253,12 +253,59 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 
 ---
 
-## Pending Tests
+---
+
+## Llama 3.2 3B — genzv2 SFT (`adapters/genz/checkpoint-1600`) — **PRODUCTION MODEL**
+**Date:** 2026-04-14
+**Job:** N/A (re-evaluation of existing checkpoint)
+**Data mix (v2):**
+| Source | Samples | % |
+|---|---|---|
+| transition | 3,000 | 30% |
+| therapist | 2,500 | 25% |
+| casual | 2,000 | 20% |
+| grief/loss | 1,500 | 15% |
+| friend | 1,000 | 10% |
+| **Total** | **10,000** | |
+**System prompt:** 6-line Anchor prompt (warm friend, no lecturing)
+
+**Rating: 9/10**
+
+✅ Good:
+- Best overall model — beats all DPO variants and all other SFT checkpoints
+- Natural casual tone, clean emotional pivoting
+- No fake shared history, no hallucinations
+- Correct pronoun tracking
+- No therapy-speak
+
+❌ Mild:
+- Occasional over-use of ellipsis (minor)
+
+**Conclusion:** genzv2 ck1600 is the winner. DPO did not improve it. Now running in production at https://tryanchor.me as `llama(genz)v2_q4_k_m.gguf`.
+
+---
+
+## DPO Evaluation Summary (2026-04-14)
+
+| Model | Train Loss | Steps | Rating vs genzv2 ck1600 |
+|---|---|---|---|
+| Llama DPO ck200 (job 560339) | 1.127 | 800 | ❌ Inferior |
+| Qwen2.5-3B DPO ck200 (job 560338) | 1.279 | 800 | ❌ Inferior |
+
+**Conclusion:** DPO did not improve either model. SFT ck1600 (genzv2) remains the best.
+
+---
+
+## Completed Tests
 
 - [x] Qwen3-1.7B checkpoint-200
 - [x] Qwen3-1.7B checkpoint-800
-- [x] Qwen3-1.7B checkpoint-1600 (final)
-- [x] Llama 3.2 3B v2 SFT checkpoint-200 ← **current best**
+- [x] Qwen3-1.7B checkpoint-1600
+- [x] Llama 3.2 3B v2 SFT checkpoint-200
 - [x] Qwen2.5-3B SFT checkpoint-200
-- [ ] Llama + DPO adapter (ck200)
-- [ ] Qwen2.5-3B + DPO adapter (ck200)
+- [x] Llama DPO ck200 ← inferior to genzv2 ck1600
+- [x] Qwen2.5-3B DPO ck200 ← inferior to genzv2 ck1600
+- [x] **genzv2 SFT ck1600 ← WINNER, in production**
+
+## Pending Tests
+- [ ] Gemma 4 E2B IT (GGUF uploaded to HF, not yet evaluated in production)
