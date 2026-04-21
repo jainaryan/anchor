@@ -23,6 +23,12 @@
         </button>
       </div>
       <nav id="chat-list"></nav>
+      <div class="sidebar-footer">
+        <button id="contact-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          Contact us
+        </button>
+      </div>
       <button id="sidebar-close" aria-label="Close sidebar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 18 9 12 15 6"/>
@@ -68,6 +74,25 @@
         <p class="disclaimer">Anchor is an AI companion, not a therapist. If you're in crisis, call or text a crisis line.</p>
       </footer>
 
+    </div>
+  </div>
+
+  <!-- Contact modal -->
+  <div id="contact-modal" aria-modal="true" role="dialog" aria-label="Contact us">
+    <div id="contact-card">
+      <button id="contact-close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <h3>Get in touch</h3>
+      <p class="contact-sub">Have feedback, ideas, or just want to say hi?</p>
+      <a class="contact-row" href="mailto:aryanjain@u.nus.edu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        aryanjain@u.nus.edu
+      </a>
+      <a class="contact-row" href="https://www.linkedin.com/in/aryan-jain-4a58b9230/" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+        linkedin.com/in/aryan-jain
+      </a>
     </div>
   </div>
 

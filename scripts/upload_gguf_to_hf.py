@@ -24,6 +24,8 @@ ALL_MODELS = {
     "llama_dpo_ck200":    EXPORTS_DIR / "mindmate_llama_dpo_ck200"    / "mindmate_llama_dpo_ck200_q4_k_m.gguf",
     "llama_sft_ck1600":   EXPORTS_DIR / "mindmate_llama_sft_ck1600"   / "mindmate_llama_sft_ck1600_q4_k_m.gguf",
     "qwen25_dpo_ck200":   EXPORTS_DIR / "mindmate_qwen25_dpo_ck200"   / "mindmate_qwen25_dpo_ck200_q4_k_m.gguf",
+    "gemma4_e2b":         EXPORTS_DIR / "mindmate_gemma4_e2b"         / "mindmate_gemma4_e2b_q4_k_m.gguf",
+    "gemma4_e4b":         EXPORTS_DIR / "mindmate_gemma4_e4b"         / "mindmate_gemma4_e4b_q4_k_m.gguf",
 }
 
 def main():

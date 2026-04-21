@@ -174,7 +174,11 @@
   function showEmptyState() {
     const div = document.createElement("div");
     div.className = "empty-state";
-    div.innerHTML = "<h2>Hey, I'm Anchor 👋</h2><p>What's on your mind?</p>";
+    div.innerHTML = `
+      <div class="welcome-icon">⚓</div>
+      <h2>Hey, I'm Anchor</h2>
+      <p class="welcome-sub">We're building a private, on-device mental wellness companion — an AI that lives on your phone and never sends your conversations anywhere. This is an early version we're using to gather feedback before we get there. Try it out and let us know what you think.</p>
+    `;
     messagesEl.appendChild(div);
   }
 
@@ -303,6 +307,15 @@
   });
 
   sendBtn.addEventListener("click", sendMessage);
+
+  // ── Contact modal ──────────────────────────────────────────────────────
+  const contactModal = document.getElementById("contact-modal");
+  const contactBtn   = document.getElementById("contact-btn");
+  const contactClose = document.getElementById("contact-close");
+
+  contactBtn.addEventListener("click", () => contactModal.classList.add("open"));
+  contactClose.addEventListener("click", () => contactModal.classList.remove("open"));
+  contactModal.addEventListener("click", e => { if (e.target === contactModal) contactModal.classList.remove("open"); });
 
   // ── Feedback pulse (after 30s) ─────────────────────────────────────────
   const feedbackBtn = document.getElementById("feedback-btn");
