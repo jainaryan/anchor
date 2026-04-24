@@ -5,9 +5,9 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=48G
+#SBATCH --mem=60G
 #SBATCH --partition=gpu-long
-#SBATCH --gres=gpu:a100-40:1
+#SBATCH --gres=gpu:a100-80:1
 #SBATCH --time=24:00:00
 
 set -euo pipefail
@@ -31,6 +31,6 @@ echo "  Job: $SLURM_JOB_ID | Node: $SLURMD_NODENAME"
 echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
 echo "=========================================="
 
-python finetuning/CUDA_train_dpo.py --model llama_ck1600 --steps 800
+python finetuning/CUDA_train_dpo.py --model llama_ck1600 --steps 1200 --data v2
 
 echo "DPO training complete."

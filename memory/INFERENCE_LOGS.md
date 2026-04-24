@@ -255,57 +255,28 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 
 ---
 
-## Llama 3.2 3B — genzv2 SFT (`adapters/genz/checkpoint-1600`) — **PRODUCTION MODEL**
-**Date:** 2026-04-14
-**Job:** N/A (re-evaluation of existing checkpoint)
-**Data mix (v2):**
-| Source | Samples | % |
-|---|---|---|
-| transition | 3,000 | 30% |
-| therapist | 2,500 | 25% |
-| casual | 2,000 | 20% |
-| grief/loss | 1,500 | 15% |
-| friend | 1,000 | 10% |
-| **Total** | **10,000** | |
-**System prompt:** 6-line Anchor prompt (warm friend, no lecturing)
-
-**Rating: 9/10**
-
-✅ Good:
-- Best overall model — beats all DPO variants and all other SFT checkpoints
-- Natural casual tone, clean emotional pivoting
-- No fake shared history, no hallucinations
-- Correct pronoun tracking
-- No therapy-speak
-
-❌ Mild:
-- Occasional over-use of ellipsis (minor)
-
-**Conclusion:** genzv2 ck1600 is the winner. DPO did not improve it. Now running in production at https://tryanchor.me as `llama(genz)v2_q4_k_m.gguf`.
-
----
-
-## DPO Evaluation Summary (2026-04-14)
-
-| Model | Train Loss | Steps | Rating vs genzv2 ck1600 |
-|---|---|---|---|
-| Llama DPO ck200 (job 560339) | 1.127 | 800 | ❌ Inferior |
-| Qwen2.5-3B DPO ck200 (job 560338) | 1.279 | 800 | ❌ Inferior |
-
-**Conclusion:** DPO did not improve either model. SFT ck1600 (genzv2) remains the best.
+## Llama 3.2 3B — genzv2 DPO (`adapters/genz_dpo_ck1600/`) — **PENDING**
+**Date:** 2026-04-24 (job 595679, gpu-long, A100-80)
+**Base:** genzv2 SFT checkpoint-1600
+**DPO data:** `dpo_train_v2.jsonl` / `dpo_val_v2.jsonl` (6,120 train + 1,080 val = 7,200 pairs)
+**Steps:** 1,200 (increased from 800 — dataset is 3× larger than v1 run)
+**DPO categories:** mixed_mode, casual_sad, panic_mode, transition, hallucination_guard, system_compliance
+**Missing from DPO data:** help_mode, memory_recall, biometric (pending jobs 595713 + 595714 — will be added in next DPO run)
+**Output:** `adapters/genz_dpo_ck1600/`
+**Status:** PENDING — evaluate vs genzv2 SFT ck1600 on full 29-scenario harness when complete.
 
 ---
 
 ## Completed Tests
 
-- [x] Qwen3-1.7B checkpoint-200
-- [x] Qwen3-1.7B checkpoint-800
-- [x] Qwen3-1.7B checkpoint-1600
+- [x] Qwen3-1.7B checkpoint-200, 800, 1600 — all inferior to Llama 3B
 - [x] Llama 3.2 3B v2 SFT checkpoint-200
-- [x] Qwen2.5-3B SFT checkpoint-200
-- [x] Llama DPO ck200 ← inferior to genzv2 ck1600
-- [x] Qwen2.5-3B DPO ck200 ← inferior to genzv2 ck1600
-- [x] **genzv2 SFT ck1600 ← WINNER, in production**
+- [x] Qwen2.5-3B SFT checkpoint-200 — inferior to Llama
+- [x] Llama DPO ck200 (job 560339) — **inferior to genzv2 SFT ck1600**
+- [x] Qwen2.5-3B DPO ck200 (job 560338) — **inferior to genzv2 SFT ck1600**
+- [x] **genzv2 SFT ck1600 — WINNER, in production**
 
 ## Pending Tests
-- [ ] Gemma 4 E2B IT (GGUF uploaded to HF, not yet evaluated in production)
+
+- [ ] genzv2 DPO ck1600 (job 595679) — new DPO on best SFT base, 3× more data, 1.5× more steps
+- [ ] Gemma 4 E2B IT — GGUF uploaded to HF, not yet evaluated on eval harness

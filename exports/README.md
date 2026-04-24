@@ -1,30 +1,33 @@
 # MindMate GGUF Exports
 
-This folder contains MindMate models exported to **GGUF format** for on-device inference (Android, Windows, macOS).
+GGUF models for on-device inference (Android, macOS, Windows).
 
 ## Available Models
 
-| File | Base | Adapter | Size (Q4_K_M) | Notes |
+| Folder | Base | Adapter | Quant | Notes |
 |---|---|---|---|---|
-| `mindmate_llama_sft_ck200/` | Llama 3.2 3B | SFT ck200 | ~2.0 GB | SFT baseline |
-| `mindmate_llama_dpo_ck200/` | Llama 3.2 3B | SFT ck200 + DPO | ~2.0 GB | Best quality — DPO trained |
-| `mindmate_qwen25_dpo_ck200/` | Qwen2.5-3B | SFT ck200 + DPO | ~2.0 GB | Alternative model |
+| `mindmate_llama_sft_ck1600/` | Llama 3.2 3B | genzv2 SFT ck1600 | Q4_K_M | **PRODUCTION — use this** |
+| `mindmate_llama_sft_ck200/` | Llama 3.2 3B | SFT ck200 | Q4_K_M | Older baseline |
+| `mindmate_llama_dpo_ck200/` | Llama 3.2 3B | SFT ck200 + DPO | Q4_K_M | Inferior to genzv2 SFT |
+| `mindmate_qwen25_dpo_ck200/` | Qwen2.5-3B | SFT ck200 + DPO | Q4_K_M | Inferior to Llama |
 
-Each folder contains:
-- `*_f16.gguf` — full precision (larger, higher quality)
-- `*_q4_k_m.gguf` — 4-bit quantized (recommended for Android)
+**Current production model:** `mindmate_llama_sft_ck1600/llama(genz)v2_q4_k_m.gguf`
+- On Pixel 8a: ~5.5 TPS, ~2.0 GB on disk, ~3.12 GB heap at runtime
+- Running at https://tryanchor.me
+
+**Pending:** `mindmate_genz_dpo_ck1600/` — DPO on top of genzv2, job 595679 running
 
 ---
 
 ## Android Usage
 
-The MindMate Android app (`android/`) loads a GGUF from the device's Downloads folder.
+The anchor-app loads GGUF from device storage.
 
-1. Transfer the `*_q4_k_m.gguf` file to your phone's Downloads folder
-2. Install the MindMate APK
-3. The app auto-detects the GGUF on launch
+1. Transfer `llama(genz)v2_q4_k_m.gguf` to `/sdcard/Download/mindmate.gguf`
+2. In the app: Add Model → pick from storage → app copies to internal storage with progress overlay
+3. Load model → chat
 
-**Required RAM:** ~2.5 GB for Q4_K_M on a 3B model
+**Required:** ~2.5 GB free RAM for Q4_K_M on Llama 3.2 3B
 
 ---
 
@@ -33,15 +36,11 @@ The MindMate Android app (`android/`) loads a GGUF from the device's Downloads f
 ### macOS / Windows — LM Studio
 1. Download [LM Studio](https://lmstudio.ai/)
 2. Load the `.gguf` file
-3. Paste `system_prompt.txt` as the system prompt
+3. System prompt: use the Anchor `BASE_PROMPT` from `anchor-app/src/utils/anchorSystemPrompt.ts`
 
 ### macOS / Linux — Ollama
 ```bash
-# Create a Modelfile
-echo 'FROM ./mindmate_llama_dpo_ck200_q4_k_m.gguf' > Modelfile
-echo 'SYSTEM """' >> Modelfile
-cat ../system_prompt.txt >> Modelfile
-echo '"""' >> Modelfile
+echo 'FROM ./llama_genzv2_q4_k_m.gguf' > Modelfile
 ollama create mindmate -f Modelfile
 ollama run mindmate
 ```
@@ -50,18 +49,13 @@ ollama run mindmate
 
 ## Reproducing the Export
 
-Run on the CUDA cluster via SLURM:
-
 ```bash
-# From ~/projects/mindmate on the cluster
-sbatch run_export.slurm llama_sft_ck200
-sbatch run_export.slurm llama_dpo_ck200
-sbatch run_export.slurm qwen25_dpo_ck200
+# On the cluster
+cd ~/projects/mindmate
+python scripts/export_gguf_cuda.py --model llama_ck1600
+
+# Or via SLURM
+sbatch run_export.slurm
 ```
 
-Or directly:
-```bash
-python scripts/export_gguf_cuda.py --model llama_dpo_ck200
-```
-
-Export logs go to `~/logs/export_<jobid>.log`.
+Export logs: `~/logs/export_<jobid>.log`

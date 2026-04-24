@@ -253,12 +253,30 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 
 ---
 
+---
+
+## Llama 3.2 3B — genzv2 DPO (`adapters/genz_dpo_ck1600/`) — **PENDING**
+**Date:** 2026-04-24 (job 595679, gpu-long, A100-80)
+**Base:** genzv2 SFT checkpoint-1600
+**DPO data:** `dpo_train_v2.jsonl` / `dpo_val_v2.jsonl` (6,120 train + 1,080 val = 7,200 pairs)
+**Steps:** 1,200 (increased from 800 — dataset is 3× larger than v1 run)
+**DPO categories:** mixed_mode, casual_sad, panic_mode, transition, hallucination_guard, system_compliance
+**Missing from DPO data:** help_mode, memory_recall, biometric (pending jobs 595713 + 595714 — will be added in next DPO run)
+**Output:** `adapters/genz_dpo_ck1600/`
+**Status:** PENDING — evaluate vs genzv2 SFT ck1600 on full 29-scenario harness when complete.
+
+---
+
+## Completed Tests
+
+- [x] Qwen3-1.7B checkpoint-200, 800, 1600 — all inferior to Llama 3B
+- [x] Llama 3.2 3B v2 SFT checkpoint-200
+- [x] Qwen2.5-3B SFT checkpoint-200 — inferior to Llama
+- [x] Llama DPO ck200 (job 560339) — **inferior to genzv2 SFT ck1600**
+- [x] Qwen2.5-3B DPO ck200 (job 560338) — **inferior to genzv2 SFT ck1600**
+- [x] **genzv2 SFT ck1600 — WINNER, in production**
+
 ## Pending Tests
 
-- [x] Qwen3-1.7B checkpoint-200
-- [x] Qwen3-1.7B checkpoint-800
-- [x] Qwen3-1.7B checkpoint-1600 (final)
-- [x] Llama 3.2 3B v2 SFT checkpoint-200 ← **current best**
-- [x] Qwen2.5-3B SFT checkpoint-200
-- [ ] Llama + DPO adapter (ck200)
-- [ ] Qwen2.5-3B + DPO adapter (ck200)
+- [ ] genzv2 DPO ck1600 (job 595679) — new DPO on best SFT base, 3× more data, 1.5× more steps
+- [ ] Gemma 4 E2B IT — GGUF uploaded to HF, not yet evaluated on eval harness

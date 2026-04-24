@@ -1,132 +1,197 @@
 # MindMate
 
-MindMate is a finetuned local mental-health wellness assistant. Multiple model variants are trained via QLoRA and exported to GGUF for on-device Android inference.
+A finetuned, local mental-health wellness assistant that runs on Android. Models are trained with QLoRA on a CUDA cluster, exported to GGUF, and deployed in a React Native Android app via a llama.cpp JNI bridge.
 
-## Models
+**Production webapp:** https://tryanchor.me (FastAPI + SSE, DigitalOcean)
+**Android app:** `anchor-app/` (React Native, package `com.pocketpal`)
 
-| Model | Size | Adapter | Notes |
+---
+
+## Best Model
+
+**`adapters/genz/checkpoint-1600`** — Llama 3.2 3B SFT (genzv2), Q4_K_M
+- Beats all DPO variants and all other SFT checkpoints
+- Deployed as `exports/mindmate_llama_sft_ck1600/llama(genz)v2_q4_k_m.gguf`
+- On device at `/sdcard/Download/mindmate.gguf` (Pixel 8a)
+- Gen: ~5.4–6.0 TPS, TTFT: 6s (cached) / 60–66s (cold 1100-tok prompt)
+
+---
+
+## Stack
+
+| Layer | Tool |
+|---|---|
+| Base model | Llama 3.2 3B Instruct |
+| SFT | QLoRA (4-bit NF4, PEFT), `CUDA_train_qlora.py` |
+| DPO | TRL DPOTrainer, two-model architecture, `CUDA_train_dpo.py` |
+| Teacher (datagen) | Qwen3-30B-A3B-Instruct-2507 (bfloat16, A100-80) |
+| Export | GGUF Q4_K_M via llama.cpp, `scripts/export_gguf_cuda.py` |
+| Android runtime | JNI → llama.cpp (`android/llama/src/main/cpp/llama-android.cpp`) |
+| Webapp | FastAPI + SSE (`deploy/server.py`) |
+| Cluster | NUS SoC SLURM, `gpu-long` partition, A100-80 |
+
+---
+
+## Training Pipeline
+
+```
+Synthetic Data (Qwen3-30B teacher)
+        ↓
+  SFT: CUDA_run_pipeline.py → CUDA_train_qlora.py
+        ↓
+  adapters/genz/checkpoint-1600  ← best SFT checkpoint
+        ↓
+  DPO: CUDA_train_dpo.py --model llama_ck1600
+        ↓
+  GGUF export: scripts/export_gguf_cuda.py
+        ↓
+  Android app (anchor-app/) or webapp (deploy/)
+```
+
+### Running SFT on cluster
+```bash
+cd ~/projects/mindmate
+sbatch finetuning/run_finetune_llama_v2.slurm
+```
+
+### Running DPO on cluster
+```bash
+sbatch finetuning/run_dpo_llama_ck1600.slurm
+# Trains on dpo_train_v2.jsonl (7,200 pairs), 1200 steps, A100-80
+# Output: adapters/genz_dpo_ck1600/
+```
+
+### Exporting to GGUF
+```bash
+sbatch run_export.slurm
+# or directly:
+python scripts/export_gguf_cuda.py --model llama_ck1600
+```
+
+---
+
+## Data
+
+### SFT training data (33,534 usable examples)
+
+| File | Examples | Content |
+|---|---|---|
+| `data/synthetic_train_friend_1.jsonl` | 7,380 | Casual friend-style support |
+| `data/synthetic_train_therapist_.jsonl` | 6,347 | Therapeutic dialogue |
+| `data/synthetic_train_transition.jsonl` | 6,184 | Casual→emotional pivot |
+| `data/synthetic_train.jsonl` | 5,565 | Grief/loss focused |
+| `data/synthetic_train_casual.jsonl` | 5,000 | Non-distress casual |
+| `data/synthetic_train_targeted_fix.jsonl` | 2,993 | Targeted: help_mode + memory_recall |
+| `data/synthetic_train_targeted_fixes.jsonl` | 65 | Hand-crafted gold examples |
+| `data/synthetic_train_biometric.jsonl` | pending | Biometric health context (job 595713) |
+
+### DPO data
+
+| File | Pairs | Notes |
+|---|---|---|
+| `data/dpo_train_v2.jsonl` | 6,120 | **Active** — use this |
+| `data/dpo_val_v2.jsonl` | 1,080 | **Active** — use this |
+| `data/dpo_train.jsonl` | 2,125 | v1, superseded |
+| `data/dpo_val.jsonl` | 375 | v1, superseded |
+
+Categories in v2: mixed_mode, casual_sad, panic_mode, transition, hallucination_guard, system_compliance. **help_mode and memory_recall pairs are pending** (job 595714).
+
+---
+
+## Active Cluster Jobs (as of 2026-04-24)
+
+| Job | What | GPU | Status |
 |---|---|---|---|
-| Llama 3.2 3B Instruct | 3B | `adapters/CUDA_mindmate_llama32b/` | Primary; best instruction following |
-| Qwen3-1.7B | 1.7B | `adapters/CUDA_mindmate_qwen3_1p7b/` | Smallest; fastest on-device |
-| Qwen2.5-3B Instruct | 3B | `adapters/CUDA_mindmate_qwen25_3b/` | Standard instruct; no thinking mode |
-
-## 🚀 Features
-- **Fine-tuning**: QLoRA (4-bit NF4) on CUDA via HuggingFace PEFT + TRL
-- **DPO**: Preference training on top of SFT adapters using 30B teacher-generated pairs
-- **Platform Support**:
-  - **CUDA (cluster)**: Full training + inference pipeline
-  - **Android**: On-device GGUF inference via llama.cpp JNI bridge
-  - **macOS** (Apple Silicon): Legacy MLX inference path
+| 595679 | DPO genzv2 ck1600, 1200 steps | A100-80 | PENDING |
+| 595713 | Biometric SFT+DPO datagen (24h) | A100-80 | PENDING |
+| 595714 | DPO targeted fix (help_mode+memory_recall) | A100-80 | PENDING |
 
 ---
 
-## 🛠️ Setup & Installation
+## Eval
 
-### Prerequisites
-- Python 3.9+
-- macOS with Apple Silicon (for training/inference using MLX)
-- (Optional) `llama.cpp` tools for export.
+14-scenario eval harness in `anchor-app/src/eval/`. Run from the EvalScreen in the Android app.
 
-### Installation
-Clone the repository and install dependencies:
+**Latest results (Batch-2, 2026-04-23):**
+- Single-turn human inspect: ~5/14 = 36% pass
+- Multi-turn consistent all-pass: 2/15 = 13%
+- Biometric probe pass: 7/22 = 32%
+- Critical issue: "you went quiet on me there" hallucination in 6 scenarios
 
-```bash
-git clone https://github.com/jainaryan/mindmate.git
-cd mindmate
-
-# Create a conda env (recommended)
-conda create -n mindmate python=3.11
-conda activate mindmate
-
-# Install dependencies
-pip install mlx-lm huggingface-hub gguf protobuf python-dotenv
-```
-
-### Download Base Model
-You need the base Llama 3.2 model weights for training or export:
-```bash
-huggingface-cli download mlx-community/Llama-3.2-3B-Instruct-4bit --local-dir mlx_llama32_3b
-```
+Full results: `anchor-app/src/eval/EVAL_RESULTS.md`
 
 ---
 
-## 🧠 Training Pipeline
+## Saved Adapters
 
-The project includes an end-to-end pipeline in `finetuning/run_pipeline.py` that handles everything from data processing to QLoRA training.
-
-### Pipeline Steps
-1.  **Build Dataset**: Compiles raw data from sources.
-2.  **Clean Dataset**: Dedupes and formats data for chat (User/Assistant).
-3.  **Chunk Data**: Splits conversations into 3072-token windows.
-4.  **Train (QLoRA)**: Fine-tunes the model using MLX.
-
-### Running the Pipeline
-To run the full training process:
-```bash
-python finetuning/run_pipeline.py
-```
-*   **Input**: Raw data in `data/new_raw_data`.
-*   **Output**: Adapters saved in `adapters/mindmate_llama32_3b_qlora_...`
+| Adapter | Base | Notes |
+|---|---|---|
+| `adapters/genz/checkpoint-1600` | Llama 3.2 3B | **BEST — in production** |
+| `adapters/CUDA_mindmate_llama32b/` | Llama 3.2 3B | v2 SFT, same data mix |
+| `adapters/CUDA_mindmate_llama32b_dpo_ck200/` | Llama 3.2 3B | DPO ck200 — inferior to genzv2 SFT |
+| `adapters/CUDA_mindmate_qwen25_3b/` | Qwen2.5-3B | Inferior to Llama |
+| `adapters/CUDA_mindmate_qwen25_3b_dpo_ck200/` | Qwen2.5-3B | DPO — inferior to Llama |
+| `adapters/genz_dpo_ck1600/` | Llama 3.2 3B | **Pending** — job 595679 |
 
 ---
 
-## 💬 Inference (Chat)
+## Cluster Access
 
-### macOS (Native MLX)
-To chat with the model on your Mac:
 ```bash
-python scripts/chat_mindmate.py
+ssh nus-student-cluster   # xlogin.comp.nus.edu.sg, user: aryanj
+# Requires NUS VPN
+squeue -u aryanj          # check jobs
+sinfo                     # check node availability
+
+# Sync local → cluster
+rsync -avz --progress data/ nus-student-cluster:~/projects/mindmate/data/
+
+# Sync cluster → local (adapters)
+rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/ adapters/
 ```
-This loads the base model + your trained adapters and launches an interactive CLI chat.
+
+**Partitions:** `gpu` (max 3h), `gpu-long` (max 3 days). All training on `gpu-long` with `a100-80`.
+**Logs:** `~/logs/` on cluster (NOT `~/projects/mindmate/logs/`).
 
 ---
 
-## 📦 Export (Windows / Android)
+## Android App
 
-To usage the model on other platforms, we export it to **GGUF format**.
+App: `anchor-app/` (React Native, NOT `mindmate_app/` which is a stale scratch fork)
 
-### 1. Run the Export Script
-This script validates the environment, fuses the adapters, and creates the GGUF file.
 ```bash
-python scripts/export_to_gguf.py
+cd anchor-app
+yarn typecheck               # typecheck
+cd android && ./gradlew assembleDebug   # build APK
 ```
-*   **Output**: `exports/mindmate_llama32_3b_f16.gguf`
 
-### 2. Run on Windows
-1.  Download **[LM Studio](https://lmstudio.ai/)**.
-2.  Load the generated `.gguf` file.
-3.  Paste the contents of `system_prompt.txt` into the system prompt configuration.
-
-### 3. Run on Android
-*   **Layla (App)**: Transfer the `.gguf` to your phone and select "Load Local Model".
-*   **UserLAnd**: Install Ubuntu -> `llama.cpp` and run from command line.
-
-See `exports/README.md` for more detailed export instructions.
+Model file expected at `/sdcard/Download/mindmate.gguf` on device.
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
+```
 mindmate/
-├── adapters/             # Trained LoRA adapters
-├── data/                 # Raw/Cleaned training data
-├── exports/              # Exported GGUF models & instructions
-├── finetuning/           # Fine-tuning pipeline & scripts
-│   ├── run_pipeline.py   # Training pipeline entry point
-│   ├── build_dataset.py
-│   ├── clean_dataset.py
-│   └── chunk.py
-├── mlx_export/           # Intermediate fused models
-├── mlx_llama32_3b/       # Base Llama 3.2 model (downloaded)
-├── scripts/              # Misc utility scripts
-│   ├── chat_mindmate.py  # Inference script
-│   ├── export_to_gguf.py # Export tool
-│   └── ...
-└── system_prompt.txt     # Core system instructions for the bot
-
-## ☁️ Uploading to Hugging Face
-To publish your fused model and ExecuTorch artifacts (if generated):
-```bash
-python upload_to_hf.py
+├── adapters/               # LoRA checkpoints
+│   ├── genz/checkpoint-1600/   ← BEST MODEL
+│   └── genz_dpo_ck1600/        ← pending job 595679
+├── data/                   # Training data (JSONL)
+├── exports/                # GGUF exports
+├── finetuning/             # Training scripts
+│   ├── CUDA_run_pipeline.py
+│   ├── CUDA_train_qlora.py
+│   ├── CUDA_train_dpo.py
+│   └── run_dpo_llama_ck1600.slurm
+├── synthetic/              # Data generation pipelines
+│   ├── biometric_sft_pipeline.py
+│   ├── biometric_dpo_pipeline.py
+│   ├── dpo_targeted_fix_pipeline.py
+│   ├── utils.py
+│   └── prompts/
+├── inference/              # CUDA chat scripts
+├── deploy/                 # Production FastAPI server
+│   └── server.py
+├── scripts/                # Export + utility scripts
+└── memory/                 # Project memory files
 ```
-*Requires `HF_TOKEN` in your environment variables.*

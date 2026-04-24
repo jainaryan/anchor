@@ -29,10 +29,11 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model",
-    choices=["llama", "qwen", "qwen25_3b", "llama_ck200"],
+    choices=["llama", "qwen", "qwen25_3b", "llama_ck200", "llama_ck1600"],
     default="llama",
 )
 parser.add_argument("--steps", type=int, default=800)
+parser.add_argument("--data", choices=["v1", "v2"], default="v2")
 args = parser.parse_args()
 
 # ── Per-model config ─────────────────────────────────────────────────────────
@@ -65,6 +66,13 @@ CONFIGS = {
         "trust_remote_code": False,
         "thinking": False,
     },
+    "llama_ck1600": {
+        "base_model": "meta-llama/Llama-3.2-3B-Instruct",
+        "sft_adapter": "adapters/genz/checkpoint-1600",
+        "dpo_out": "adapters/genz_dpo_ck1600",
+        "trust_remote_code": False,
+        "thinking": False,
+    },
 }
 
 cfg = CONFIGS[args.model]
@@ -73,8 +81,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASE_MODEL  = cfg["base_model"]
 SFT_ADAPTER = PROJECT_ROOT / cfg["sft_adapter"]
 DPO_OUT     = PROJECT_ROOT / cfg["dpo_out"]
-TRAIN_FILE  = PROJECT_ROOT / "data" / "dpo_train.jsonl"
-VAL_FILE    = PROJECT_ROOT / "data" / "dpo_val.jsonl"
+_suffix     = "_v2" if args.data == "v2" else ""
+TRAIN_FILE  = PROJECT_ROOT / "data" / f"dpo_train{_suffix}.jsonl"
+VAL_FILE    = PROJECT_ROOT / "data" / f"dpo_val{_suffix}.jsonl"
 
 print("=" * 60)
 print(f"  MindMate DPO Training — {args.model.upper()}")
