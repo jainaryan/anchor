@@ -2,7 +2,7 @@
 
 ## Metadata
 - Project: `mindmate`
-- Last updated: `2026-04-24`
+- Last updated: `2026-04-26`
 - Android app: `anchor-app/` (NOT `mindmate_app/` — that is a stale scratch fork)
 - Production: https://tryanchor.me
 
@@ -93,9 +93,12 @@ Synthetic Data Generation (Qwen3-30B)
 - GGUF: `exports/mindmate_llama_sft_ck1600/llama(genz)v2_q4_k_m.gguf`
 - Pixel 8a: ~5.5 TPS, TTFT 60–66s cold / 6s cached, heap 3.12–3.17 GB
 
-### `adapters/genz_dpo_ck1600/` — **PENDING** (job 595679)
-- DPO on top of genzv2 ck1600, 1200 steps on dpo_v2 data
-- Will be evaluated on same 14-scenario harness when done
+### `adapters/genz_dpo_ck1600/` — **COMPLETED but FAILED** ❌ (job 595679)
+- DPO on top of genzv2 ck1600, 1200 steps on dpo_v2 data (~1h on A100-80)
+- Saved to cluster, but training diverged: all `rewards/margins` negative, `rewards/accuracies` 0.11–0.31
+- Root cause: `format_messages()` used `tokenizer.apply_chat_template` for `llama_ck1600`, but genzv2 SFT was trained with manual Llama 3 format → format mismatch → DPO had no useful gradient signal
+- **Fixed in CUDA_train_dpo.py**: added `"llama_ck1600"` to manual-format branch; added `max_prompt_length=1024`
+- **Needs re-run** after pushing fix to cluster
 
 ### `adapters/CUDA_mindmate_llama32b/` — Llama v2 SFT
 - Same data mix as genz. Has checkpoints 200–1600.
@@ -124,7 +127,7 @@ Synthetic Data Generation (Qwen3-30B)
 | `synthetic_train_casual.jsonl` | 5,000 | Non-distress casual | |
 | `synthetic_train_targeted_fix.jsonl` | 2,993 | help_mode + memory_recall | Job 594101, Apr 23 |
 | `synthetic_train_targeted_fixes.jsonl` | 65 | Hand-crafted gold examples | help_mode (30) + biometric (15) + banned opener (20) |
-| `synthetic_train_biometric.jsonl` | **pending** | Biometric health context | Job 595713 |
+| `synthetic_train_biometric.jsonl` | **0 (bug)** | Biometric health context | Job 595713 ran 22h, 0 examples — `random` not imported in utils.py. Fixed. |
 | `additional_training_samples.jsonl` | 30 | Legacy | **EXCLUDED** |
 
 ### DPO data
@@ -138,7 +141,7 @@ Synthetic Data Generation (Qwen3-30B)
 | `dpo_val.jsonl` | 375 | Apr 9 | v1 — superseded |
 
 **DPO v2 categories:** mixed_mode (1,400), casual_sad (1,247), panic_mode (1,082), transition (1,044), hallucination_guard (794), system_compliance (553)
-**Missing from all DPO data:** help_mode, memory_recall, biometric — all pending jobs 595713, 595714
+**Missing from all DPO data:** help_mode, memory_recall, biometric — jobs 595713 (biometric, 0 pairs due to bug) and 595714 (targeted fix, timed out) both failed. Both need re-run.
 
 ### Excluded data (user decision 2026-04-14)
 - `data/new_raw_data/mindmate_train.jsonl` — 20,662 examples
@@ -162,9 +165,9 @@ All active data uses `conversations` format:
 | `transition_pipeline.py` | casual→emotional pivots | Done |
 | `dpo_pipeline.py` | DPO pairs (v1 and v2) | Done |
 | `targeted_fix_pipeline.py` | help_mode + memory_recall SFT | Done (job 594101) |
-| `dpo_targeted_fix_pipeline.py` | DPO pairs for help_mode + memory_recall | Pending (job 595714) |
-| `biometric_sft_pipeline.py` | Biometric health context SFT, 4 modes | Pending (job 595713) |
-| `biometric_dpo_pipeline.py` | Biometric DPO pairs, 4 pair types | Pending (job 595713, phase 2) |
+| `dpo_targeted_fix_pipeline.py` | DPO pairs for help_mode + memory_recall | **Needs re-run** (job 595714 timed out at 10h, no logs — SLURM log path bug fixed) |
+| `biometric_sft_pipeline.py` | Biometric health context SFT, 4 modes | **Needs re-run** (job 595713 generated 0 — `random`+`re` not imported in utils.py; fixed) |
+| `biometric_dpo_pipeline.py` | Biometric DPO pairs, 4 pair types | **Needs re-run** (same bug) |
 
 ### Biometric pipeline details (new, Apr 2026)
 - 24 profiles across: sleep (4), mood_trend (4), physical_symptoms (2), coping_outcome (2), energy (2), social_withdrawal (2), anxiety_intensity (2), mixed (2)
@@ -267,17 +270,23 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ---
 
-## Active Cluster Jobs (2026-04-24)
+## Active Cluster Jobs (2026-04-26)
 
-| Job | Name | GPU | Status | Output |
-|---|---|---|---|---|
-| 595679 | DPO genzv2 ck1600 | a100-80 | PENDING | `adapters/genz_dpo_ck1600/` |
-| 595713 | Biometric SFT+DPO | a100-80 | PENDING | `data/synthetic_train_biometric.jsonl` |
-| 595714 | DPO targeted fix | a100-80 | PENDING | appended to `dpo_train.jsonl` |
+**No jobs running.** All need re-run after pushing fixes.
 
-### Previously completed relevant jobs
+### Jobs to re-submit
+| Script | Purpose | Fix applied |
+|---|---|---|
+| `finetuning/run_dpo_llama_ck1600.slurm` | DPO on genzv2 ck1600 | format_messages + max_prompt_length fix |
+| `synthetic/run_biometric_datagen.slurm` | Biometric SFT+DPO | `import random`+`re` fix in utils.py |
+| `synthetic/run_dpo_targeted_fix.slurm` | help_mode+memory_recall DPO | log path fix |
+
+### Recent job history
 | Job | Name | Result |
 |---|---|---|
+| 595714 | DPO targeted fix | TIMEOUT 10h — no logs (wrong log path, now fixed) |
+| 595713 | Biometric SFT+DPO | COMPLETED 22h — 0 new pairs generated (`random`+`re` not imported, now fixed) |
+| 595679 | DPO genzv2 ck1600 | COMPLETED 1h — diverged (negative margins, format mismatch, now fixed) |
 | 594101 | Targeted fix SFT | 2,993 examples, good quality (0% bad phrases) |
 | 594102 | DPO targeted fix | Failed — no output (missing prompt file) |
 | 595563 | Biometric SFT+DPO | Failed — wrong SLURM log path |
@@ -402,3 +411,7 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 | Apr 22 | 595563 biometric SLURM instant fail | Wrong log path `/home/aryanj/` → `/home/a/aryanj/` |
 | Apr 22 | 595564 DPO targeted fix crashed | Missing prompt file `dpo_targeted_fix_preference.txt` — created and synced |
 | Apr 24 | DPO targeted fix prompt had unreplaced `{system_prompt}` / `{memory_context}` | `generate_pair()` replaces all 4 vars — local file is correct, just needed syncing |
+| Apr 26 | `synthetic/utils.py` missing `import random` and `import re` → `randomize_health_context()` crashed on every call → biometric pipeline (job 595713) generated 0 pairs in 22h | Added both imports to utils.py |
+| Apr 26 | DPO `format_messages()` used `tokenizer.apply_chat_template` for `llama_ck1600` → format mismatch with SFT training → all DPO rewards/margins negative (job 595679 wasted) | Added `"llama_ck1600"` to manual Llama 3 format branch in `CUDA_train_dpo.py` |
+| Apr 26 | DPO `max_prompt_length` not set → defaults to something small, truncating prompts | Added `max_prompt_length=1024` to DPOConfig |
+| Apr 26 | `synthetic/run_dpo_targeted_fix.slurm` used relative log path `logs/...` → no logs for job 595714 | Fixed to `/home/a/aryanj/logs/...` |

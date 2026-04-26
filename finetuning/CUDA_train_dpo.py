@@ -159,8 +159,9 @@ print(f"  Train: {len(dataset['train'])} pairs | Val: {len(dataset['validation']
 
 
 def format_messages(messages) -> str:
-    if args.model in ("llama", "llama_ck200"):
-        # Manually construct Llama 3 prompt — bypasses Jinja2 template issues
+    if args.model in ("llama", "llama_ck200", "llama_ck1600"):
+        # Manually construct Llama 3 prompt — bypasses Jinja2 template issues.
+        # Must match the format used in SFT training (CUDA_train_qlora.py).
         result = "<|begin_of_text|>"
         for msg in messages:
             result += f"<|start_header_id|>{msg['role']}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"
@@ -242,6 +243,7 @@ dpo_config = DPOConfig(
     lr_scheduler_type="cosine",
     optim="paged_adamw_32bit",
     max_length=1536,
+    max_prompt_length=1024,
     logging_steps=10,
     save_steps=200,
     eval_strategy="steps",

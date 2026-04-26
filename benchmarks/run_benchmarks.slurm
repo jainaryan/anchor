@@ -1,0 +1,55 @@
+#!/bin/bash
+#SBATCH --job-name=mindmate-bench
+#SBATCH --output=/home/a/aryanj/logs/benchmark_%j.log
+#SBATCH --error=/home/a/aryanj/logs/benchmark_%j.err
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --partition=gpu-long
+#SBATCH --gres=gpu:a100-40:1
+#SBATCH --time=02:00:00
+
+# ── MindMate Benchmark Runner ─────────────────────────────────────────────────
+#
+# Runs the full benchmark suite against one or more checkpoints.
+# Results land in benchmarks/results/<model>_<timestamp>.{json,md}
+#
+# Usage:
+#   sbatch benchmarks/run_benchmarks.slurm
+#   sbatch benchmarks/run_benchmarks.slurm --export=MODEL=llama_dpo_ck1600
+#   sbatch benchmarks/run_benchmarks.slurm --export=MODEL=llama_ck1600,CATEGORY=MEMORY_USE
+#
+# Environment overrides (via --export):
+#   MODEL      one of: llama_ck1600 (default), llama_dpo_ck1600, llama_ck200, qwen25_3b
+#   CATEGORY   filter to one category (optional)
+# ─────────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+MODEL="${MODEL:-llama_ck1600}"
+CATEGORY_ARG=""
+if [ -n "${CATEGORY:-}" ]; then
+    CATEGORY_ARG="--category $CATEGORY"
+fi
+
+PROJECT_DIR=~/projects/mindmate
+cd "$PROJECT_DIR"
+
+echo "========================================"
+echo "  MindMate Benchmark"
+echo "  Model:  $MODEL"
+echo "  Job:    $SLURM_JOB_ID"
+echo "  Node:   $SLURMD_NODENAME"
+echo "  GPU:    $(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
+echo "  Start:  $(date)"
+echo "========================================"
+
+source mindmatenv/bin/activate
+
+python benchmarks/run_benchmarks.py \
+    --model "$MODEL" \
+    $CATEGORY_ARG
+
+echo ""
+echo "Done: $(date)"

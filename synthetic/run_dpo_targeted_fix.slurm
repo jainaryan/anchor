@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=mindmate-dpo-targeted-fix
-#SBATCH --output=logs/dpo_targeted_fix_%j.log
-#SBATCH --error=logs/dpo_targeted_fix_%j.err
+#SBATCH --output=/home/a/aryanj/logs/dpo_targeted_fix_%j.log
+#SBATCH --error=/home/a/aryanj/logs/dpo_targeted_fix_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4

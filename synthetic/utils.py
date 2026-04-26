@@ -2,6 +2,8 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import os
 import json
+import random
+import re
 from pathlib import Path
 from typing import List, Dict, Optional
 import time
