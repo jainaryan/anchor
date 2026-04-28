@@ -64,3 +64,18 @@ mindmate_app/
 # Generated social drafts / images (API output)
 social_media/output/
 social_media/
+
+# Project chat logs and SLURM output logs
+logs/
+
+# Synthetic generation raw outputs and scratch
+synthetic/outputs/
+synthetic/stdin
+
+# Claude memory files
+memory/
+MEMORY.md
+
+# Stray duplicate files
+finetuning/MINDMATE_DETAILED_INTERNAL_NOTES.md
+export_gguf_cuda.py

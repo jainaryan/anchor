@@ -2,7 +2,7 @@
 
 ## Metadata
 - Project: `mindmate`
-- Last updated: `2026-04-26`
+- Last updated: `2026-04-28`
 - Android app: `anchor-app/` (NOT `mindmate_app/` — that is a stale scratch fork)
 - Production: https://tryanchor.me
 
@@ -270,22 +270,24 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ---
 
-## Active Cluster Jobs (2026-04-26)
+## Active Cluster Jobs (2026-04-28)
 
-**No jobs running.** All need re-run after pushing fixes.
+| Job | Name | Status | Node | Purpose |
+|---|---|---|---|---|
+| 599031 | `mindmate-targeted-fix` | **RUNNING** (~4h in) | xgph8 (A100-80) | help_mode + memory_recall DPO targeted fix datagen |
+| 599030 | `mindmate-biometric` | **PENDING** (Resources) | — | Biometric SFT+DPO datagen (re-run, import bug fixed) |
 
-### Jobs to re-submit
-| Script | Purpose | Fix applied |
-|---|---|---|
-| `finetuning/run_dpo_llama_ck1600.slurm` | DPO on genzv2 ck1600 | format_messages + max_prompt_length fix |
-| `synthetic/run_biometric_datagen.slurm` | Biometric SFT+DPO | `import random`+`re` fix in utils.py |
-| `synthetic/run_dpo_targeted_fix.slurm` | help_mode+memory_recall DPO | log path fix |
+**Still needs submission:**
+- `finetuning/run_dpo_llama_ck1600.slurm` — DPO on genzv2 ck1600 (format + max_prompt_length fixed)
 
-### Recent job history
+### Job history
 | Job | Name | Result |
 |---|---|---|
+| 599045 | Benchmark genzv2 ck1600 | **COMPLETED** — 27/42 (64%). See Benchmarks section. |
+| 599031 | Targeted fix DPO | RUNNING |
+| 599030 | Biometric SFT+DPO | PENDING |
 | 595714 | DPO targeted fix | TIMEOUT 10h — no logs (wrong log path, now fixed) |
-| 595713 | Biometric SFT+DPO | COMPLETED 22h — 0 new pairs generated (`random`+`re` not imported, now fixed) |
+| 595713 | Biometric SFT+DPO | COMPLETED 22h — 0 new pairs (`random`+`re` not imported, now fixed) |
 | 595679 | DPO genzv2 ck1600 | COMPLETED 1h — diverged (negative margins, format mismatch, now fixed) |
 | 594101 | Targeted fix SFT | 2,993 examples, good quality (0% bad phrases) |
 | 594102 | DPO targeted fix | Failed — no output (missing prompt file) |
@@ -295,6 +297,52 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 | 560339 | Llama DPO ck200 | Inferior to genzv2 SFT |
 | 560338 | Qwen2.5-3B DPO | Inferior to genzv2 SFT |
 | 554799 | Llama v2 SFT | → `adapters/CUDA_mindmate_llama32b/checkpoint-1600` |
+
+---
+
+## Benchmarks (`benchmarks/`)
+
+### Suite (34 scenarios, 6 categories — after removing BANNED_PHRASES)
+| Category | Scenarios | What it tests |
+|---|---|---|
+| MEMORY_USE | 8 | Names, coping strategies, session history, held-out names (Zoya, Kabir) |
+| HELP_MODE | 6 | "help me" / "what should I do" → named technique, no hallucination |
+| CRISIS | 5 | Passive SI, active distress, safety escalation |
+| NO_HALLUCINATION | 6 | No fake shared history, no invented context |
+| BIOMETRIC | 5 | Sleep/HRV/mood data → referenced naturally in response |
+| FORMAT | 4 | No markdown, no "As an AI", proper length |
+
+### Results — genzv2 ck1600 baseline (job 599045, 2026-04-28)
+**Overall: 27/42 (64%)** — *note: ran against old scenarios.py that still had 8 BANNED_PHRASES scenarios; true score on 34-scenario suite estimated ~20/34 (59%)*
+
+| Category | Pass | Total | Avg score |
+|---|---|---|---|
+| CRISIS | 5 | 5 | 1.00 ✅ |
+| FORMAT | 4 | 4 | 1.00 ✅ |
+| NO_HALLUCINATION | 6 | 6 | 1.00 ✅ |
+| HELP_MODE | 3 | 6 | 0.75 ⚠️ |
+| BIOMETRIC | 1 | 5 | 0.54 ❌ |
+| MEMORY_USE | 1 | 8 | 0.43 ❌ |
+
+**Key failures:**
+- Memory: ignores names (Zoya, Kabir), coping strategies, session history — responds generically
+- Biometric: ignores sleep hours/HRV/mood scores in context entirely
+- Help mode: asks a question instead of naming a technique when user says "help me calm down"
+
+**Fix in progress:** Targeted fix datagen (job 599031) + biometric datagen (job 599030) — will add training data for these exact failure modes, then re-SFT and re-benchmark.
+
+### Files
+- `benchmarks/scenarios.py` — all scenarios + `ALL_SCENARIOS`, `CATEGORIES` dicts
+- `benchmarks/run_benchmarks.py` — model loader (4-bit NF4 + PeftModel) + scorer + output
+- `benchmarks/run_benchmarks.slurm` — gpu-long, a100-40, 2h, supports MODEL/CATEGORY env
+- `benchmarks/results/` — JSON + Markdown output per run (`<label>_<timestamp>.{json,md}`)
+
+### Running
+```bash
+sbatch benchmarks/run_benchmarks.slurm                          # default: llama_ck1600
+sbatch --export=MODEL=llama_dpo_ck1600 benchmarks/run_benchmarks.slurm
+sbatch --export=MODEL=llama_ck1600,CATEGORY=MEMORY_USE benchmarks/run_benchmarks.slurm
+```
 
 ---
 
@@ -415,3 +463,4 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 | Apr 26 | DPO `format_messages()` used `tokenizer.apply_chat_template` for `llama_ck1600` → format mismatch with SFT training → all DPO rewards/margins negative (job 595679 wasted) | Added `"llama_ck1600"` to manual Llama 3 format branch in `CUDA_train_dpo.py` |
 | Apr 26 | DPO `max_prompt_length` not set → defaults to something small, truncating prompts | Added `max_prompt_length=1024` to DPOConfig |
 | Apr 26 | `synthetic/run_dpo_targeted_fix.slurm` used relative log path `logs/...` → no logs for job 595714 | Fixed to `/home/a/aryanj/logs/...` |
+| Apr 28 | `benchmarks/scenarios.py` fix (remove BANNED_PHRASES) not synced to cluster → benchmark job 599045 ran 42 scenarios instead of 34 | Re-synced local fixed version to cluster |
