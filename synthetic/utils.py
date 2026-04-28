@@ -2,6 +2,8 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import os
 import json
+import random
+import re
 from pathlib import Path
 from typing import List, Dict, Optional
 import time
@@ -234,6 +236,163 @@ def calculate_similarity(s1: str, s2: str) -> float:
     intersection = words1.intersection(words2)
     union = words1.union(words2)
     return len(intersection) / len(union) if union else 0.0
+
+def randomize_health_context(profile: dict) -> dict:
+    """
+    Return a shallow copy of the profile with the health_context string
+    randomized — numbers, dates, and qualitative descriptors are varied
+    so the teacher model never sees the same seed twice.
+
+    This prevents the model from memorizing specific strings like
+    "Mood 4/10 — noticeably lower than last session (was 7/10)" and instead
+    learns the general skill of referencing any health data in the context block.
+    """
+    import copy
+    p = copy.copy(profile)
+    ctx = p["health_context"]
+    health_type = p["health_type"]
+
+    # ── Date randomization ─────────────────────────────────────────────────────
+    # Shift all dates together so multi-session ordering is preserved
+    DATE_POOL = [
+        "Mar 28", "Mar 29", "Mar 30", "Mar 31",
+        "Apr 2",  "Apr 3",  "Apr 4",  "Apr 5",  "Apr 6",  "Apr 7",
+        "Apr 8",  "Apr 9",  "Apr 10", "Apr 11", "Apr 12", "Apr 13",
+        "Apr 14", "Apr 15", "Apr 16", "Apr 17", "Apr 18", "Apr 19",
+        "Apr 20", "Apr 21", "Apr 22", "Apr 23", "Apr 24", "Apr 25",
+        "May 1",  "May 2",  "May 3",  "May 4",  "May 5",
+    ]
+    existing_dates = re.findall(r'\[([A-Z][a-z]{2} \d+)\]', ctx)
+    if existing_dates:
+        max_offset = max(0, len(DATE_POOL) - len(existing_dates))
+        offset = random.randint(0, max_offset)
+        new_dates = DATE_POOL[offset: offset + len(existing_dates)]
+        for old, new in zip(existing_dates, new_dates):
+            ctx = ctx.replace(f'[{old}]', f'[{new}]', 1)
+
+    # ── Sleep randomization ────────────────────────────────────────────────────
+    if health_type == "sleep":
+        hrs_lo = random.randint(2, 5)
+        hrs_hi = min(hrs_lo + random.randint(0, 2), 6)
+        ctx = re.sub(r'\d-\d hrs', f'{hrs_lo}-{hrs_hi} hrs', ctx)
+        ctx = re.sub(r'\b\d hrs\b',   f'{random.randint(2, 5)} hrs',   ctx)
+        ctx = re.sub(r'\b\d hours\b', f'{random.randint(2, 5)} hours', ctx)
+        ctx = re.sub(r'wok(e|ing) \d+-?\d* times',
+                     f'wok\\1 {random.randint(2, 6)} times', ctx)
+        for q in ["very poor", "severely disrupted", "extremely poor",
+                  "very disrupted", "badly disrupted", "terrible"]:
+            if q in ctx:
+                ctx = ctx.replace(q, random.choice([
+                    "very poor", "severely disrupted", "extremely poor",
+                    "very disrupted", "badly disrupted", "really terrible",
+                ]), 1)
+                break
+        ctx = re.sub(
+            r'about a week|a week\b|ten days|over a week|nearly two weeks'
+            r'|almost two weeks|several days|more than a week',
+            random.choice([
+                "about a week", "nearly two weeks", "several days",
+                "over a week", "more than a week", "almost ten days",
+            ]), ctx, count=1)
+
+    # ── Mood score randomization ───────────────────────────────────────────────
+    elif health_type == "mood_trend":
+        n_scores = len(re.findall(r'\d+/10', ctx))
+        if n_scores >= 2:
+            # Multi-session: generate a coherent declining sequence
+            start = random.randint(6, 9)
+            scores = [start]
+            for _ in range(n_scores - 1):
+                scores.append(max(1, scores[-1] - random.randint(1, 3)))
+            idx = [0]
+            def _replace_score(m):
+                s = scores[min(idx[0], n_scores - 1)]
+                idx[0] += 1
+                return f'{s}/10'
+            ctx = re.sub(r'\d+/10', _replace_score, ctx)
+            # Also fix "was X/10" back-references (appear in parentheses)
+            # These are already replaced above in the same pass — fine.
+        elif n_scores == 1:
+            score = random.randint(2, 6)
+            ctx = re.sub(r'\d+/10', f'{score}/10', ctx, count=1)
+            # Fix "was X/10" to be higher than current score
+            prev = min(score + random.randint(2, 4), 9)
+            ctx = re.sub(r'was \d+/10', f'was {prev}/10', ctx)
+        for low_desc in ["noticeably lower", "significantly lower", "much lower",
+                         "considerably worse", "markedly lower"]:
+            if low_desc in ctx:
+                ctx = ctx.replace(low_desc, random.choice([
+                    "noticeably lower", "significantly lower", "much lower",
+                    "considerably worse", "markedly lower",
+                ]), 1)
+                break
+        for bad_desc in ["very bad", "extremely low", "really struggling",
+                         "at a low point", "rock bottom"]:
+            if bad_desc in ctx:
+                ctx = ctx.replace(bad_desc, random.choice([
+                    "very bad", "extremely low", "really struggling",
+                    "at a low point", "at its lowest",
+                ]), 1)
+                break
+
+    # ── Anxiety intensity randomization ───────────────────────────────────────
+    elif health_type == "anxiety_intensity":
+        # Replace "Anxiety X/10" with a varied score in the moderate-high range
+        ctx = re.sub(r'Anxiety \d+/10',
+                     lambda m: f'Anxiety {random.randint(5, 9)}/10', ctx)
+        # "always braced" / "constant background" descriptors
+        for phrase in ["always braced for something bad", "constantly braced"]:
+            if phrase in ctx:
+                ctx = ctx.replace(phrase, random.choice([
+                    "always braced for something bad",
+                    "constantly waiting for the next problem",
+                    "permanently on guard",
+                    "braced for the worst",
+                    "never fully off alert",
+                ]), 1)
+                break
+
+    # ── Energy randomization ───────────────────────────────────────────────────
+    elif health_type == "energy":
+        for phrase in ["running on empty", "running on fumes", "nearly empty",
+                       "nearly depleted", "very low", "half capacity"]:
+            if phrase in ctx:
+                ctx = ctx.replace(phrase, random.choice([
+                    "running on empty", "running on fumes", "nearly depleted",
+                    "half capacity", "very low", "at rock bottom energy-wise",
+                    "almost nothing left",
+                ]), 1)
+                break
+        # Randomize "hitting a wall by Xpm"
+        ctx = re.sub(r'by \d+(am|pm)',
+                     f'by {random.choice([11, 12, 1, 2, 3])}{"am" if random.random() < 0.1 else "pm"}',
+                     ctx)
+
+    # ── Physical symptoms randomization ───────────────────────────────────────
+    elif health_type == "physical_symptoms":
+        for phrase in ["high-stress moments", "high-stress days",
+                       "stressful periods", "stressful days"]:
+            if phrase in ctx:
+                ctx = ctx.replace(phrase, random.choice([
+                    "high-stress moments", "high-stress days",
+                    "stressful periods", "stressful days",
+                    "pressure-filled situations", "overwhelming days",
+                ]), 1)
+                break
+
+    # ── Social withdrawal randomization ───────────────────────────────────────
+    elif health_type == "social_withdrawal":
+        n = random.randint(2, 5)
+        ctx = re.sub(r'declined? (two|three|four|five|\d+) invitations?',
+                     f'declined {n} invitation{"s" if n > 1 else ""}', ctx)
+        ctx = re.sub(r"hasn't seen anyone in person for (a week|two weeks|\d+ days)",
+                     f"hasn't seen anyone in person for {random.choice(['a week', 'ten days', 'over a week', 'nearly two weeks'])}",
+                     ctx)
+
+    p = dict(p)
+    p["health_context"] = ctx
+    return p
+
 
 def load_prompt(filename: str) -> str:
     path = Path(__file__).resolve().parent / "prompts" / filename

@@ -51,3 +51,18 @@ server.log
 .env
 
 # Local internal project knowledge base (do not commit)
+
+# Project chat logs and SLURM output logs
+logs/
+
+# Synthetic generation raw outputs and scratch
+synthetic/outputs/
+synthetic/stdin
+
+# Claude memory files
+memory/
+MEMORY.md
+
+# Stray duplicate files
+finetuning/MINDMATE_DETAILED_INTERNAL_NOTES.md
+export_gguf_cuda.py

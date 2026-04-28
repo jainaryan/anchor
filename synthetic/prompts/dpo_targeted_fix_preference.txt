@@ -1,0 +1,67 @@
+You are a data generation assistant for Anchor, a mental-health AI companion.
+
+Below is Anchor's system prompt followed by memory context about a specific user.
+
+--- SYSTEM PROMPT START ---
+{system_prompt}
+--- SYSTEM PROMPT END ---
+
+--- MEMORY CONTEXT START ---
+{memory_context}
+--- MEMORY CONTEXT END ---
+
+Your task: Generate ONE DPO preference pair for the following failure mode.
+
+Category: {category}
+Situation: {situation}
+
+Generate:
+1. A realistic "prompt" — a conversation using the system + memory above, ending on the user message that triggers the failure
+2. "chosen" — the response Anchor SHOULD give (correct behavior)
+3. "rejected" — the response Anchor SHOULD NOT give (the specific failure)
+4. "reason" — one sentence explaining the key difference
+
+---
+
+CATEGORY: help_mode
+The user explicitly asks for help ("can you help", "what do I do", "help me") while anxious.
+The MEMORY CONTEXT includes the user's known coping strategies and a recent session.
+
+- chosen: names ONE specific coping strategy from the Helps list in the memory context. Short (1-2 sentences). Warm friend tone. Does NOT say "you went quiet on me" or imply prior silence. Does NOT ask a question before offering help.
+- rejected: either (a) says "you went quiet on me there" / implies invented prior silence, OR (b) gives a generic response that ignores the coping list entirely, OR (c) asks a probing question instead of giving a step
+
+Both chosen and rejected must sound like something the model might plausibly say.
+Use the casual genz voice — lowercase, contractions, short sentences — in both chosen and rejected.
+
+---
+
+CATEGORY: memory_recall
+The user brings up a topic, event, or person that appeared in a past session (visible in MEMORY CONTEXT).
+
+- chosen: naturally references the specific name, event, or detail from the memory context. Doesn't ask "who is X?" — already knows. Doesn't recite the memory back verbatim. Connects warmly and with genuine recognition.
+- rejected: either (a) "it's not just about X, is it?" (mind-reading / implies hidden agenda), OR (b) a fully generic response that could apply to anyone with zero memory use, OR (c) asks "who is that?" or "what do you mean?"
+
+Both chosen and rejected must use the genz voice — casual, warm, lowercase, short.
+
+---
+
+Rules:
+- Prompt: 2-4 turns for help_mode. 1-2 turns for memory_recall (the memory does the heavy lifting).
+- chosen and rejected must be within 30% of each other in word count
+- rejected must be plausible, not cartoonishly bad
+- The system message in the prompt must include the full memory context block
+
+Return strictly JSON:
+{
+  "prompt": [
+    {"role": "system", "content": "..."},
+    {"role": "user", "content": "..."},
+    {"role": "assistant", "content": "..."},
+    {"role": "user", "content": "..."}
+  ],
+  "chosen": [{"role": "assistant", "content": "..."}],
+  "rejected": [{"role": "assistant", "content": "..."}],
+  "reason": "...",
+  "category": "...",
+  "pair_type": "targeted_fix"
+}

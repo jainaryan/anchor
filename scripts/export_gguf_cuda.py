@@ -4,6 +4,9 @@ Merges a LoRA adapter into its base model, converts to GGUF F16,
 then quantizes to Q4_K_M.
 
 Usage:
+    python scripts/export_gguf_cuda.py --model llama_sft_ck200
+    python scripts/export_gguf_cuda.py --model llama_dpo_ck200
+    python scripts/export_gguf_cuda.py --model qwen25_dpo_ck200
     python scripts/export_gguf_cuda.py --model genz
     python scripts/export_gguf_cuda.py --model qwen
 
@@ -26,6 +29,47 @@ CONVERT_SCRIPT = LLAMA_CPP_DIR / "convert_hf_to_gguf.py"
 QUANTIZE_BIN = LLAMA_CPP_DIR / "build" / "bin" / "llama-quantize"
 
 MODELS = {
+    # SFT baseline — Llama 3.2 3B checkpoint-200
+    "llama_sft_ck200": {
+        "base": "meta-llama/Llama-3.2-3B-Instruct",
+        "adapter": PROJECT_ROOT / "adapters" / "CUDA_mindmate_llama32b" / "checkpoint-200",
+        "out_name": "mindmate_llama_sft_ck200",
+    },
+    # DPO — Llama 3.2 3B: merge SFT ck200 first, then DPO LoRA on top
+    "llama_dpo_ck200": {
+        "base": "meta-llama/Llama-3.2-3B-Instruct",
+        "sft_adapter": PROJECT_ROOT / "adapters" / "CUDA_mindmate_llama32b" / "checkpoint-200",
+        "adapter": PROJECT_ROOT / "adapters" / "CUDA_mindmate_llama32b_dpo_ck200",
+        "out_name": "mindmate_llama_dpo_ck200",
+    },
+    # DPO — Qwen2.5-3B: merge SFT ck200 first, then DPO LoRA on top
+    "qwen25_dpo_ck200": {
+        "base": "Qwen/Qwen2.5-3B-Instruct",
+        "sft_adapter": PROJECT_ROOT / "adapters" / "CUDA_mindmate_qwen25_3b" / "checkpoint-200",
+        "adapter": PROJECT_ROOT / "adapters" / "CUDA_mindmate_qwen25_3b_dpo_ck200",
+        "out_name": "mindmate_qwen25_dpo_ck200",
+    },
+    # SFT only — Llama 3.2 3B checkpoint-1600 (pre-DPO baseline)
+    "llama_sft_ck1600": {
+        "base": "meta-llama/Llama-3.2-3B-Instruct",
+        "adapter": PROJECT_ROOT / "adapters" / "CUDA_mindmate_llama32b" / "checkpoint-1600",
+        "out_name": "mindmate_llama_sft_ck1600",
+    },
+    # Gemma 4 E2B IT — final adapter (1600 steps)
+    "gemma4_e2b": {
+        "base": "google/gemma-4-e2b-it",
+        "adapter": PROJECT_ROOT / "adapters" / "CUDA_mindmate_gemma4_e2b",
+        "out_name": "mindmate_gemma4_e2b",
+        "gemma4": True,  # flag: needs Gemma4ClippableLinear unwrap before PEFT
+    },
+    # Gemma 4 E4B IT — final adapter (1600 steps)
+    "gemma4_e4b": {
+        "base": "google/gemma-4-e4b-it",
+        "adapter": PROJECT_ROOT / "adapters" / "CUDA_mindmate_gemma4_e4b",
+        "out_name": "mindmate_gemma4_e4b",
+        "gemma4": True,
+    },
+    # Legacy
     "genz": {
         "base": "meta-llama/Llama-3.2-3B-Instruct",
         "adapter": PROJECT_ROOT / "adapters" / "genz",
@@ -39,12 +83,28 @@ MODELS = {
 }
 
 
+def unwrap_gemma4_clippable_linears(model):
+    """Replace Gemma4ClippableLinear wrappers with their inner Linear so PEFT can inject LoRA."""
+    for parent in list(model.modules()):
+        for attr_name, child in list(parent.named_children()):
+            if type(child).__name__ == "Gemma4ClippableLinear" and hasattr(child, "linear"):
+                setattr(parent, attr_name, child.linear)
+    return model
+
+
 def step_merge(cfg: dict, merged_dir: Path):
-    print(f"\n[STEP 1] Merging adapter into base model...")
+    has_sft = "sft_adapter" in cfg
+    is_gemma4 = cfg.get("gemma4", False)
+
+    print(f"\n[STEP 1] Merging adapter(s) into base model...")
     print(f"  Base:    {cfg['base']}")
+    if has_sft:
+        print(f"  SFT adapter: {cfg['sft_adapter']}")
     print(f"  Adapter: {cfg['adapter']}")
     print(f"  Output:  {merged_dir}")
 
+    if has_sft and not Path(cfg["sft_adapter"]).exists():
+        raise FileNotFoundError(f"SFT adapter not found: {cfg['sft_adapter']}")
     if not cfg["adapter"].exists():
         raise FileNotFoundError(f"Adapter not found: {cfg['adapter']}")
 
@@ -60,7 +120,20 @@ def step_merge(cfg: dict, merged_dir: Path):
         low_cpu_mem_usage=True,
     )
 
-    print("  Loading adapter...")
+    if is_gemma4:
+        model = unwrap_gemma4_clippable_linears(model)
+        print("  [gemma4-fix] Unwrapped Gemma4ClippableLinear → inner Linear.")
+
+    if has_sft:
+        print("  Loading SFT adapter and merging...")
+        model = PeftModel.from_pretrained(model, str(cfg["sft_adapter"]))
+        model = model.merge_and_unload()
+        if is_gemma4:
+            model = unwrap_gemma4_clippable_linears(model)
+        print("  SFT merged. Loading DPO adapter...")
+    else:
+        print("  Loading adapter...")
+
     model = PeftModel.from_pretrained(model, str(cfg["adapter"]))
 
     print("  Merging and unloading LoRA weights...")
@@ -115,7 +188,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model", required=True, choices=list(MODELS.keys()),
-        help="Which model to export: genz | qwen"
+        help="Which model to export"
     )
     parser.add_argument(
         "--skip-merge", action="store_true",

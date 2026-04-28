@@ -29,10 +29,11 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model",
-    choices=["llama", "qwen", "qwen25_3b", "llama_ck200"],
+    choices=["llama", "qwen", "qwen25_3b", "llama_ck200", "llama_ck1600"],
     default="llama",
 )
 parser.add_argument("--steps", type=int, default=800)
+parser.add_argument("--data", choices=["v1", "v2"], default="v2")
 args = parser.parse_args()
 
 # ── Per-model config ─────────────────────────────────────────────────────────
@@ -65,6 +66,13 @@ CONFIGS = {
         "trust_remote_code": False,
         "thinking": False,
     },
+    "llama_ck1600": {
+        "base_model": "meta-llama/Llama-3.2-3B-Instruct",
+        "sft_adapter": "adapters/genz/checkpoint-1600",
+        "dpo_out": "adapters/genz_dpo_ck1600",
+        "trust_remote_code": False,
+        "thinking": False,
+    },
 }
 
 cfg = CONFIGS[args.model]
@@ -73,8 +81,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BASE_MODEL  = cfg["base_model"]
 SFT_ADAPTER = PROJECT_ROOT / cfg["sft_adapter"]
 DPO_OUT     = PROJECT_ROOT / cfg["dpo_out"]
-TRAIN_FILE  = PROJECT_ROOT / "data" / "dpo_train.jsonl"
-VAL_FILE    = PROJECT_ROOT / "data" / "dpo_val.jsonl"
+_suffix     = "_v2" if args.data == "v2" else ""
+TRAIN_FILE  = PROJECT_ROOT / "data" / f"dpo_train{_suffix}.jsonl"
+VAL_FILE    = PROJECT_ROOT / "data" / f"dpo_val{_suffix}.jsonl"
 
 print("=" * 60)
 print(f"  MindMate DPO Training — {args.model.upper()}")
@@ -150,8 +159,9 @@ print(f"  Train: {len(dataset['train'])} pairs | Val: {len(dataset['validation']
 
 
 def format_messages(messages) -> str:
-    if args.model in ("llama", "llama_ck200"):
-        # Manually construct Llama 3 prompt — bypasses Jinja2 template issues
+    if args.model in ("llama", "llama_ck200", "llama_ck1600"):
+        # Manually construct Llama 3 prompt — bypasses Jinja2 template issues.
+        # Must match the format used in SFT training (CUDA_train_qlora.py).
         result = "<|begin_of_text|>"
         for msg in messages:
             result += f"<|start_header_id|>{msg['role']}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"
@@ -233,6 +243,7 @@ dpo_config = DPOConfig(
     lr_scheduler_type="cosine",
     optim="paged_adamw_32bit",
     max_length=1536,
+    max_prompt_length=1024,
     logging_steps=10,
     save_steps=200,
     eval_strategy="steps",
