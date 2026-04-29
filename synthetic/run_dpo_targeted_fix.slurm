@@ -1,29 +1,68 @@
 #!/bin/bash
-#SBATCH --job-name=mindmate-dpo-targeted-fix
-#SBATCH --output=/home/a/aryanj/logs/dpo_targeted_fix_%j.log
-#SBATCH --error=/home/a/aryanj/logs/dpo_targeted_fix_%j.err
+#SBATCH --job-name=mindmate-dpo-tfix
+#SBATCH --output=/home/a/aryanj/logs/%x_%j.out
+#SBATCH --error=/home/a/aryanj/logs/%x_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
+#SBATCH --mem=80G
 #SBATCH --partition=gpu-long
 #SBATCH --gres=gpu:a100-80:1
-#SBATCH --time=08:00:00
+#SBATCH --time=24:00:00
 
-unset VIRTUAL_ENV
+# ── DPO Targeted Fix Data Generation (help_mode + memory_recall) ─────────────
+#
+# Generates preference pairs for the two worst benchmark failure modes:
+#   help_mode    — user asks for help → chosen names ONE coping technique,
+#                  rejected asks a question or hallucinates shared history
+#   memory_recall — user mentions someone/event from past session →
+#                  chosen references it naturally, rejected ignores or hallucinates
+#
+# Runs until 22h timeout (2h buffer before 24h wall). On SIGTERM, pipeline
+# saves gracefully. Appends pairs to:
+#   data/dpo_train.jsonl + data/dpo_val.jsonl
+# Partial recovery file:
+#   data/dpo_targeted_fix_partial.jsonl
+#
+# Requires A100-80 (Qwen3-30B-A3B-Instruct-2507 teacher in bfloat16, ~60GB VRAM)
+# ─────────────────────────────────────────────────────────────────────────────
 
-if [ ! -d "mindmatenv" ]; then
-    uv venv mindmatenv --python 3.12
-fi
+set -euo pipefail
 
-source mindmatenv/bin/activate
+PROJECT_DIR=~/projects/mindmate
+SYNTHETIC_DIR=$PROJECT_DIR/synthetic
 
-uv pip install torch transformers bitsandbytes tqdm accelerate
+echo "========================================"
+echo "  MindMate DPO Targeted Fix Datagen"
+echo "  help_mode + memory_recall pairs"
+echo "  Job: $SLURM_JOB_ID"
+echo "  Node: $SLURMD_NODENAME"
+echo "  Started: $(date)"
+echo "========================================"
 
-# A100-80: full bfloat16 — no 4-bit quantisation
+source $PROJECT_DIR/mindmatenv/bin/activate
+echo "[Setup] Python: $(which python) — $(python --version)"
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+echo ""
+
+cd $SYNTHETIC_DIR
 export USE_4BIT=0
 
-echo "Starting DPO targeted fix pipeline (help_mode + memory_recall)..."
-mindmatenv/bin/python synthetic/dpo_targeted_fix_pipeline.py
+echo "[Pipeline] Generating DPO pairs (help_mode + memory_recall)..."
+echo "  Output: $PROJECT_DIR/data/dpo_train.jsonl + dpo_val.jsonl"
+echo "  Partial: $PROJECT_DIR/data/dpo_targeted_fix_partial.jsonl"
+echo ""
 
-echo "Pipeline finished!"
+# 22h timeout — 2h buffer before 24h wall-time
+timeout 79200 python -u dpo_targeted_fix_pipeline.py || true
+
+echo ""
+echo "========================================"
+echo "  Pipeline complete: $(date)"
+TRAIN_LINES=$(wc -l < $PROJECT_DIR/data/dpo_train.jsonl 2>/dev/null || echo 0)
+VAL_LINES=$(wc -l < $PROJECT_DIR/data/dpo_val.jsonl 2>/dev/null || echo 0)
+PARTIAL_LINES=$(wc -l < $PROJECT_DIR/data/dpo_targeted_fix_partial.jsonl 2>/dev/null || echo 0)
+echo "  dpo_train.jsonl:              $TRAIN_LINES pairs"
+echo "  dpo_val.jsonl:                $VAL_LINES pairs"
+echo "  dpo_targeted_fix_partial:     $PARTIAL_LINES pairs"
+echo "========================================"
