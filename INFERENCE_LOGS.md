@@ -285,7 +285,8 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 | targeted_fixes (gold) | 65 | bonus |
 | **Total** | **~10,065** | |
 **System prompt:** Simplified 13-line prompt (temperature 0.75)
-**Status:** PENDING — submit `finetuning/run_sft_v3.slurm`
+**Job:** 600329 (A100-40, gpu-long)
+**Status:** QUEUED — evaluate vs genzv2 ck1600 on 34-scenario benchmark when complete
 **Goal:** Fix MEMORY_USE (12%), BIOMETRIC (20%), HELP_MODE (50%) vs genzv2 ck1600 baseline
 
 ---
@@ -306,7 +307,8 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 | targeted_fixes (gold) | 65 | bonus | Fix |
 | **Total** | **~4,915** | | |
 **System prompt:** Simplified 13-line prompt (temperature 0.75)
-**Status:** PENDING — submit `finetuning/run_sft_v2_continued.slurm`
+**Job:** 600330 (A100-40, gpu-long)
+**Status:** QUEUED — A/B vs genzv3 on benchmark when both complete
 **Goal:** Same fixes as v3 but faster — builds on genzv2's existing good behaviors. A/B vs genzv3.
 
 ---

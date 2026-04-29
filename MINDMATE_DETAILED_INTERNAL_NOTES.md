@@ -275,19 +275,17 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 | Job | Name | Status | Purpose |
 |---|---|---|---|
-| TBD | `mindmate-sft-v3` | **PENDING submission** | SFT v3 fresh training, 1600 steps |
-| TBD | `mindmate-sft-v2c` | **PENDING submission** | SFT v2_continued from genzv2 ck1600, 500 steps |
+| 600329 | `mindmate-sft-v3` | **RUNNING/PENDING** | SFT v3 fresh training, 1600 steps |
+| 600330 | `mindmate-sft-v2c` | **RUNNING/PENDING** | SFT v2_continued from genzv2 ck1600, 500 steps |
 
 **Still needs submission:**
-- `finetuning/run_sft_v3.slurm` — Option A: fresh Llama 3B, v3 mix, 1600 steps → `adapters/genzv3/`
-- `finetuning/run_sft_v2_continued.slurm` — Option B: continue genzv2 ck1600, v2_continued mix, 500 steps → `adapters/genzv2_continued/`
 - `finetuning/run_dpo_llama_ck1600.slurm` — DPO on genzv2 ck1600 (format + max_prompt_length fixed, not yet submitted)
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
-| TBD | SFT v3 | PENDING submission |
-| TBD | SFT v2_continued | PENDING submission |
+| 600329 | SFT v3 (genzv3) | QUEUED Apr 29 |
+| 600330 | SFT v2_continued (genzv2_continued) | QUEUED Apr 29 |
 | 599045 | Benchmark genzv2 ck1600 | **COMPLETED** — 27/42 (64%). See Benchmarks section. |
 | 599031 | Targeted fix SFT | **COMPLETED** — 13,524 SFT examples (help_mode + memory_recall) |
 | 599030 | Biometric SFT+DPO | **COMPLETED** — 2,348 SFT + ~1,263 DPO pairs added |
