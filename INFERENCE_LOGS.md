@@ -255,22 +255,22 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 
 ---
 
-## Llama 3.2 3B — genzv2 DPO (`adapters/genz_dpo_ck1600/`) — **PENDING**
-**Date:** 2026-04-24 (job 595679, gpu-long, A100-80)
+## Llama 3.2 3B — genzv2 DPO (`adapters/genz_dpo_ck1600/`) — **FAILED** ❌
+**Date:** 2026-04-24 (job 595679, gpu-long, A100-80, ~1h)
 **Base:** genzv2 SFT checkpoint-1600
-**DPO data:** `dpo_train_v2.jsonl` / `dpo_val_v2.jsonl` (6,120 train + 1,080 val = 7,200 pairs)
-**Steps:** 1,200 (increased from 800 — dataset is 3× larger than v1 run)
-**DPO categories:** mixed_mode, casual_sad, panic_mode, transition, hallucination_guard, system_compliance
-**Missing from DPO data:** help_mode, memory_recall, biometric (pending jobs 595713 + 595714 — will be added in next DPO run)
-**Output:** `adapters/genz_dpo_ck1600/`
-**Status:** PENDING — evaluate vs genzv2 SFT ck1600 on full 29-scenario harness when complete.
+**DPO data:** `dpo_train_v2.jsonl` / `dpo_val_v2.jsonl` (6,120 train + 1,080 val)
+**Steps:** 1,200
+**Failure:** Training diverged — all `rewards/margins` negative, `rewards/accuracies` 0.11–0.31
+**Root cause:** `format_messages()` used `tokenizer.apply_chat_template` for `llama_ck1600`, but genzv2 SFT was trained on manual Llama 3 format → mismatch → no useful gradient signal
+**Fix applied:** `CUDA_train_dpo.py` updated — `llama_ck1600` added to manual-format branch + `max_prompt_length=1024`
+**Re-run status:** Holding — waiting for v3/v2_continued benchmark results before deciding if DPO is needed
 
 ---
 
 ---
 
-## Llama 3.2 3B — genzv3 SFT (`adapters/genzv3/`) — **PENDING**
-**Date:** 2026-04-29 (job TBD, gpu-long, A100-40, ~60 min)
+## Llama 3.2 3B — genzv3 SFT (`adapters/genzv3/`) — **TRAINED, BENCHMARKING**
+**Date:** 2026-04-30 (job 600329, gpu-long, A100-40, 1h 23min)
 **Base:** `meta-llama/Llama-3.2-3B-Instruct` (fresh training)
 **Steps:** 1,600
 **Data mix:**
@@ -285,14 +285,14 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 | targeted_fixes (gold) | 65 | bonus |
 | **Total** | **~10,065** | |
 **System prompt:** Simplified 13-line prompt (temperature 0.75)
-**Job:** 600329 (A100-40, gpu-long)
-**Status:** QUEUED — evaluate vs genzv2 ck1600 on 34-scenario benchmark when complete
-**Goal:** Fix MEMORY_USE (12%), BIOMETRIC (20%), HELP_MODE (50%) vs genzv2 ck1600 baseline
+**Job:** 600329 (A100-40, gpu-long, 1h 23min)
+**Status:** COMPLETED ✅ — all checkpoints ck200–1600 + final saved to `adapters/genzv3/`
+**Benchmark:** job 600383 (H200) — PENDING
 
 ---
 
 ## Llama 3.2 3B — genzv2_continued SFT (`adapters/genzv2_continued/`) — **PENDING**
-**Date:** 2026-04-29 (job TBD, gpu-long, A100-40, ~15-20 min)
+**Date:** 2026-04-30 (job 600330, gpu-long, A100-40, 26 min)
 **Base:** `adapters/genz/checkpoint-1600` (continued training, PeftModel.from_pretrained)
 **Steps:** 500
 **Data mix:**
@@ -309,7 +309,7 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 **System prompt:** Simplified 13-line prompt (temperature 0.75)
 **Job:** 600330 (A100-40, gpu-long, 26 min)
 **Status:** COMPLETED ✅ — checkpoints: 200, 400, 500 + final saved to `adapters/genzv2_continued/`
-**Pending:** benchmark run + A/B vs genzv3
+**Benchmark:** job 600384 (H200) — PENDING
 **Goal:** Same fixes as v3 but faster — builds on genzv2's existing good behaviors. A/B vs genzv3.
 
 ---
@@ -321,9 +321,14 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 - [x] Qwen2.5-3B SFT checkpoint-200 — inferior to Llama
 - [x] Llama DPO ck200 (job 560339) — **inferior to genzv2 SFT ck1600**
 - [x] Qwen2.5-3B DPO ck200 (job 560338) — **inferior to genzv2 SFT ck1600**
-- [x] **genzv2 SFT ck1600 — WINNER, in production**
+- [x] **genzv2 SFT ck1600 — current production model** (benchmark: 59% on 34-scenario suite)
+- [x] genzv2 DPO ck1600 (job 595679) — **FAILED** (format mismatch, not re-run)
+- [x] genzv3 SFT ck1600 (job 600329) — trained, benchmark pending (job 600383)
+- [x] genzv2_continued SFT (job 600330) — trained, benchmark pending (job 600384)
 
 ## Pending Tests
 
-- [ ] genzv2 DPO ck1600 (job 595679) — new DPO on best SFT base, 3× more data, 1.5× more steps
+- [ ] **genzv3 ck1600 benchmark** (job 600383, H200) — compare vs genzv2 59% baseline
+- [ ] **genzv2_continued benchmark** (job 600384, H200) — A/B vs genzv3
 - [ ] Gemma 4 E2B IT — GGUF uploaded to HF, not yet evaluated on eval harness
+- [ ] DPO re-run on best new adapter (pending benchmark outcome + decision)

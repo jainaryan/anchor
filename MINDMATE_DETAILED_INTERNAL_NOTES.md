@@ -2,7 +2,7 @@
 
 ## Metadata
 - Project: `mindmate`
-- Last updated: `2026-04-28`
+- Last updated: `2026-04-30`
 - Android app: `anchor-app/` (NOT `mindmate_app/` — that is a stale scratch fork)
 - Production: https://tryanchor.me
 
@@ -87,18 +87,29 @@ Synthetic Data Generation (Qwen3-30B)
 
 ## Saved Adapters
 
+### `adapters/genzv3/checkpoint-1600` — **CANDIDATE** 🔬 (job 600329)
+- Llama 3.2 3B, v3 data mix, 1600 steps, fresh from base, ~1h 23min on A100-40
+- v3 mix: transition 25%, targeted_fix 20%, therapist 15%, biometric 15%, friend 15%, casual 10%, +65 gold
+- **Benchmark:** job 600383 (H200) — PENDING
+- **Goal:** fix MEMORY_USE (12%), BIOMETRIC (20%), HELP_MODE (50%) from genzv2 baseline
+
+### `adapters/genzv2_continued/` — **CANDIDATE** 🔬 (job 600330)
+- Llama 3.2 3B, continued from genzv2 ck1600, 500 steps, ~26min on A100-40
+- v2_continued mix: targeted_fix 30%, biometric 25%, transition 15%, therapist 12%, casual 10%, friend 5%, +65 gold
+- **Benchmark:** job 600384 (H200) — PENDING
+- **Goal:** same fixes as genzv3 but faster — A/B comparison
+
 ### `adapters/genz/checkpoint-1600` — **PRODUCTION MODEL** ✅
 - Llama 3.2 3B, v2 data mix, 1600 steps
-- **Beats all DPO models and all other SFT checkpoints**
+- **Current best — beats all DPO models and all other SFT checkpoints**
 - GGUF: `exports/mindmate_llama_sft_ck1600/llama(genz)v2_q4_k_m.gguf`
 - Pixel 8a: ~5.5 TPS, TTFT 60–66s cold / 6s cached, heap 3.12–3.17 GB
+- Benchmark baseline: 59% on 34-scenario suite (CRISIS/FORMAT/NO_HALLUCINATION 100%, MEMORY_USE 12%, BIOMETRIC 20%, HELP_MODE 50%)
 
-### `adapters/genz_dpo_ck1600/` — **COMPLETED but FAILED** ❌ (job 595679)
-- DPO on top of genzv2 ck1600, 1200 steps on dpo_v2 data (~1h on A100-80)
-- Saved to cluster, but training diverged: all `rewards/margins` negative, `rewards/accuracies` 0.11–0.31
-- Root cause: `format_messages()` used `tokenizer.apply_chat_template` for `llama_ck1600`, but genzv2 SFT was trained with manual Llama 3 format → format mismatch → DPO had no useful gradient signal
-- **Fixed in CUDA_train_dpo.py**: added `"llama_ck1600"` to manual-format branch; added `max_prompt_length=1024`
-- **Needs re-run** after pushing fix to cluster
+### `adapters/genz_dpo_ck1600/` — **FAILED** ❌ (job 595679)
+- DPO on genzv2 ck1600, diverged: negative margins, accuracy 0.11–0.31
+- Root cause: format mismatch (apply_chat_template vs manual Llama 3 format). Fixed in CUDA_train_dpo.py.
+- Not re-run — waiting for v3/v2_continued benchmark results before deciding if DPO is needed
 
 ### `adapters/CUDA_mindmate_llama32b/` — Llama v2 SFT
 - Same data mix as genz. Has checkpoints 200–1600.
@@ -161,14 +172,14 @@ All active data uses `conversations` format:
 ### Active pipelines
 | Pipeline | Output | Status |
 |---|---|---|
-| `pipeline.py` | therapist/friend/grief | Done |
-| `casual_pipeline.py` | casual non-distress | Done |
-| `transition_pipeline.py` | casual→emotional pivots | Done |
-| `dpo_pipeline.py` | DPO pairs (v1 and v2) | Done |
-| `targeted_fix_pipeline.py` | help_mode + memory_recall SFT | Done (job 594101) |
-| `dpo_targeted_fix_pipeline.py` | DPO pairs for help_mode + memory_recall | **Needs re-run** (job 595714 timed out at 10h, no logs — SLURM log path bug fixed) |
-| `biometric_sft_pipeline.py` | Biometric health context SFT, 4 modes | **Needs re-run** (job 595713 generated 0 — `random`+`re` not imported in utils.py; fixed) |
-| `biometric_dpo_pipeline.py` | Biometric DPO pairs, 4 pair types | **Needs re-run** (same bug) |
+| `pipeline.py` | therapist/friend/grief | ✅ Done |
+| `casual_pipeline.py` | casual non-distress | ✅ Done |
+| `transition_pipeline.py` | casual→emotional pivots | ✅ Done |
+| `dpo_pipeline.py` | DPO pairs (v1 and v2) | ✅ Done |
+| `targeted_fix_pipeline.py` | help_mode + memory_recall SFT | ✅ Done — 13,524 examples (job 599031) |
+| `biometric_sft_pipeline.py` | Biometric SFT, 4 modes | ✅ Done — 2,348 examples (job 599030) |
+| `biometric_dpo_pipeline.py` | Biometric DPO pairs, 4 pair types | ✅ Done — ~1,263 pairs added (job 599030) |
+| `dpo_targeted_fix_pipeline.py` | DPO pairs for help_mode + memory_recall | 🟢 **RUNNING** (job 600358, A100-80, 22h) |
 
 ### Biometric pipeline details (new, Apr 2026)
 - 24 profiles across: sleep (4), mood_trend (4), physical_symptoms (2), coping_outcome (2), energy (2), social_withdrawal (2), anxiety_intensity (2), mixed (2)
@@ -271,23 +282,27 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ---
 
-## Active Cluster Jobs (2026-04-29)
+## Active Cluster Jobs (2026-04-30)
 
 | Job | Name | Status | Purpose |
 |---|---|---|---|
-| 600329 | `mindmate-sft-v3` | **RUNNING** | SFT v3 fresh training, 1600 steps → `adapters/genzv3/` |
-| 600330 | `mindmate-sft-v2c` | **COMPLETED** ✅ 26min | SFT v2_continued, 500 steps → `adapters/genzv2_continued/` |
-| 600358 | `mindmate-dpo-tfix` | **QUEUED** | DPO targeted fix datagen (help_mode + memory_recall pairs, 22h) |
+| 600383 | `mindmate-bench` | 🟡 **PENDING** | Benchmark genzv3/checkpoint-1600 (H200, 3h) |
+| 600384 | `mindmate-bench` | 🟡 **PENDING** | Benchmark genzv2_continued final adapter (H200, 3h) |
+| 600358 | `mindmate-dpo-tfix` | 🟢 **RUNNING** | DPO targeted fix datagen, help_mode + memory_recall (A100-80, 22h) |
 
-**Still needs submission:**
-- `finetuning/run_dpo_llama_ck1600.slurm` — DPO on genzv2 ck1600 (format + max_prompt_length fixed, not yet submitted)
+**Still needs submission (after benchmark results):**
+- `finetuning/run_dpo_llama_ck1600.slurm` — DPO training on best new adapter (pending benchmark outcome)
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
-| 600329 | SFT v3 (genzv3) | RUNNING Apr 30 — ck200/400/600/800 saved |
-| 600330 | SFT v2_continued | COMPLETED Apr 30, 26min — ck200/400/500 + final saved |
-| 600358 | DPO targeted fix datagen | QUEUED Apr 30 |
+| 600384 | Benchmark genzv2_continued | PENDING H200 |
+| 600383 | Benchmark genzv3 ck1600 | PENDING H200 |
+| 600376 | Benchmark genzv2_continued | FAILED 1s — benchmarks/ not on cluster, now fixed |
+| 600375 | Benchmark genzv3 ck1600 | FAILED 2s — benchmarks/ not on cluster, now fixed |
+| 600330 | SFT v2_continued | **COMPLETED** Apr 30, 26min — ck200/400/500 + final saved to `adapters/genzv2_continued/` |
+| 600329 | SFT v3 (genzv3) | **COMPLETED** Apr 30, 1h 23min — ck200–1600 + final saved to `adapters/genzv3/` |
+| 600358 | DPO targeted fix datagen | **RUNNING** Apr 30 (A100-80, 22h) |
 | 599045 | Benchmark genzv2 ck1600 | **COMPLETED** — 27/42 (64%). See Benchmarks section. |
 | 599031 | Targeted fix SFT | **COMPLETED** — 13,524 SFT examples (help_mode + memory_recall) |
 | 599030 | Biometric SFT+DPO | **COMPLETED** — 2,348 SFT + ~1,263 DPO pairs added |
@@ -334,7 +349,13 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 - Biometric: ignores sleep hours/HRV/mood scores in context entirely
 - Help mode: asks a question instead of naming a technique when user says "help me calm down"
 
-**Fix in progress:** Targeted fix datagen (job 599031) + biometric datagen (job 599030) — will add training data for these exact failure modes, then re-SFT and re-benchmark.
+**Fix applied:** Trained genzv3 (fresh, 1600 steps, v3 mix) and genzv2_continued (continued, 500 steps) with targeted_fix + biometric data added. Benchmark results pending (jobs 600383 + 600384, H200).
+
+### Results — genzv3 ck1600 (job 600383, 2026-04-30)
+**Status: PENDING**
+
+### Results — genzv2_continued (job 600384, 2026-04-30)
+**Status: PENDING**
 
 ### Files
 - `benchmarks/scenarios.py` — all scenarios + `ALL_SCENARIOS`, `CATEGORIES` dicts
