@@ -116,32 +116,33 @@ Synthetic Data Generation (Qwen3-30B)
 
 ## Data Layer
 
-### SFT data (33,534 usable examples as of 2026-04-24)
+### SFT data (as of 2026-04-29)
 
 | File | Examples | Content | Notes |
 |---|---|---|---|
+| `synthetic_train_targeted_fix.jsonl` | **13,524** | help_mode + memory_recall | Job 599031, Apr 29 ✅ |
 | `synthetic_train_friend_1.jsonl` | 7,380 | Casual friend-style support | |
 | `synthetic_train_therapist_.jsonl` | 6,347 | Therapeutic dialogue | |
 | `synthetic_train_transition.jsonl` | 6,184 | Casual→emotional pivot | Fix for joke-mode-lock |
-| `synthetic_train.jsonl` | 5,565 | Grief/loss | |
+| `synthetic_train.jsonl` | 5,565 | Grief/loss | Not used in v3+ mixes |
 | `synthetic_train_casual.jsonl` | 5,000 | Non-distress casual | |
-| `synthetic_train_targeted_fix.jsonl` | 2,993 | help_mode + memory_recall | Job 594101, Apr 23 |
-| `synthetic_train_targeted_fixes.jsonl` | 65 | Hand-crafted gold examples | help_mode (30) + biometric (15) + banned opener (20) |
-| `synthetic_train_biometric.jsonl` | **0 (bug)** | Biometric health context | Job 595713 ran 22h, 0 examples — `random` not imported in utils.py. Fixed. |
+| `synthetic_train_biometric.jsonl` | **2,348** | Biometric health context | Job 599030, Apr 29 ✅ |
+| `synthetic_train_targeted_fixes.jsonl` | 65 | Hand-crafted gold examples | help_mode (30) + biometric (15) + banned opener (20) — always 100% |
 | `additional_training_samples.jsonl` | 30 | Legacy | **EXCLUDED** |
 
 ### DPO data
 
 | File | Pairs | Date | Notes |
 |---|---|---|---|
-| `dpo_train_v2.jsonl` | 6,120 | Apr 18 | **Active** |
-| `dpo_val_v2.jsonl` | 1,080 | Apr 18 | **Active** |
+| `dpo_train_v2.jsonl` | 6,120 | Apr 18 | v2 — used for genzv2 DPO |
+| `dpo_val_v2.jsonl` | 1,080 | Apr 18 | v2 |
+| `dpo_train.jsonl` | **3,199** | Apr 29 | **Active** — v2 + biometric pairs added by job 599030 |
+| `dpo_val.jsonl` | **564** | Apr 29 | **Active** — v2 + biometric |
+| `dpo_biometric_partial.jsonl` | 1,971 | Apr 29 | Biometric-only pairs (subset of dpo_train.jsonl) |
 | `dpo_pairs_partial_v2.jsonl` | 7,202 | Apr 18 | Raw partial — redundant |
-| `dpo_train.jsonl` | 2,125 | Apr 9 | v1 — superseded |
-| `dpo_val.jsonl` | 375 | Apr 9 | v1 — superseded |
 
-**DPO v2 categories:** mixed_mode (1,400), casual_sad (1,247), panic_mode (1,082), transition (1,044), hallucination_guard (794), system_compliance (553)
-**Missing from all DPO data:** help_mode, memory_recall, biometric — jobs 595713 (biometric, 0 pairs due to bug) and 595714 (targeted fix, timed out) both failed. Both need re-run.
+**DPO categories in dpo_train.jsonl:** biometric (A/B/C/D types) + mixed_mode, casual_sad, panic_mode, transition, hallucination_guard, system_compliance
+**Still missing:** help_mode, memory_recall DPO pairs — not yet generated
 
 ### Excluded data (user decision 2026-04-14)
 - `data/new_raw_data/mindmate_train.jsonl` — 20,662 examples
@@ -270,22 +271,26 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ---
 
-## Active Cluster Jobs (2026-04-28)
+## Active Cluster Jobs (2026-04-29)
 
-| Job | Name | Status | Node | Purpose |
-|---|---|---|---|---|
-| 599031 | `mindmate-targeted-fix` | **RUNNING** (~4h in) | xgph8 (A100-80) | help_mode + memory_recall DPO targeted fix datagen |
-| 599030 | `mindmate-biometric` | **PENDING** (Resources) | — | Biometric SFT+DPO datagen (re-run, import bug fixed) |
+| Job | Name | Status | Purpose |
+|---|---|---|---|
+| TBD | `mindmate-sft-v3` | **PENDING submission** | SFT v3 fresh training, 1600 steps |
+| TBD | `mindmate-sft-v2c` | **PENDING submission** | SFT v2_continued from genzv2 ck1600, 500 steps |
 
 **Still needs submission:**
-- `finetuning/run_dpo_llama_ck1600.slurm` — DPO on genzv2 ck1600 (format + max_prompt_length fixed)
+- `finetuning/run_sft_v3.slurm` — Option A: fresh Llama 3B, v3 mix, 1600 steps → `adapters/genzv3/`
+- `finetuning/run_sft_v2_continued.slurm` — Option B: continue genzv2 ck1600, v2_continued mix, 500 steps → `adapters/genzv2_continued/`
+- `finetuning/run_dpo_llama_ck1600.slurm` — DPO on genzv2 ck1600 (format + max_prompt_length fixed, not yet submitted)
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
+| TBD | SFT v3 | PENDING submission |
+| TBD | SFT v2_continued | PENDING submission |
 | 599045 | Benchmark genzv2 ck1600 | **COMPLETED** — 27/42 (64%). See Benchmarks section. |
-| 599031 | Targeted fix DPO | RUNNING |
-| 599030 | Biometric SFT+DPO | PENDING |
+| 599031 | Targeted fix SFT | **COMPLETED** — 13,524 SFT examples (help_mode + memory_recall) |
+| 599030 | Biometric SFT+DPO | **COMPLETED** — 2,348 SFT + ~1,263 DPO pairs added |
 | 595714 | DPO targeted fix | TIMEOUT 10h — no logs (wrong log path, now fixed) |
 | 595713 | Biometric SFT+DPO | COMPLETED 22h — 0 new pairs (`random`+`re` not imported, now fixed) |
 | 595679 | DPO genzv2 ck1600 | COMPLETED 1h — diverged (negative margins, format mismatch, now fixed) |

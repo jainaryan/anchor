@@ -34,7 +34,6 @@ random.seed(SEED)
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 
-OUT_DIR = PROJECT_ROOT / "data" / "conversations_raw"
 extra_paths = [
     PROJECT_ROOT / "data" / "synthetic_train_therapist_.jsonl",
     PROJECT_ROOT / "data" / "synthetic_train_friend_1.jsonl",
@@ -81,6 +80,35 @@ DATA_MIX_PRESETS = {
         "synthetic_train.jsonl":            1500,
         "synthetic_train_friend_1.jsonl":   1000,
     },
+    # v3 (2026-04-29): fresh training with targeted fix + biometric data
+    # Fixes: MEMORY_USE (12%), HELP_MODE (50%), BIOMETRIC (20%) from benchmark baseline
+    # transition=25%, targeted_fix=20%, therapist=15%, biometric=15%, friend=15%, casual=10%
+    # +65 gold hand-crafted examples (always 100%)
+    # Total: ~10,065
+    "v3": {
+        "synthetic_train_transition.jsonl":     2500,
+        "synthetic_train_targeted_fix.jsonl":   2000,
+        "synthetic_train_therapist_.jsonl":     1500,
+        "synthetic_train_biometric.jsonl":      1500,
+        "synthetic_train_friend_1.jsonl":       1500,
+        "synthetic_train_casual.jsonl":         1000,
+        "synthetic_train_targeted_fixes.jsonl":   65,
+    },
+    # v2_continued (2026-04-29): continued training from genzv2 ck1600
+    # Base model already knows: casual tone, pivot, CRISIS, FORMAT, NO_HALLUCINATION
+    # Only fixing: MEMORY_USE, BIOMETRIC, HELP_MODE
+    # targeted_fix=30%, biometric=25%, transition=15%(replay), therapist=12%(replay),
+    # casual=10%(replay), friend=5%(replay), +65 gold
+    # Total: ~4,915
+    "v2_continued": {
+        "synthetic_train_targeted_fix.jsonl":   1500,
+        "synthetic_train_biometric.jsonl":      1250,
+        "synthetic_train_transition.jsonl":      750,
+        "synthetic_train_therapist_.jsonl":      600,
+        "synthetic_train_casual.jsonl":          500,
+        "synthetic_train_friend_1.jsonl":        250,
+        "synthetic_train_targeted_fixes.jsonl":   65,
+    },
 }
 
 import argparse as _argparse
@@ -89,7 +117,9 @@ _preset_parser.add_argument("--model", type=str, default="v2", choices=list(DATA
 _preset_args, _ = _preset_parser.parse_known_args()
 
 SOURCE_CAPS = DATA_MIX_PRESETS[_preset_args.model]
+OUT_DIR = PROJECT_ROOT / "data" / f"conversations_raw_{_preset_args.model}"
 print(f"[build_dataset] Using data mix preset: {_preset_args.model}")
+print(f"[build_dataset] Output dir: {OUT_DIR}")
 
 os.makedirs(OUT_DIR, exist_ok=True)
 

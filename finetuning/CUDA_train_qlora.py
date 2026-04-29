@@ -8,7 +8,7 @@ from transformers import (
     DataCollatorForSeq2Seq,
     BitsAndBytesConfig,
 )
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, get_peft_model, PeftModel
 import bitsandbytes as bnb
 import os
 import argparse
@@ -17,6 +17,12 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--iters", type=int, default=1600)
+parser.add_argument("--out-dir", type=str, default=None,
+                    help="Adapter output directory (default: adapters/CUDA_mindmate_llama32b_v2)")
+parser.add_argument("--data-dir", type=str, default="data/conversations_cleaned",
+                    help="Directory containing mindmate_train.jsonl and mindmate_val.jsonl")
+parser.add_argument("--adapter-path", type=str, default=None,
+                    help="Path to existing LoRA adapter for continued training (skips fresh LoRA init)")
 args_parsed = parser.parse_args()
 
 print(f'Version: {torch.__version__}') 
@@ -28,10 +34,15 @@ if not torch.cuda.is_available():
     
 
 BASE_MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
-DATA_DIR = "data/conversations_cleaned"
-OUT_DIR = "adapters/CUDA_mindmate_llama32b_v2"
+DATA_DIR = args_parsed.data_dir
+OUT_DIR = args_parsed.out_dir or "adapters/CUDA_mindmate_llama32b_v2"
 TRAIN_FILE = Path(DATA_DIR) / "mindmate_train.jsonl"
 VAL_FILE = Path(DATA_DIR) / "mindmate_val.jsonl"
+
+print(f"[trainer] Data dir   : {DATA_DIR}")
+print(f"[trainer] Output dir : {OUT_DIR}")
+print(f"[trainer] Adapter    : {args_parsed.adapter_path or 'none (fresh LoRA)'}")
+print(f"[trainer] Steps      : {args_parsed.iters}")
 
 if not TRAIN_FILE.exists() or not VAL_FILE.exists():
     raise FileNotFoundError(
@@ -59,15 +70,23 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto",
 )
 
-lora_config = LoraConfig(
-    r=8,
-    lora_alpha=16,
-    lora_dropout=0.05,
-    target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-    task_type="CAUSAL_LM",
-)
+if args_parsed.adapter_path:
+    # Continued training: load existing adapter weights, keep training
+    print(f"[trainer] Loading existing adapter from {args_parsed.adapter_path}")
+    model = PeftModel.from_pretrained(model, args_parsed.adapter_path, is_trainable=True)
+    print(f"[trainer] Adapter loaded — continued training mode")
+else:
+    # Fresh training: initialise new LoRA
+    lora_config = LoraConfig(
+        r=8,
+        lora_alpha=16,
+        lora_dropout=0.05,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        task_type="CAUSAL_LM",
+    )
+    model = get_peft_model(model, lora_config)
+    print(f"[trainer] Fresh LoRA initialised")
 
-model = get_peft_model(model, lora_config)
 model.enable_input_require_grads()
 
 dataset = load_dataset(

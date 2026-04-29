@@ -267,6 +267,50 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 
 ---
 
+---
+
+## Llama 3.2 3B — genzv3 SFT (`adapters/genzv3/`) — **PENDING**
+**Date:** 2026-04-29 (job TBD, gpu-long, A100-40, ~60 min)
+**Base:** `meta-llama/Llama-3.2-3B-Instruct` (fresh training)
+**Steps:** 1,600
+**Data mix:**
+| Source | Samples | % |
+|---|---|---|
+| transition | 2,500 | 25% |
+| targeted_fix (memory + help) | 2,000 | 20% |
+| therapist | 1,500 | 15% |
+| biometric | 1,500 | 15% |
+| friend | 1,500 | 15% |
+| casual | 1,000 | 10% |
+| targeted_fixes (gold) | 65 | bonus |
+| **Total** | **~10,065** | |
+**System prompt:** Simplified 13-line prompt (temperature 0.75)
+**Status:** PENDING — submit `finetuning/run_sft_v3.slurm`
+**Goal:** Fix MEMORY_USE (12%), BIOMETRIC (20%), HELP_MODE (50%) vs genzv2 ck1600 baseline
+
+---
+
+## Llama 3.2 3B — genzv2_continued SFT (`adapters/genzv2_continued/`) — **PENDING**
+**Date:** 2026-04-29 (job TBD, gpu-long, A100-40, ~15-20 min)
+**Base:** `adapters/genz/checkpoint-1600` (continued training, PeftModel.from_pretrained)
+**Steps:** 500
+**Data mix:**
+| Source | Samples | % | Type |
+|---|---|---|---|
+| targeted_fix (memory + help) | 1,500 | 30% | Fix |
+| biometric | 1,250 | 25% | Fix |
+| transition | 750 | 15% | Replay |
+| therapist | 600 | 12% | Replay |
+| casual | 500 | 10% | Replay |
+| friend | 250 | 5% | Replay |
+| targeted_fixes (gold) | 65 | bonus | Fix |
+| **Total** | **~4,915** | | |
+**System prompt:** Simplified 13-line prompt (temperature 0.75)
+**Status:** PENDING — submit `finetuning/run_sft_v2_continued.slurm`
+**Goal:** Same fixes as v3 but faster — builds on genzv2's existing good behaviors. A/B vs genzv3.
+
+---
+
 ## Completed Tests
 
 - [x] Qwen3-1.7B checkpoint-200, 800, 1600 — all inferior to Llama 3B
