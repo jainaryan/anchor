@@ -28,6 +28,8 @@
 set -euo pipefail
 
 MODEL="${MODEL:-llama_ck1600}"
+ADAPTER="${ADAPTER:-}"
+LABEL="${LABEL:-}"
 CATEGORY_ARG=""
 if [ -n "${CATEGORY:-}" ]; then
     CATEGORY_ARG="--category $CATEGORY"
@@ -38,7 +40,12 @@ cd "$PROJECT_DIR"
 
 echo "========================================"
 echo "  MindMate Benchmark"
+if [ -n "$ADAPTER" ]; then
+echo "  Adapter: $ADAPTER"
+echo "  Label:   ${LABEL:-$(basename $ADAPTER)}"
+else
 echo "  Model:  $MODEL"
+fi
 echo "  Job:    $SLURM_JOB_ID"
 echo "  Node:   $SLURMD_NODENAME"
 echo "  GPU:    $(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
@@ -47,9 +54,18 @@ echo "========================================"
 
 source mindmatenv/bin/activate
 
-python benchmarks/run_benchmarks.py \
-    --model "$MODEL" \
-    $CATEGORY_ARG
+if [ -n "$ADAPTER" ]; then
+    LABEL_ARG=""
+    if [ -n "$LABEL" ]; then LABEL_ARG="--label $LABEL"; fi
+    python -u benchmarks/run_benchmarks.py \
+        --adapter "$ADAPTER" \
+        $LABEL_ARG \
+        $CATEGORY_ARG
+else
+    python -u benchmarks/run_benchmarks.py \
+        --model "$MODEL" \
+        $CATEGORY_ARG
+fi
 
 echo ""
 echo "Done: $(date)"
