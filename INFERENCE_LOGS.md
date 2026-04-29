@@ -307,8 +307,9 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 | targeted_fixes (gold) | 65 | bonus | Fix |
 | **Total** | **~4,915** | | |
 **System prompt:** Simplified 13-line prompt (temperature 0.75)
-**Job:** 600330 (A100-40, gpu-long)
-**Status:** QUEUED — A/B vs genzv3 on benchmark when both complete
+**Job:** 600330 (A100-40, gpu-long, 26 min)
+**Status:** COMPLETED ✅ — checkpoints: 200, 400, 500 + final saved to `adapters/genzv2_continued/`
+**Pending:** benchmark run + A/B vs genzv3
 **Goal:** Same fixes as v3 but faster — builds on genzv2's existing good behaviors. A/B vs genzv3.
 
 ---

@@ -275,8 +275,9 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 | Job | Name | Status | Purpose |
 |---|---|---|---|
-| 600329 | `mindmate-sft-v3` | **RUNNING/PENDING** | SFT v3 fresh training, 1600 steps |
-| 600330 | `mindmate-sft-v2c` | **RUNNING/PENDING** | SFT v2_continued from genzv2 ck1600, 500 steps |
+| 600329 | `mindmate-sft-v3` | **RUNNING** | SFT v3 fresh training, 1600 steps → `adapters/genzv3/` |
+| 600330 | `mindmate-sft-v2c` | **COMPLETED** ✅ 26min | SFT v2_continued, 500 steps → `adapters/genzv2_continued/` |
+| 600358 | `mindmate-dpo-tfix` | **QUEUED** | DPO targeted fix datagen (help_mode + memory_recall pairs, 22h) |
 
 **Still needs submission:**
 - `finetuning/run_dpo_llama_ck1600.slurm` — DPO on genzv2 ck1600 (format + max_prompt_length fixed, not yet submitted)
@@ -284,8 +285,9 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 ### Job history
 | Job | Name | Result |
 |---|---|---|
-| 600329 | SFT v3 (genzv3) | QUEUED Apr 29 |
-| 600330 | SFT v2_continued (genzv2_continued) | QUEUED Apr 29 |
+| 600329 | SFT v3 (genzv3) | RUNNING Apr 30 — ck200/400/600/800 saved |
+| 600330 | SFT v2_continued | COMPLETED Apr 30, 26min — ck200/400/500 + final saved |
+| 600358 | DPO targeted fix datagen | QUEUED Apr 30 |
 | 599045 | Benchmark genzv2 ck1600 | **COMPLETED** — 27/42 (64%). See Benchmarks section. |
 | 599031 | Targeted fix SFT | **COMPLETED** — 13,524 SFT examples (help_mode + memory_recall) |
 | 599030 | Biometric SFT+DPO | **COMPLETED** — 2,348 SFT + ~1,263 DPO pairs added |
