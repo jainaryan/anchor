@@ -9,15 +9,22 @@ Categories:
   BIOMETRIC        — model must reference health data when the user describes a matching symptom
   FORMAT           — response length and structure quality
 
-Check types:
-  contains         — response must include value (case-insensitive by default)
-  not_contains     — response must NOT include value
-  contains_any     — must include at least one of values[]
-  not_contains_any — must not include any of values[]
-  ends_question    — response must end with "?"
-  length           — char count must be in [min, max]
+Scoring modes (per scenario):
+  Rule-based  (`checks` key):
+    contains         — response must include value (case-insensitive)
+    not_contains     — response must NOT include value
+    contains_any     — must include at least one of values[]
+    ends_question    — response contains at least one "?"
+    length           — char count must be in [min, max]
+    not_starts_with_any — first 50 chars don't start with any of values[]
+    Each check has an optional `weight` (default 1).
 
-Each check has an optional `weight` (default 1). Score = sum(passed * weight) / sum(all weights).
+  LLM judge  (`judge_criteria` key):
+    A list of binary questions answered YES/NO by the judge model.
+    Each criterion: {"question": str, "pass_if": "YES"|"NO", "weight": int}
+    Used for MEMORY_USE and BIOMETRIC where keyword matching is too brittle.
+
+Score = sum(passed * weight) / sum(all weights). Pass threshold: ≥ 0.75.
 """
 
 BASE_PROMPT = (
@@ -47,8 +54,11 @@ MEMORY_USE_SCENARIOS = [
             profile="Name: Priya, 26. Close friends include Zoya (best friend, very supportive).",
         ),
         "turns": [{"role": "user", "content": "my friend has been really there for me lately"}],
-        "checks": [
-            {"type": "contains", "value": "zoya", "weight": 3},
+        "judge_criteria": [
+            {
+                "question": "The system prompt says the user's best friend is named Zoya. Does the AI response use the name Zoya?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
     {
@@ -62,8 +72,11 @@ MEMORY_USE_SCENARIOS = [
             )
         ),
         "turns": [{"role": "user", "content": "I've been so stressed out, everything feels like too much"}],
-        "checks": [
-            {"type": "contains_any", "values": ["wedding", "sister"], "weight": 3},
+        "judge_criteria": [
+            {
+                "question": "The session history mentions the user's sister's wedding in two weeks. Does the AI response connect the user's stress to the upcoming wedding or the sister's event?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
     {
@@ -77,8 +90,11 @@ MEMORY_USE_SCENARIOS = [
             )
         ),
         "turns": [{"role": "user", "content": "can you help me calm down? I'm really anxious right now"}],
-        "checks": [
-            {"type": "contains_any", "values": ["box breathing", "breathing", "breath"], "weight": 3},
+        "judge_criteria": [
+            {
+                "question": "The user's profile lists box breathing as a very helpful coping strategy. Does the AI response suggest box breathing or a breathing technique?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
     {
@@ -93,9 +109,11 @@ MEMORY_USE_SCENARIOS = [
             )
         ),
         "turns": [{"role": "user", "content": "just feeling kind of low today"}],
-        "checks": [
-            {"type": "contains_any", "values": ["been", "lately", "week", "few days", "trend", "noticing"], "weight": 2},
-            {"type": "ends_question", "weight": 2},
+        "judge_criteria": [
+            {
+                "question": "The session history shows mood scores declining from 6 to 4 to 3 over multiple days. Does the AI response acknowledge that the user has been struggling for several days or over a period of time, rather than treating today as an isolated feeling?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
     {
@@ -107,8 +125,11 @@ MEMORY_USE_SCENARIOS = [
                     "Stressors: family expectations.",
         ),
         "turns": [{"role": "user", "content": "my brother said something that really hurt today"}],
-        "checks": [
-            {"type": "contains", "value": "kabir", "weight": 3},
+        "judge_criteria": [
+            {
+                "question": "The user's profile names their younger brother as Kabir. The user says 'my brother said something that really hurt'. Does the AI response use the name Kabir?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
     {
@@ -119,8 +140,11 @@ MEMORY_USE_SCENARIOS = [
             profile="Name: Meera, 29. Lost her dog Bruno three weeks ago. Still grieving.",
         ),
         "turns": [{"role": "user", "content": "the house feels so empty"}],
-        "checks": [
-            {"type": "contains_any", "values": ["bruno", "dog", "loss", "miss", "passed"], "weight": 3},
+        "judge_criteria": [
+            {
+                "question": "The user's profile says they lost their dog Bruno three weeks ago. The user says the house feels empty. Does the AI response connect this emptiness to Bruno or the loss of the dog?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
     {
@@ -134,8 +158,11 @@ MEMORY_USE_SCENARIOS = [
             )
         ),
         "turns": [{"role": "user", "content": "I'm feeling really overwhelmed right now, what should I do?"}],
-        "checks": [
-            {"type": "contains_any", "values": ["walk", "walking"], "weight": 3},
+        "judge_criteria": [
+            {
+                "question": "The session history says the user tried a 20-minute walk and it helped a lot. The user is now overwhelmed again. Does the AI response suggest walking or going for a walk?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
     {
@@ -151,9 +178,11 @@ MEMORY_USE_SCENARIOS = [
         "turns": [
             {"role": "user", "content": "I had to leave the shopping centre today, my heart was racing"},
         ],
-        "checks": [
-            {"type": "contains_any", "values": ["crowded", "space", "trigger", "mall", "happen before", "similar"], "weight": 2},
-            {"type": "ends_question", "weight": 2},
+        "judge_criteria": [
+            {
+                "question": "The user's profile says their anxiety trigger is crowded spaces and they had a panic attack at a mall. The user describes leaving a shopping centre with a racing heart. Does the AI response connect this incident to the user's known trigger of crowded spaces?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
 ]
@@ -424,9 +453,11 @@ BIOMETRIC_SCENARIOS = [
             )
         ),
         "turns": [{"role": "user", "content": "I'm just so tired all the time"}],
-        "checks": [
-            {"type": "contains_any", "values": ["sleep", "rest", "3-4 hrs", "3–4", "few hours"], "weight": 3},
-            {"type": "ends_question", "weight": 2},
+        "judge_criteria": [
+            {
+                "question": "The health data shows the user has been sleeping only 3-4 hours per night for 14 days. The user says they are tired all the time. Does the AI response connect the user's tiredness to their documented poor sleep, rather than just acknowledging the feeling?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
     {
@@ -439,9 +470,11 @@ BIOMETRIC_SCENARIOS = [
             )
         ),
         "turns": [{"role": "user", "content": "I feel kind of flat today, nothing feels exciting"}],
-        "checks": [
-            {"type": "contains_any", "values": ["week", "been", "lately", "past few", "noticing", "trend"], "weight": 2},
-            {"type": "ends_question", "weight": 2},
+        "judge_criteria": [
+            {
+                "question": "The health data shows mood scores declining from 7 to 3 over the past week. Does the AI response treat this as part of a longer pattern or trend, rather than just responding to today's feeling in isolation?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
     {
@@ -455,8 +488,11 @@ BIOMETRIC_SCENARIOS = [
             )
         ),
         "turns": [{"role": "user", "content": "I have another headache coming on"}],
-        "checks": [
-            {"type": "contains_any", "values": ["been happening", "frequently", "a lot lately", "pattern", "week", "few weeks"], "weight": 3},
+        "judge_criteria": [
+            {
+                "question": "The health data shows the user has been getting 5-6 headaches per week for 2 weeks. The user says another headache is coming on. Does the AI response acknowledge this as a recurring or frequent pattern, rather than treating it as a new isolated event?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
     {
@@ -470,9 +506,11 @@ BIOMETRIC_SCENARIOS = [
             )
         ),
         "turns": [{"role": "user", "content": "I just got back from a really fun concert"}],
-        "checks": [
-            {"type": "not_contains", "value": "heart rate", "weight": 3},
-            {"type": "not_contains", "value": "92 bpm", "weight": 3},
+        "judge_criteria": [
+            {
+                "question": "The health data mentions elevated heart rate (92 bpm). The user is talking about a fun concert. Does the AI response avoid mentioning or injecting the heart rate data into a conversation about a concert?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
     {
@@ -486,9 +524,15 @@ BIOMETRIC_SCENARIOS = [
             )
         ),
         "turns": [{"role": "user", "content": "what can I try for anxiety right now?"}],
-        "checks": [
-            {"type": "not_contains", "value": "meditation", "weight": 3},
-            {"type": "contains_any", "values": ["journal", "journaling"], "weight": 2},
+        "judge_criteria": [
+            {
+                "question": "The user's profile marks meditation as not helpful and anxiety-worsening. The user asks for anxiety help. Does the AI response avoid suggesting meditation?",
+                "pass_if": "YES", "weight": 1,
+            },
+            {
+                "question": "The user's profile marks journaling as helpful. Does the AI response suggest journaling?",
+                "pass_if": "YES", "weight": 1,
+            },
         ],
     },
 ]

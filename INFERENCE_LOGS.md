@@ -255,7 +255,7 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 
 ---
 
-## Llama 3.2 3B — genzv2 DPO (`adapters/genz_dpo_ck1600/`) — **FAILED** ❌
+## Llama 3.2 3B — genzv2 DPO attempt 1 (`adapters/genz_dpo_ck1600/`) — **FAILED** ❌
 **Date:** 2026-04-24 (job 595679, gpu-long, A100-80, ~1h)
 **Base:** genzv2 SFT checkpoint-1600
 **DPO data:** `dpo_train_v2.jsonl` / `dpo_val_v2.jsonl` (6,120 train + 1,080 val)
@@ -263,13 +263,22 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 **Failure:** Training diverged — all `rewards/margins` negative, `rewards/accuracies` 0.11–0.31
 **Root cause:** `format_messages()` used `tokenizer.apply_chat_template` for `llama_ck1600`, but genzv2 SFT was trained on manual Llama 3 format → mismatch → no useful gradient signal
 **Fix applied:** `CUDA_train_dpo.py` updated — `llama_ck1600` added to manual-format branch + `max_prompt_length=1024`
-**Re-run status:** Holding — waiting for v3/v2_continued benchmark results before deciding if DPO is needed
+
+---
+
+## Llama 3.2 3B — genzv2 DPO attempt 2 (`adapters/genz_dpo_ck1600/`) — **RUNNING** 🟢
+**Date:** 2026-05-01 (job 601548, gpu-long, A100-80)
+**Base:** genzv2 SFT checkpoint-1600
+**DPO data:** `dpo_train.jsonl` / `dpo_val.jsonl` (5,750 train + 1,014 val)
+**Data coverage:** biometric, help_mode, memory_recall, hallucination_guard, transition, panic_mode, casual_sad, mixed_mode
+**Steps:** 1,200 (saves every 200 → ck200, 400, 600, 800, 1000, 1200 + final)
+**Status:** RUNNING — format mismatch fixed, full data coverage for all failing categories
 
 ---
 
 ---
 
-## Llama 3.2 3B — genzv3 SFT (`adapters/genzv3/`) — **TRAINED, BENCHMARKING**
+## Llama 3.2 3B — genzv3 SFT (`adapters/genzv3/`) — **BENCHMARKING (checkpoint sweep)**
 **Date:** 2026-04-30 (job 600329, gpu-long, A100-40, 1h 23min)
 **Base:** `meta-llama/Llama-3.2-3B-Instruct` (fresh training)
 **Steps:** 1,600
@@ -287,11 +296,14 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 **System prompt:** Simplified 13-line prompt (temperature 0.75)
 **Job:** 600329 (A100-40, gpu-long, 1h 23min)
 **Status:** COMPLETED ✅ — all checkpoints ck200–1600 + final saved to `adapters/genzv3/`
-**Benchmark:** job 600383 (H200) — PENDING
+**Benchmark:** checkpoint sweep jobs 601526–601533 (A100-40, new LLM-judge runner) — RUNNING/PENDING
+- ck1600 early result: **53%** overall (old runner, job 600383 — superseded by sweep)
+- Full curve (ck200–1600) pending; new runner uses Qwen3-30B judge for MEMORY_USE + BIOMETRIC categories
+- Hypothesis: HELP_MODE improved vs genzv2 baseline; CRISIS may regress at higher checkpoints
 
 ---
 
-## Llama 3.2 3B — genzv2_continued SFT (`adapters/genzv2_continued/`) — **PENDING**
+## Llama 3.2 3B — genzv2_continued SFT (`adapters/genzv2_continued/`) — **BENCHMARKING (checkpoint sweep)**
 **Date:** 2026-04-30 (job 600330, gpu-long, A100-40, 26 min)
 **Base:** `adapters/genz/checkpoint-1600` (continued training, PeftModel.from_pretrained)
 **Steps:** 500
@@ -309,8 +321,25 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 **System prompt:** Simplified 13-line prompt (temperature 0.75)
 **Job:** 600330 (A100-40, gpu-long, 26 min)
 **Status:** COMPLETED ✅ — checkpoints: 200, 400, 500 + final saved to `adapters/genzv2_continued/`
-**Benchmark:** job 600384 (H200) — PENDING
+**Benchmark:** checkpoint sweep jobs 601545–601547 (A100-40, new LLM-judge runner) — RUNNING/PENDING
+- ck1600 early result (old runner): **50%** overall — regression vs genzv2 59% baseline
+- Possible cause: MEMORY_USE collapsed (0/8) with old keyword checks; LLM judge may score differently
+- Full curve (ck200–500) pending
 **Goal:** Same fixes as v3 but faster — builds on genzv2's existing good behaviors. A/B vs genzv3.
+
+---
+
+## Benchmark Runner — LLM Judge (added 2026-04-30)
+
+`benchmarks/run_benchmarks.py` now uses a two-phase runner:
+1. **Phase 1:** Eval model (Llama 3B 4-bit) generates all responses → unloaded from VRAM
+2. **Phase 2:** Judge model (Qwen3-30B-A3B-Instruct-2507, 4-bit NF4) scores MEMORY_USE and BIOMETRIC scenarios via binary YES/NO questions
+
+**Why:** Keyword checks (`contains("zoya")`, `contains_any(["sleep"])`) can't distinguish organic memory use from mechanical mention, and can't verify the model correctly *avoids* injecting biometric data. LLM judge asks targeted natural-language questions instead.
+
+**Scenario routing:** Scenarios with `judge_criteria` → LLM judge. Scenarios with `checks` → rule-based scoring (unchanged).
+
+**Also fixed (2026-04-30):** `ends_question` check changed from `response.rstrip().endswith("?")` to `"?" in response` — previous check caused false CRISIS failures when model appended a non-question trailing clause after the question.
 
 ---
 
@@ -321,14 +350,17 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 - [x] Qwen2.5-3B SFT checkpoint-200 — inferior to Llama
 - [x] Llama DPO ck200 (job 560339) — **inferior to genzv2 SFT ck1600**
 - [x] Qwen2.5-3B DPO ck200 (job 560338) — **inferior to genzv2 SFT ck1600**
-- [x] **genzv2 SFT ck1600 — current production model** (benchmark: 59% on 34-scenario suite)
-- [x] genzv2 DPO ck1600 (job 595679) — **FAILED** (format mismatch, not re-run)
-- [x] genzv3 SFT ck1600 (job 600329) — trained, benchmark pending (job 600383)
-- [x] genzv2_continued SFT (job 600330) — trained, benchmark pending (job 600384)
+- [x] **genzv2 SFT ck1600 — current production model** (benchmark: 59% on 34-scenario suite, old runner)
+- [x] genzv2 DPO ck1600 attempt 1 (job 595679) — **FAILED** (format mismatch)
+- [x] genzv3 SFT ck1600 early benchmark (job 600383, old runner) — **53%** (below 59% baseline)
+- [x] genzv2_continued SFT early benchmark (job 600384, old runner) — **50%** (below 59% baseline)
+- [x] genzv2 ck200–1600 checkpoint sweep (jobs 601526–601533, new LLM-judge runner) — PENDING results
+- [x] genzv3 ck200–1600 checkpoint sweep (jobs 601526–601533, new LLM-judge runner) — PENDING results
+- [x] genzv2_continued ck200–500 checkpoint sweep (jobs 601545–601547, new LLM-judge runner) — PENDING results
 
 ## Pending Tests
 
-- [ ] **genzv3 ck1600 benchmark** (job 600383, H200) — compare vs genzv2 59% baseline
-- [ ] **genzv2_continued benchmark** (job 600384, H200) — A/B vs genzv3
+- [ ] **genzv3 + genzv2 + genzv2_continued checkpoint sweep results** — compare full curves under new LLM-judge runner; find best checkpoint per family
+- [ ] **genzv2 DPO attempt 2** (job 601548, A100-80) — RUNNING; benchmark each ck200–1200 after completion
+- [ ] **DPO on best new adapter** — pending benchmark outcome from above sweeps
 - [ ] Gemma 4 E2B IT — GGUF uploaded to HF, not yet evaluated on eval harness
-- [ ] DPO re-run on best new adapter (pending benchmark outcome + decision)

@@ -2,7 +2,7 @@
 
 ## Metadata
 - Project: `mindmate`
-- Last updated: `2026-04-30`
+- Last updated: `2026-05-01`
 - Android app: `anchor-app/` (NOT `mindmate_app/` — that is a stale scratch fork)
 - Production: https://tryanchor.me
 
@@ -75,41 +75,46 @@ Synthetic Data Generation (Qwen3-30B)
 ### DPO (`CUDA_train_dpo.py`)
 - `learning_rate`: 5e-7
 - `lora_r`: 8, `lora_alpha`: 16
-- `max_steps`: 1200 (increased from 800 — v2 data is 3× larger)
+- `max_steps`: 1200
 - `beta`: 0.1, `loss_type`: sigmoid
 - `precompute_ref_log_probs`: True (avoids dual-model OOM)
 - Architecture: base (4-bit) + SFT adapter (trainable DPO LoRA) + ref_model (frozen SFT)
-- Data: `dpo_train_v2.jsonl` / `dpo_val_v2.jsonl` (7,200 pairs)
+- Data: `dpo_train.jsonl` / `dpo_val.jsonl` (5,750 train + 1,014 val — includes help_mode + memory_recall pairs)
 - **Previous DPO (ck200, 800 steps, v1 data) did NOT improve over SFT — genzv2 ck1600 remained best**
-- **New DPO run (job 595679): genzv2 ck1600 base, 1200 steps, v2 data → pending**
+- **genzv2 DPO re-run (job 601548): genzv2 ck1600 base, 1200 steps, dpo_train.jsonl → RUNNING**
 
 ---
 
 ## Saved Adapters
 
-### `adapters/genzv3/checkpoint-1600` — **CANDIDATE** 🔬 (job 600329)
+### `adapters/genzv3/` — **BENCHMARKING** 🔬 (job 600329)
 - Llama 3.2 3B, v3 data mix, 1600 steps, fresh from base, ~1h 23min on A100-40
 - v3 mix: transition 25%, targeted_fix 20%, therapist 15%, biometric 15%, friend 15%, casual 10%, +65 gold
-- **Benchmark:** job 600383 (H200) — PENDING
-- **Goal:** fix MEMORY_USE (12%), BIOMETRIC (20%), HELP_MODE (50%) from genzv2 baseline
+- Checkpoints: ck200, ck400, ck600, ck800, ck1000, ck1200, ck1400, ck1600 + final
+- **Checkpoint sweep:** jobs 601526–601533 (A100-40, LLM judge runner) — RUNNING/PENDING
+- First result (old runner, ck1600): 53% overall — HELP_MODE improved (50%→76%), CRISIS regressed (100%→73%)
 
-### `adapters/genzv2_continued/` — **CANDIDATE** 🔬 (job 600330)
+### `adapters/genzv2_continued/` — **BENCHMARKING** 🔬 (job 600330)
 - Llama 3.2 3B, continued from genzv2 ck1600, 500 steps, ~26min on A100-40
 - v2_continued mix: targeted_fix 30%, biometric 25%, transition 15%, therapist 12%, casual 10%, friend 5%, +65 gold
-- **Benchmark:** job 600384 (H200) — PENDING
-- **Goal:** same fixes as genzv3 but faster — A/B comparison
+- Checkpoints: ck200, ck400, ck500 + final
+- **Checkpoint sweep:** jobs 601545–601547 (A100-40, LLM judge runner) — PENDING
+- First result (old runner, final): 50% overall — MEMORY_USE catastrophically worse (0/8)
 
 ### `adapters/genz/checkpoint-1600` — **PRODUCTION MODEL** ✅
 - Llama 3.2 3B, v2 data mix, 1600 steps
 - **Current best — beats all DPO models and all other SFT checkpoints**
 - GGUF: `exports/mindmate_llama_sft_ck1600/llama(genz)v2_q4_k_m.gguf`
 - Pixel 8a: ~5.5 TPS, TTFT 60–66s cold / 6s cached, heap 3.12–3.17 GB
-- Benchmark baseline: 59% on 34-scenario suite (CRISIS/FORMAT/NO_HALLUCINATION 100%, MEMORY_USE 12%, BIOMETRIC 20%, HELP_MODE 50%)
+- Benchmark baseline (old runner): 59% — CRISIS/FORMAT/NO_HALLUCINATION 100%, HELP_MODE 50%, BIOMETRIC 20%, MEMORY_USE 12%
+- **Checkpoint sweep:** jobs 601534–601544 (A100-40, LLM judge runner) — RUNNING/PENDING
+- **DPO re-run:** job 601548 (A100-80, RUNNING) — genzv2 ck1600 base, 1200 steps, 5,750 pairs
 
-### `adapters/genz_dpo_ck1600/` — **FAILED** ❌ (job 595679)
-- DPO on genzv2 ck1600, diverged: negative margins, accuracy 0.11–0.31
-- Root cause: format mismatch (apply_chat_template vs manual Llama 3 format). Fixed in CUDA_train_dpo.py.
-- Not re-run — waiting for v3/v2_continued benchmark results before deciding if DPO is needed
+### `adapters/genz_dpo_ck1600/` — **RUNNING** 🟢 (job 601548)
+- DPO on genzv2 ck1600, 1200 steps, `dpo_train.jsonl` (5,750 pairs incl. help_mode + memory_recall)
+- Previous attempt (job 595679) diverged — format mismatch fixed in CUDA_train_dpo.py
+- Saves every 200 steps → checkpoints at ck200, 400, 600, 800, 1000, 1200 + final
+- Est. completion: ~4-5h from submission
 
 ### `adapters/CUDA_mindmate_llama32b/` — Llama v2 SFT
 - Same data mix as genz. Has checkpoints 200–1600.
@@ -147,13 +152,14 @@ Synthetic Data Generation (Qwen3-30B)
 |---|---|---|---|
 | `dpo_train_v2.jsonl` | 6,120 | Apr 18 | v2 — used for genzv2 DPO |
 | `dpo_val_v2.jsonl` | 1,080 | Apr 18 | v2 |
-| `dpo_train.jsonl` | **3,199** | Apr 29 | **Active** — v2 + biometric pairs added by job 599030 |
-| `dpo_val.jsonl` | **564** | Apr 29 | **Active** — v2 + biometric |
+| `dpo_train.jsonl` | **5,750** | May 1 | **Active** — biometric + help_mode + memory_recall added by jobs 599030 + 600358 |
+| `dpo_val.jsonl` | **1,014** | May 1 | **Active** |
+| `dpo_train_v2.jsonl` | 6,120 | Apr 18 | v2 generation — superseded by dpo_train.jsonl |
+| `dpo_val_v2.jsonl` | 1,080 | Apr 18 | v2 |
 | `dpo_biometric_partial.jsonl` | 1,971 | Apr 29 | Biometric-only pairs (subset of dpo_train.jsonl) |
-| `dpo_pairs_partial_v2.jsonl` | 7,202 | Apr 18 | Raw partial — redundant |
 
-**DPO categories in dpo_train.jsonl:** biometric (A/B/C/D types) + mixed_mode, casual_sad, panic_mode, transition, hallucination_guard, system_compliance
-**Still missing:** help_mode, memory_recall DPO pairs — not yet generated
+**DPO categories in dpo_train.jsonl:** biometric (A/B/C/D types) + mixed_mode, casual_sad, panic_mode, transition, hallucination_guard, system_compliance + **help_mode** + **memory_recall** (added by job 600358)
+**Coverage complete** — all failing benchmark categories now have DPO pairs
 
 ### Excluded data (user decision 2026-04-14)
 - `data/new_raw_data/mindmate_train.jsonl` — 20,662 examples
@@ -179,7 +185,7 @@ All active data uses `conversations` format:
 | `targeted_fix_pipeline.py` | help_mode + memory_recall SFT | ✅ Done — 13,524 examples (job 599031) |
 | `biometric_sft_pipeline.py` | Biometric SFT, 4 modes | ✅ Done — 2,348 examples (job 599030) |
 | `biometric_dpo_pipeline.py` | Biometric DPO pairs, 4 pair types | ✅ Done — ~1,263 pairs added (job 599030) |
-| `dpo_targeted_fix_pipeline.py` | DPO pairs for help_mode + memory_recall | 🟢 **RUNNING** (job 600358, A100-80, 22h) |
+| `dpo_targeted_fix_pipeline.py` | DPO pairs for help_mode + memory_recall | ✅ Done — ~2,551 train + ~450 val pairs added (job 600358) |
 
 ### Biometric pipeline details (new, Apr 2026)
 - 24 profiles across: sleep (4), mood_trend (4), physical_symptoms (2), coping_outcome (2), energy (2), social_withdrawal (2), anxiety_intensity (2), mixed (2)
@@ -208,7 +214,7 @@ All active data uses `conversations` format:
 | `CUDA_train_qlora.py` | Llama SFT trainer |
 | `CUDA_run_pipeline_qwen25_3b.py` | Qwen2.5-3B SFT orchestrator |
 | `CUDA_train_qlora_qwen25_3b.py` | Qwen2.5-3B SFT trainer |
-| `CUDA_train_dpo.py` | DPO trainer, `--model llama_ck1600 --steps 1200 --data v2` |
+| `CUDA_train_dpo.py` | DPO trainer, `--model llama_ck1600 --steps 1200 --data v1` |
 | `build_dataset.py` | Merges JSONL files per DATA_MIX_PRESETS |
 | `clean_dataset.py` | Deduplication + format validation |
 
@@ -282,27 +288,30 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ---
 
-## Active Cluster Jobs (2026-04-30)
+## Active Cluster Jobs (2026-05-01)
 
 | Job | Name | Status | Purpose |
 |---|---|---|---|
-| 600383 | `mindmate-bench` | 🟡 **PENDING** | Benchmark genzv3/checkpoint-1600 (H200, 3h) |
-| 600384 | `mindmate-bench` | 🟡 **PENDING** | Benchmark genzv2_continued final adapter (H200, 3h) |
-| 600358 | `mindmate-dpo-tfix` | 🟢 **RUNNING** | DPO targeted fix datagen, help_mode + memory_recall (A100-80, 22h) |
-
-**Still needs submission (after benchmark results):**
-- `finetuning/run_dpo_llama_ck1600.slurm` — DPO training on best new adapter (pending benchmark outcome)
+| 601548 | `mindmate-dpo-llama-ck1600` | 🟢 **RUNNING** | DPO on genzv2 ck1600, 1200 steps, 5,750 pairs (A100-80, ~5h) |
+| 601526–601533 | `mindmate-bench` | 🟢 **RUNNING/PENDING** | genzv3 ck200–1600 checkpoint sweep (A100-40, LLM judge) |
+| 601534–601544 | `mindmate-bench` | 🟢 **RUNNING/PENDING** | genzv2 ck200–1600 checkpoint sweep (A100-40, LLM judge) |
+| 601545–601547 | `mindmate-bench` | 🟡 **PENDING** | genzv2_continued ck200–500 checkpoint sweep (A100-40, LLM judge) |
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
-| 600384 | Benchmark genzv2_continued | PENDING H200 |
-| 600383 | Benchmark genzv3 ck1600 | PENDING H200 |
-| 600376 | Benchmark genzv2_continued | FAILED 1s — benchmarks/ not on cluster, now fixed |
-| 600375 | Benchmark genzv3 ck1600 | FAILED 2s — benchmarks/ not on cluster, now fixed |
-| 600330 | SFT v2_continued | **COMPLETED** Apr 30, 26min — ck200/400/500 + final saved to `adapters/genzv2_continued/` |
-| 600329 | SFT v3 (genzv3) | **COMPLETED** Apr 30, 1h 23min — ck200–1600 + final saved to `adapters/genzv3/` |
-| 600358 | DPO targeted fix datagen | **RUNNING** Apr 30 (A100-80, 22h) |
+| 601548 | DPO genzv2 ck1600 re-run | 🟢 **RUNNING** May 1 — genzv2 ck1600 base, 5,750 pairs, 1200 steps, A100-80 |
+| 601526–601533 | Benchmark genzv3 sweep | 🟢 **RUNNING** May 1 — ck200–1600, A100-40, LLM judge |
+| 601534–601544 | Benchmark genzv2 sweep | 🟢 **RUNNING/PENDING** May 1 — ck200–1600, A100-40, LLM judge |
+| 601545–601547 | Benchmark genzv2_continued sweep | 🟡 **PENDING** May 1 — ck200–500, A100-40, LLM judge |
+| 601438–601465 | Benchmark (failed batch) | FAILED — CUDA path issue on node xgpj0 (a100-80); switched to a100-40 |
+| 600784 | Benchmark genzv2_continued final | COMPLETED Apr 30 — 50% (old runner, no judge) |
+| 600383 | Benchmark genzv3 ck1600 | COMPLETED Apr 30 — 53% (old runner, no judge) |
+| 600376 | Benchmark genzv2_continued | FAILED 1s — benchmarks/ not on cluster |
+| 600375 | Benchmark genzv3 ck1600 | FAILED 2s — benchmarks/ not on cluster |
+| 600358 | DPO targeted fix datagen | **COMPLETED** May 1 — ~2,551 train + ~450 val pairs added (help_mode + memory_recall) |
+| 600330 | SFT v2_continued | **COMPLETED** Apr 30, 26min — ck200/400/500 + final |
+| 600329 | SFT v3 (genzv3) | **COMPLETED** Apr 30, 1h 23min — ck200–1600 + final |
 | 599045 | Benchmark genzv2 ck1600 | **COMPLETED** — 27/42 (64%). See Benchmarks section. |
 | 599031 | Targeted fix SFT | **COMPLETED** — 13,524 SFT examples (help_mode + memory_recall) |
 | 599030 | Biometric SFT+DPO | **COMPLETED** — 2,348 SFT + ~1,263 DPO pairs added |
@@ -310,9 +319,6 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 | 595713 | Biometric SFT+DPO | COMPLETED 22h — 0 new pairs (`random`+`re` not imported, now fixed) |
 | 595679 | DPO genzv2 ck1600 | COMPLETED 1h — diverged (negative margins, format mismatch, now fixed) |
 | 594101 | Targeted fix SFT | 2,993 examples, good quality (0% bad phrases) |
-| 594102 | DPO targeted fix | Failed — no output (missing prompt file) |
-| 595563 | Biometric SFT+DPO | Failed — wrong SLURM log path |
-| 595564 | DPO targeted fix retry | Crashed — missing `dpo_targeted_fix_preference.txt` prompt |
 | 580674 | DPO v2 datagen | 7,202 pairs → `dpo_train_v2.jsonl` + `dpo_val_v2.jsonl` |
 | 560339 | Llama DPO ck200 | Inferior to genzv2 SFT |
 | 560338 | Qwen2.5-3B DPO | Inferior to genzv2 SFT |
@@ -322,53 +328,60 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ## Benchmarks (`benchmarks/`)
 
-### Suite (34 scenarios, 6 categories — after removing BANNED_PHRASES)
-| Category | Scenarios | What it tests |
-|---|---|---|
-| MEMORY_USE | 8 | Names, coping strategies, session history, held-out names (Zoya, Kabir) |
-| HELP_MODE | 6 | "help me" / "what should I do" → named technique, no hallucination |
-| CRISIS | 5 | Passive SI, active distress, safety escalation |
-| NO_HALLUCINATION | 6 | No fake shared history, no invented context |
-| BIOMETRIC | 5 | Sleep/HRV/mood data → referenced naturally in response |
-| FORMAT | 4 | No markdown, no "As an AI", proper length |
-
-### Results — genzv2 ck1600 baseline (job 599045, 2026-04-28)
-**Overall: 27/42 (64%)** — *note: ran against old scenarios.py that still had 8 BANNED_PHRASES scenarios; true score on 34-scenario suite estimated ~20/34 (59%)*
-
-| Category | Pass | Total | Avg score |
+### Suite (34 scenarios, 6 categories)
+| Category | Scenarios | Scoring | What it tests |
 |---|---|---|---|
-| CRISIS | 5 | 5 | 1.00 ✅ |
-| FORMAT | 4 | 4 | 1.00 ✅ |
-| NO_HALLUCINATION | 6 | 6 | 1.00 ✅ |
-| HELP_MODE | 3 | 6 | 0.75 ⚠️ |
-| BIOMETRIC | 1 | 5 | 0.54 ❌ |
-| MEMORY_USE | 1 | 8 | 0.43 ❌ |
+| MEMORY_USE | 8 | **LLM judge** | Names, coping strategies, session history, held-out names (Zoya, Kabir) |
+| HELP_MODE | 6 | rule-based | "help me" / "what should I do" → named technique, no hallucination |
+| CRISIS | 5 | rule-based | Passive SI, active distress, safety escalation |
+| NO_HALLUCINATION | 6 | rule-based | No fake shared history, no invented context |
+| BIOMETRIC | 5 | **LLM judge** | Sleep/HRV/mood data → referenced naturally in response |
+| FORMAT | 4 | rule-based | No markdown, no "As an AI", proper length |
 
-**Key failures:**
-- Memory: ignores names (Zoya, Kabir), coping strategies, session history — responds generically
-- Biometric: ignores sleep hours/HRV/mood scores in context entirely
-- Help mode: asks a question instead of naming a technique when user says "help me calm down"
+**Scoring (updated 2026-05-01):** MEMORY_USE + BIOMETRIC use LLM judge (Qwen3-30B, 4-bit, YES/NO per criterion). CRISIS/HELP_MODE/NO_HALLUCINATION/FORMAT remain rule-based. `ends_question` check fixed: now passes if `?` appears anywhere in response (not just final char). Two-phase runner: eval model generates all responses → unload → judge model scores.
 
-**Fix applied:** Trained genzv3 (fresh, 1600 steps, v3 mix) and genzv2_continued (continued, 500 steps) with targeted_fix + biometric data added. Benchmark results pending (jobs 600383 + 600384, H200).
+### Results — genzv2 ck1600 baseline (job 599045, 2026-04-28, old runner)
+**Overall: 20/34 (59%)** *(old keyword-based checks)*
 
-### Results — genzv3 ck1600 (job 600383, 2026-04-30)
-**Status: PENDING**
+| Category | Pass | Total |
+|---|---|---|
+| CRISIS | 5 | 5 ✅ |
+| FORMAT | 4 | 4 ✅ |
+| NO_HALLUCINATION | 6 | 6 ✅ |
+| HELP_MODE | 3 | 6 ⚠️ |
+| BIOMETRIC | 1 | 5 ❌ |
+| MEMORY_USE | 1 | 8 ❌ |
 
-### Results — genzv2_continued (job 600384, 2026-04-30)
-**Status: PENDING**
+### Results — genzv3 ck1600 (job 600383, 2026-04-30, old runner)
+**Overall: 18/34 (53%)** *(old keyword-based checks — MEMORY_USE/BIOMETRIC scores unreliable)*
+- HELP_MODE improved: 4/6 (76%) vs 3/6 baseline ✅
+- CRISIS regressed: 2/5 (73%) vs 5/5 baseline ❌ — model appends trailing non-question clause, failing `ends_question`
+
+### Results — genzv2_continued final (job 600384, 2026-04-30, old runner)
+**Overall: 17/34 (50%)** *(old keyword-based checks)*
+- MEMORY_USE collapsed: 0/8 ❌ — continued training broke memory context usage
+- FORMAT perfect: 4/4 ✅
+
+### Checkpoint sweeps (new LLM judge runner, 2026-05-01)
+- **genzv3 ck200–1600:** jobs 601526–601533 — RUNNING/PENDING
+- **genzv2 ck200–1600:** jobs 601534–601544 — RUNNING/PENDING
+- **genzv2_continued ck200–500:** jobs 601545–601547 — PENDING
+- Results will land in `benchmarks/results/` — compare against 59% baseline with new judge scores
 
 ### Files
-- `benchmarks/scenarios.py` — all scenarios + `ALL_SCENARIOS`, `CATEGORIES` dicts
-- `benchmarks/run_benchmarks.py` — model loader (4-bit NF4 + PeftModel) + scorer + output
-- `benchmarks/run_benchmarks.slurm` — gpu-long, a100-40, 2h, supports MODEL/CATEGORY env
+- `benchmarks/scenarios.py` — scenarios; MEMORY_USE + BIOMETRIC use `judge_criteria`, others use `checks`
+- `benchmarks/run_benchmarks.py` — two-phase: eval model → judge model (Qwen3-30B 4-bit)
+- `benchmarks/run_benchmarks.slurm` — gpu-long, **a100-40**, 48G, 4h; supports ADAPTER/LABEL/MODEL/CATEGORY env
 - `benchmarks/results/` — JSON + Markdown output per run (`<label>_<timestamp>.{json,md}`)
 
 ### Running
 ```bash
-sbatch benchmarks/run_benchmarks.slurm                          # default: llama_ck1600
-sbatch --export=MODEL=llama_dpo_ck1600 benchmarks/run_benchmarks.slurm
+sbatch --export=ADAPTER=adapters/genzv3/checkpoint-400,LABEL=genzv3_ck400 benchmarks/run_benchmarks.slurm
+sbatch --export=MODEL=llama_ck1600 benchmarks/run_benchmarks.slurm
 sbatch --export=MODEL=llama_ck1600,CATEGORY=MEMORY_USE benchmarks/run_benchmarks.slurm
 ```
+
+**Note:** Use A100-40 only (a100-80 node xgpj0 has broken CUDA path — torch import fails).
 
 ---
 
@@ -490,3 +503,6 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 | Apr 26 | DPO `max_prompt_length` not set → defaults to something small, truncating prompts | Added `max_prompt_length=1024` to DPOConfig |
 | Apr 26 | `synthetic/run_dpo_targeted_fix.slurm` used relative log path `logs/...` → no logs for job 595714 | Fixed to `/home/a/aryanj/logs/...` |
 | Apr 28 | `benchmarks/scenarios.py` fix (remove BANNED_PHRASES) not synced to cluster → benchmark job 599045 ran 42 scenarios instead of 34 | Re-synced local fixed version to cluster |
+| May 1 | A100-80 node xgpj0 torch import fails: `libtorch_global_deps.so: No such file or directory` — CUDA libs not in LD_LIBRARY_PATH on that node | Switched `run_benchmarks.slurm` to A100-40 (40GB VRAM sufficient for sequential eval+judge) |
+| May 1 | `ends_question` check failed when model appended trailing non-question clause after the question | Fixed: now checks `"?" in response` instead of `response.rstrip().endswith("?")` |
+| May 1 | MEMORY_USE + BIOMETRIC benchmark checks were keyword-based → failed on semantically correct responses | Replaced with LLM judge (Qwen3-30B 4-bit, binary YES/NO per criterion) in `scenarios.py` + `run_benchmarks.py` |

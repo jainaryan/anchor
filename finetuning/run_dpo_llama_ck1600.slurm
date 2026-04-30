@@ -12,25 +12,16 @@
 
 set -euo pipefail
 
-unset VIRTUAL_ENV
-
-if [ ! -f "mindmatenv/bin/activate" ]; then
-  echo "ERROR: virtual environment not found at mindmatenv/bin/activate"
-  exit 1
-fi
+cd ~/projects/mindmate
 source mindmatenv/bin/activate
 
-uv pip install "torch==2.10.0+cu128" --index-url https://download.pytorch.org/whl/cu128
-uv pip install peft bitsandbytes transformers accelerate datasets trl
-
-cd ~/projects/mindmate
-
 echo "=========================================="
-echo "  MindMate DPO — Llama 3.2 3B (ck1600)"
+echo "  MindMate DPO — Llama 3.2 3B (genzv2 ck1600)"
 echo "  Job: $SLURM_JOB_ID | Node: $SLURMD_NODENAME"
 echo "  GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
+echo "  Data: dpo_train.jsonl (5750 pairs, incl. help_mode + memory_recall)"
 echo "=========================================="
 
-python finetuning/CUDA_train_dpo.py --model llama_ck1600 --steps 1200 --data v2
+python -u finetuning/CUDA_train_dpo.py --model llama_ck1600 --steps 1200 --data v1
 
 echo "DPO training complete."
