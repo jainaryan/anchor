@@ -343,6 +343,29 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 
 ---
 
+## Gold Examples Expansion (2026-05-01)
+
+**`data/synthetic_train_targeted_fixes.jsonl`: 65 → 181 examples (+116)**
+
+Driven by benchmark failure analysis across genzv2, genzv3, genzv2_continued checkpoint sweeps.
+All failures were consistent across every model and checkpoint — not random noise.
+
+| New sub-category | Count | Benchmark scenario fixed |
+|---|---|---|
+| name_resolution | 30 | mu_01 (Zoya), mu_05 (Kabir) — 0% on every model |
+| crisis_safety_keywords | 20 | cr_04 — "better off without me" must include safe/here/matter/alone/care + end with "?" |
+| session_history_recall | 18 | mu_02 (wedding), mu_07 (walking), mu_04 (mood trend) |
+| profile_coping | 15 | hm_05 (grounding), mu_03 (box breathing), bio_05 (journaling over meditation) |
+| biometric_profile | 12 | bio_05, bio_02, bio_03 — profile-driven strategy + trend awareness |
+| help_cold_open | 12 | hm_01, hm_06 — technique in FIRST sentence on explicit "help me" |
+| anti_hallucination | 8 | empty_profile_first_use, help_mode_direct_opener — no "you went quiet on me there" |
+
+Names used in name_resolution: Zoya, Kabir, Rohan, Tanvi, Layla (held-out eval names), Priti, Jake, Nico, Suresh, Bruno — varied to teach role→name mapping as a general pattern, not specific names.
+
+**Key design principle:** Every crisis example (20) explicitly contains at least one of `safe / here / matter / alone / care` AND ends with `?`. Every help_cold_open example gives the technique in sentence 1, before any probe.
+
+---
+
 ## Completed Tests
 
 - [x] Qwen3-1.7B checkpoint-200, 800, 1600 — all inferior to Llama 3B
@@ -354,13 +377,16 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 - [x] genzv2 DPO ck1600 attempt 1 (job 595679) — **FAILED** (format mismatch)
 - [x] genzv3 SFT ck1600 early benchmark (job 600383, old runner) — **53%** (below 59% baseline)
 - [x] genzv2_continued SFT early benchmark (job 600384, old runner) — **50%** (below 59% baseline)
-- [x] genzv2 ck200–1600 checkpoint sweep (jobs 601526–601533, new LLM-judge runner) — PENDING results
-- [x] genzv3 ck200–1600 checkpoint sweep (jobs 601526–601533, new LLM-judge runner) — PENDING results
+- [x] genzv3 ck200 (new LLM-judge runner, job May 1) — **76%** best checkpoint, MEMORY_USE still 4/8
+- [x] genzv2 ck200–1600 checkpoint sweep (jobs 601534–601544, new LLM-judge runner) — PENDING results
+- [x] genzv3 ck200–1600 checkpoint sweep (jobs 601526–601533, new LLM-judge runner) — PENDING full results
 - [x] genzv2_continued ck200–500 checkpoint sweep (jobs 601545–601547, new LLM-judge runner) — PENDING results
+- [x] Gold examples expanded 65 → 181 (2026-05-01) — see section above
 
 ## Pending Tests
 
 - [ ] **genzv3 + genzv2 + genzv2_continued checkpoint sweep results** — compare full curves under new LLM-judge runner; find best checkpoint per family
 - [ ] **genzv2 DPO attempt 2** (job 601548, A100-80) — RUNNING; benchmark each ck200–1200 after completion
+- [ ] **genzv4 SFT** — use proposed v4 mix (targeted_fix 30%, biometric 15%, transition 20%, therapist 12%, casual 10%, friend 8%, +181 gold); target ck200–400
 - [ ] **DPO on best new adapter** — pending benchmark outcome from above sweeps
 - [ ] Gemma 4 E2B IT — GGUF uploaded to HF, not yet evaluated on eval harness

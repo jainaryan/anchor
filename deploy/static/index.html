@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Anchor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -51,28 +54,161 @@
         </button>
         <div class="header-right">
           <button id="feedback-btn" onclick="window.open('https://forms.gle/cQUBm2MouLGobn2h8','_blank','noopener')">Feedback</button>
-          <div class="model-select-wrap">
+          <div class="model-select-wrap" id="model-select-wrap">
             <label for="model-select">Model</label>
             <select id="model-select"></select>
           </div>
         </div>
       </header>
 
-      <!-- Messages -->
-      <main id="messages" aria-live="polite"></main>
+      <!-- Tab bar -->
+      <nav class="tab-bar" role="tablist">
+        <button class="tab-btn active" data-tab="chat" role="tab" aria-selected="true">Chat</button>
+        <button class="tab-btn" data-tab="profile" role="tab" aria-selected="false">Profile</button>
+        <button class="tab-btn" data-tab="insights" role="tab" aria-selected="false">Insights</button>
+        <button class="tab-btn" data-tab="about" role="tab" aria-selected="false">About</button>
+      </nav>
 
-      <!-- Input -->
-      <footer>
-        <div class="input-wrap">
-          <textarea id="input" placeholder="Message Anchor…" rows="1" maxlength="2000" aria-label="Message input"></textarea>
-          <button id="send-btn" aria-label="Send">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-          </button>
+      <!-- Panel: Chat -->
+      <div id="panel-chat" class="tab-panel active" role="tabpanel">
+        <main id="messages" aria-live="polite"></main>
+        <footer>
+          <div class="input-wrap">
+            <textarea id="input" placeholder="Message Anchor…" rows="1" maxlength="2000" aria-label="Message input"></textarea>
+            <button id="send-btn" aria-label="Send">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
+          </div>
+          <p class="disclaimer">Anchor is an AI companion, not a therapist. If you're in crisis, call or text a crisis line.</p>
+        </footer>
+      </div>
+
+      <!-- Panel: Profile -->
+      <div id="panel-profile" class="tab-panel" role="tabpanel">
+        <div class="panel-scroll">
+          <div class="panel-content">
+            <div class="panel-header">
+              <h2>My Profile</h2>
+              <p class="panel-sub">Anchor uses this to personalise your conversations. Everything stays in your browser — nothing is sent to a server.</p>
+            </div>
+
+            <div class="profile-form">
+              <div class="form-group">
+                <label for="profile-name">Your name</label>
+                <input type="text" id="profile-name" placeholder="What should Anchor call you?" maxlength="60" />
+              </div>
+
+              <div class="form-group">
+                <label for="profile-about">About you</label>
+                <textarea id="profile-about" rows="3" placeholder="Your role, life situation, or anything you'd want Anchor to know…" maxlength="600"></textarea>
+                <span class="field-hint">e.g. "I'm a grad student in Singapore, dealing with burnout and thesis stress."</span>
+              </div>
+
+              <div class="form-group">
+                <label for="profile-helps">What helps you</label>
+                <textarea id="profile-helps" rows="3" placeholder="Coping strategies or activities that work for you…" maxlength="400"></textarea>
+                <span class="field-hint">e.g. "Going for walks, journaling, breathing exercises, talking to my sister."</span>
+              </div>
+
+              <div class="form-group">
+                <label for="profile-people">People in your life</label>
+                <textarea id="profile-people" rows="3" placeholder="Key people and how they're connected to you…" maxlength="400"></textarea>
+                <span class="field-hint">e.g. "Arjun (partner), Mom, Priya (best friend), Dr. Sharma (therapist)."</span>
+              </div>
+
+              <div class="form-group">
+                <label>When I come to Anchor, I usually want to…</label>
+                <div class="radio-group">
+                  <label class="radio-option">
+                    <input type="radio" name="interaction-style" value="vent" />
+                    <span class="radio-body">
+                      <strong>Vent and be heard</strong>
+                      <small>I want to talk it out — not get advice</small>
+                    </span>
+                  </label>
+                  <label class="radio-option">
+                    <input type="radio" name="interaction-style" value="help" />
+                    <span class="radio-body">
+                      <strong>Get practical help</strong>
+                      <small>Give me strategies and concrete next steps</small>
+                    </span>
+                  </label>
+                  <label class="radio-option">
+                    <input type="radio" name="interaction-style" value="both" />
+                    <span class="radio-body">
+                      <strong>Mix of both</strong>
+                      <small>Read the room and adapt to what I need</small>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button id="profile-save-btn">Save profile</button>
+                <span id="profile-saved-msg" class="saved-msg" aria-live="polite"></span>
+              </div>
+            </div>
+          </div>
         </div>
-        <p class="disclaimer">Anchor is an AI companion, not a therapist. If you're in crisis, call or text a crisis line.</p>
-      </footer>
+      </div>
+
+      <!-- Panel: Insights -->
+      <div id="panel-insights" class="tab-panel" role="tabpanel">
+        <div class="panel-scroll">
+          <div class="panel-content">
+            <div class="panel-header">
+              <h2>Insights</h2>
+              <p class="panel-sub">A look back at your conversations with Anchor.</p>
+            </div>
+            <div id="insights-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel: About -->
+      <div id="panel-about" class="tab-panel" role="tabpanel">
+        <div class="panel-scroll">
+          <div class="panel-content">
+            <div class="panel-header">
+              <h2>About Anchor</h2>
+            </div>
+            <div class="about-sections">
+
+              <div class="about-block">
+                <h3>What is Anchor?</h3>
+                <p>Anchor is a private AI mental wellness companion built to give you a safe space to talk through what's on your mind. It's not a replacement for therapy — it's a thoughtful presence that listens, remembers, and responds with care.</p>
+                <p>This is an early web preview. The full version runs entirely on your phone with no internet connection required, so your conversations never leave your device.</p>
+              </div>
+
+              <div class="about-block">
+                <h3>How memory works</h3>
+                <p>When you fill in your Profile tab, that information is saved to your browser's local storage and included as context when you chat, so Anchor can respond more personally without you re-explaining yourself each time.</p>
+                <p>Your conversations pass through our server to generate responses and are logged in anonymised form (emails and phone numbers are scrubbed). Logs are used solely to improve the model — they are never sold or shared with third parties.</p>
+              </div>
+
+              <div class="about-block">
+                <h3>The model</h3>
+                <p>Anchor is powered by a fine-tuned version of Llama 3.2 3B, trained on mental wellness conversations with a focus on empathetic, non-clinical support. The model is quantised (Q4_K_M) and optimised to run on consumer hardware — including fully on-device on Android.</p>
+              </div>
+
+              <div class="about-block about-block--warning">
+                <h3>Important disclaimer</h3>
+                <p>Anchor is not a licensed therapist, counsellor, or medical professional. It cannot diagnose, treat, or provide clinical mental health advice. If you are in crisis or need immediate help, please reach out to a professional.</p>
+                <p><strong>Singapore:</strong> Samaritans of Singapore — <a href="tel:1767">1-767</a> (24/7)</p>
+                <p><strong>International:</strong> <a href="https://www.befrienders.org" target="_blank" rel="noopener">befrienders.org</a></p>
+              </div>
+
+              <div class="about-block">
+                <h3>Built by</h3>
+                <p>Anchor is an independent project by <a href="https://www.linkedin.com/in/aryan-jain-4a58b9230/" target="_blank" rel="noopener">Aryan Jain</a>. Have feedback, ideas, or questions? <a href="mailto:aryanjain@u.nus.edu">aryanjain@u.nus.edu</a></p>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
 
     </div>
   </div>
@@ -97,6 +233,7 @@
   </div>
 
   <div id="feedback-toast">Enjoying Anchor? <a href="https://forms.gle/cQUBm2MouLGobn2h8" target="_blank" rel="noopener">Leave feedback →</a></div>
+
   <script src="script.js"></script>
 </body>
 </html>

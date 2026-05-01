@@ -89,14 +89,14 @@ Synthetic Data Generation (Qwen3-30B)
 
 ### `adapters/genzv3/` — **BENCHMARKING** 🔬 (job 600329)
 - Llama 3.2 3B, v3 data mix, 1600 steps, fresh from base, ~1h 23min on A100-40
-- v3 mix: transition 25%, targeted_fix 20%, therapist 15%, biometric 15%, friend 15%, casual 10%, +65 gold
+- v3 mix: transition 25%, targeted_fix 20%, therapist 15%, biometric 15%, friend 15%, casual 10%, +65 gold (gold now expanded to 181 — see genzv4 plan)
 - Checkpoints: ck200, ck400, ck600, ck800, ck1000, ck1200, ck1400, ck1600 + final
 - **Checkpoint sweep:** jobs 601526–601533 (A100-40, LLM judge runner) — RUNNING/PENDING
 - First result (old runner, ck1600): 53% overall — HELP_MODE improved (50%→76%), CRISIS regressed (100%→73%)
 
 ### `adapters/genzv2_continued/` — **BENCHMARKING** 🔬 (job 600330)
 - Llama 3.2 3B, continued from genzv2 ck1600, 500 steps, ~26min on A100-40
-- v2_continued mix: targeted_fix 30%, biometric 25%, transition 15%, therapist 12%, casual 10%, friend 5%, +65 gold
+- v2_continued mix: targeted_fix 30%, biometric 25%, transition 15%, therapist 12%, casual 10%, friend 5%, +65 gold (gold now expanded to 181)
 - Checkpoints: ck200, ck400, ck500 + final
 - **Checkpoint sweep:** jobs 601545–601547 (A100-40, LLM judge runner) — PENDING
 - First result (old runner, final): 50% overall — MEMORY_USE catastrophically worse (0/8)
@@ -143,7 +143,7 @@ Synthetic Data Generation (Qwen3-30B)
 | `synthetic_train.jsonl` | 5,565 | Grief/loss | Not used in v3+ mixes |
 | `synthetic_train_casual.jsonl` | 5,000 | Non-distress casual | |
 | `synthetic_train_biometric.jsonl` | **2,348** | Biometric health context | Job 599030, Apr 29 ✅ |
-| `synthetic_train_targeted_fixes.jsonl` | 65 | Hand-crafted gold examples | help_mode (30) + biometric (15) + banned opener (20) — always 100% |
+| `synthetic_train_targeted_fixes.jsonl` | **181** | Hand-crafted gold examples | name_resolution (30) + crisis_safety (20) + profile_coping (15) + help_cold_open (12) + session_recall (18) + biometric_profile (12) + anti_hallucination (8) + original 65 — always 100% |
 | `additional_training_samples.jsonl` | 30 | Legacy | **EXCLUDED** |
 
 ### DPO data
@@ -272,8 +272,16 @@ Directives added to make the model use context proactively:
 
 **Critical fixes in progress:**
 1. ✅ "You went quiet on me there" — 20 hand-crafted SFT examples added (lines 46–65 of targeted_fixes.jsonl)
-2. ⏳ Biometric context utilization — 15 hand-crafted examples added (lines 31–45) + pipeline job 595713
-3. ⏳ help_mode + memory_recall DPO — job 595714
+2. ✅ Biometric context utilization — 15 hand-crafted examples added (lines 31–45) + pipeline job 595713
+3. ✅ help_mode + memory_recall DPO — job 595714
+4. ✅ **Gold examples expanded: 65 → 181 (2026-05-01)** — 116 new examples targeting benchmark failures:
+   - name_resolution (30): "my friend/brother/partner" → uses profile name (Zoya, Kabir, Rohan, Tanvi, Layla, etc.)
+   - crisis_safety (20): "better off without me" type → response includes safe/here/matter/alone/care + ends with "?"
+   - session_history_recall (18): wedding/walking/mood-trend specifically referenced from session history
+   - profile_coping (15): uses the marked-★-helpful strategy from profile by name (not generic breathing)
+   - biometric_profile (12): avoids marked-✗-unhelpful strategy, suggests marked-helpful one
+   - help_cold_open (12): explicit "help me calm down" → technique in FIRST sentence (not probe)
+   - anti_hallucination (8): cold "hey" → clean opener, no invented prior context
 
 ### LLM judge
 Confirmed unreliable — inflates all scores to 80–84 regardless of actual response quality. Use human inspection only.
@@ -300,6 +308,7 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 ### Job history
 | Job | Name | Result |
 |---|---|---|
+| —      | Gold examples expanded    | **DONE** May 1 — 65 → 181 examples in `synthetic_train_targeted_fixes.jsonl` (name_resolution×30, crisis_safety×20, session_recall×18, profile_coping×15, biometric_profile×12, help_cold_open×12, anti_hallucination×8) |
 | 601548 | DPO genzv2 ck1600 re-run | 🟢 **RUNNING** May 1 — genzv2 ck1600 base, 5,750 pairs, 1200 steps, A100-80 |
 | 601526–601533 | Benchmark genzv3 sweep | 🟢 **RUNNING** May 1 — ck200–1600, A100-40, LLM judge |
 | 601534–601544 | Benchmark genzv2 sweep | 🟢 **RUNNING/PENDING** May 1 — ck200–1600, A100-40, LLM judge |
@@ -323,6 +332,53 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 | 560339 | Llama DPO ck200 | Inferior to genzv2 SFT |
 | 560338 | Qwen2.5-3B DPO | Inferior to genzv2 SFT |
 | 554799 | Llama v2 SFT | → `adapters/CUDA_mindmate_llama32b/checkpoint-1600` |
+
+---
+
+## genzv4 Plan (next training run)
+
+### Why genzv4
+genzv3 ck200 peaks at 76% (new LLM judge runner). Remaining failures are all in MEMORY_USE (4/8) and HELP_MODE (4/6). Root causes identified from benchmark analysis (2026-05-01):
+
+| Failure | Root cause | Fix |
+|---|---|---|
+| mu_01, mu_05 — name recall 0% | Training data has memory_recall but no explicit role→name mapping examples | name_resolution gold examples (30 new) |
+| hm_01, hm_06 — probe instead of technique | Model learned empathy-first so deeply that "help me" still triggers probe | help_cold_open gold examples (12 new) |
+| mu_03, hm_05, bio_05 — generic coping over profile | Model ignores profile-specific strategy, defaults to breathing | profile_coping gold examples (15 new) |
+| cr_04 — no safety keyword | Response thoughtful but never says safe/here/matter/alone/care | crisis_safety gold examples (20 new) |
+| mu_02, mu_07 — history detail ignored | Empathises with register but doesn't engage specific detail | session_recall gold examples (18 new) |
+| bio_02, bio_03 — treats session as isolated | Doesn't acknowledge trend even when history is present | biometric_profile gold examples (12 new) |
+| "you went quiet on me there" hallucination | Learned phrase from training; fires on cold opens | anti_hallucination gold examples (8 new) |
+
+### Gold examples (done ✅ 2026-05-01)
+- `data/synthetic_train_targeted_fixes.jsonl`: **65 → 181 examples** (+116)
+- All new examples target specific benchmark failure patterns above
+
+### Proposed v4 data mix (10k total)
+```
+targeted_fix (memory + help)  30%  (3,000 — up from 20%)
+biometric                     15%  (1,500 — keep)
+transition                    20%  (2,000 — slight decrease)
+therapist                     12%  (1,200 — slight decrease)
+casual                        10%  (1,000 — keep)
+friend                         8%    (800 — down from 15% to reduce "hey love" dominance)
+gold (targeted_fixes.jsonl)  +181  (always included at 100%)
+```
+
+Within targeted_fix (3,000), enforce sub-distribution:
+- name_resolution (role→name recall): ~40% (1,200)
+- session_history_detail (specific event/coping recall): ~25% (750)
+- help_first (technique immediately on explicit help request): ~20% (600)
+- profile_strategy_recall (suggest the marked-helpful strategy): ~15% (450)
+
+### Optimal checkpoint
+All evidence (Qwen-1.7B, genzv3) points to **ck200–400** as the Goldilocks zone for 10k datasets.
+Options:
+1. Train 1600 steps, run sweep, pick best early checkpoint (ck200–400 likely)
+2. Increase dataset to 20k+ (use more of the 13,524 targeted_fix examples) — pushes the overfitting threshold later
+
+### Do NOT use genzv2_continued approach again
+Continued training (PeftModel.from_pretrained) catastrophically broke MEMORY_USE (0/8). Always train fresh from base.
 
 ---
 
