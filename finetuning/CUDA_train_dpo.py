@@ -258,7 +258,6 @@ dpo_config = DPOConfig(
     lr_scheduler_type="cosine",
     optim="paged_adamw_32bit",
     max_length=1536,
-    max_prompt_length=1024,
     logging_steps=10,
     save_steps=200,
     eval_strategy="steps",
