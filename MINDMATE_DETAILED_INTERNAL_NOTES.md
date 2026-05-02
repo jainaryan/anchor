@@ -20,7 +20,7 @@ Synthetic Data (Qwen3-30B teacher)
 → Android (anchor-app, JNI → llama.cpp)
 ```
 
-**Best model:** `adapters/genz/checkpoint-1600` (genzv2 SFT, Llama 3.2 3B). Beats all DPO variants.
+**Best model:** `adapters/genz/checkpoint-1200` (genzv2 SFT, Llama 3.2 3B, 71%). Beats all DPO variants and all other SFT checkpoints under LLM judge runner.
 **Production deploy:** https://tryanchor.me (FastAPI, DigitalOcean c-4)
 **On-device:** Pixel 8a, `/sdcard/Download/mindmate.gguf`, ~5.5 TPS
 
@@ -116,15 +116,17 @@ Synthetic Data Generation (Qwen3-30B)
 - Checkpoints: ck200–ck2400 (every 200 steps)
 - **Best: ck200 = 65%** — does NOT improve over genzv2_ck1200 (71%). See benchmark results.
 
-### `adapters/genzv2_dpo_ck1200/` — **RUNNING** 🟢 (job 602946)
-- DPO on genzv2 ck1200, 800 steps, `dpo_train.jsonl` (5,750 pairs incl. help_mode + memory_recall)
+### `adapters/genzv2_dpo_ck1200/` — **DONE** ✅ (job 603039)
+- DPO on genzv2 ck1200, 800 steps, `dpo_train.jsonl`, 1h 42min on A100-80
+- **Benchmark: 20/34 (59%)** — WORSE than SFT baseline (71%). HELP_MODE collapsed to 0/6.
 
-### `adapters/genzv3_dpo_ck200/` — **RUNNING** 🟢 (job 602947)
-- DPO on genzv3 ck200, 800 steps, `dpo_train.jsonl`
+### `adapters/genzv3_dpo_ck200/` — **DONE** ✅ (job 603040)
+- DPO on genzv3 ck200, 800 steps, `dpo_train.jsonl`, 1h 42min on A100-80
+- **Benchmark: 23/34 (68%)** — same as genzv3_ck200 SFT. No improvement.
 
-### `adapters/genz_dpo_ck1600/` — **PENDING** ⏳ (job 602948)
-- DPO on genzv2 ck1600, 800 steps, `dpo_train.jsonl`
-- Previous attempt (job 601548, 1200 steps) completed but not yet benchmarked
+### `adapters/genz_dpo_ck1600/` — **DONE** ✅ (job 603100)
+- DPO on genzv2 ck1600, 800 steps, `dpo_train.jsonl`, 1h 42min on A100-80
+- **Benchmark: 22/34 (65%)** — same as genzv2_ck1600 SFT. No improvement.
 
 ### `adapters/CUDA_mindmate_llama32b/` — Llama v2 SFT
 - Same data mix as genz. Has checkpoints 200–1600.
@@ -307,19 +309,16 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ---
 
-## Active Cluster Jobs (2026-05-02)
+## Active Cluster Jobs (2026-05-03)
 
-| Job | Name | Status | Purpose |
-|---|---|---|---|
-| 603039 | `dpo-genzv2-ck1200` | 🟢 **RUNNING** | DPO on genzv2 ck1200, 800 steps, dpo_train.jsonl, A100-80 |
-| 603040 | `dpo-genzv3-ck200` | 🟢 **RUNNING** | DPO on genzv3 ck200, 800 steps, dpo_train.jsonl, A100-80 |
-| 603100 | `dpo-genzv2-ck1600` | ⏳ **PENDING** | DPO on genzv2 ck1600, 800 steps, dpo_train.jsonl, A100-80 |
+No active jobs — all complete as of May 3.
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
-| 603100 | DPO genzv2_ck1600 | ⏳ **PENDING** May 2 — resubmit after argparse fix |
-| 603039–603040 | DPO genzv2_ck1200 / genzv3_ck200 | 🟢 **RUNNING** May 2 — 800 steps, dpo_train.jsonl |
+| 603293–603295 | Benchmark DPO sweep | **DONE** May 3 — genzv2_dpo_ck1200/genzv3_dpo_ck200/genzv2_dpo_ck1600; results in Benchmarks section |
+| 603039–603040 | DPO genzv2_ck1200 / genzv3_ck200 | **DONE** May 3 — 1h 42min each on A100-80 |
+| 603100 | DPO genzv2_ck1600 | **DONE** May 3 — 1h 42min on A100-80 |
 | 603027–603038 | Benchmark genzv4 sweep | **DONE** May 2 — ck200–ck2400, A100-80; results in Benchmarks section |
 | 602946–602948 | DPO genzv2_ck1200 / genzv3_ck200 / genzv2_ck1600 | FAILED May 2 — `max_prompt_length` not in DPOConfig (TRL version); resubmitted as 603039–603041 |
 | 603041 | DPO genzv2_ck1600 | FAILED May 2 — `genzv2_ck1600` missing from argparse choices; resubmitted as 603100 |
@@ -488,6 +487,27 @@ genzv4: 21,529 examples (targeted_fix 28%, transition 19%, friend 14%, therapist
 - CRISIS inconsistent (4/5 at many checkpoints vs 5/5 for genzv2_ck1200) — therapist data at 2,500 may still be insufficient
 - BIOMETRIC best at ck600 (4/5) suggesting biometric recall takes more training than memory recall
 - **Conclusion:** genzv4 architecture (more data + more steps) did not solve the HELP+MEM co-optimization problem. **DPO on genzv2_ck1200 remains the most promising path.**
+
+### DPO vs SFT comparison — 2026-05-03 ✅ COMPLETE
+
+DPO trained on `dpo_train.jsonl` (5,750 pairs), 800 steps, from three SFT bases. Jobs 603039/603040/603100 → benchmarked 603293–603295.
+
+| Model | BIO /5 | CRISIS /5 | FORMAT /4 | HELP /6 | MEM /8 | NOH /6 | Total /34 | % |
+|---|---|---|---|---|---|---|---|---|
+| **genzv2_ck1200 SFT** *(best baseline)* | 3 | **5** | **4** | 2 | **4** | **6** | **24** | **71%** |
+| genzv3_ck200 SFT | 3 | 5 | 3 | 3 | 3 | 6 | 23 | 68% |
+| genzv2_ck1600 SFT | 4 | 5 | 4 | 1 | 2 | 6 | 22 | 65% |
+| genzv2_dpo_ck1200 | 3 | 4 | 4 | **0** | 3 | 6 | 20 | 59% ❌ |
+| genzv3_dpo_ck200 | 2 | 5 | 4 | 3 | 4 | 5 | 23 | 68% = |
+| genzv2_dpo_ck1600 | 2 | 5 | 3 | 3 | 3 | 6 | 22 | 65% = |
+
+**Key findings (DPO):**
+- **DPO consistently fails to improve over SFT.** genzv2_ck1200 SFT at 71% remains the best model overall.
+- genzv2_dpo_ck1200 is actively WORSE than its SFT base (59% vs 71%) — HELP_MODE collapsed to 0/6.
+- genzv3_dpo_ck200 and genzv2_dpo_ck1600 are flat vs their SFT bases.
+- Pattern: DPO hurts HELP_MODE (model becomes more hesitant) and also regresses BIOMETRIC.
+- **Conclusion: DPO with current data + beta=0.1 + 800 steps does not work for this task. Abandon DPO, focus on SFT data quality.**
+- **Current production-best: `adapters/genz/checkpoint-1200`** (genzv2 SFT, 71%) — note this is ck1200 not ck1600.
 
 ### Files
 - `benchmarks/scenarios.py` — scenarios; MEMORY_USE + BIOMETRIC use `judge_criteria`, others use `checks`
