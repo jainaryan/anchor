@@ -185,6 +185,7 @@ base = AutoModelForCausalLM.from_pretrained(
     device_map="auto",
     torch_dtype=torch.float16,
     low_cpu_mem_usage=True,
+    attn_implementation="eager",
 )
 model = PeftModel.from_pretrained(base, str(adapter_path))
 model.eval()
@@ -216,10 +217,14 @@ for i, sc in enumerate(scenarios, 1):
 
 # Free eval model VRAM before loading judge
 print("\n[Phase 1] Unloading eval model...")
+model.cpu()
+base.cpu()
 del model, base, tokenizer
 gc.collect()
+torch.cuda.synchronize()
 torch.cuda.empty_cache()
-print("VRAM freed.")
+vram_free = torch.cuda.mem_get_info()[0] / 1024**3
+print(f"VRAM freed. ({vram_free:.1f} GiB now free)")
 
 # ── Phase 2: Judge scoring ────────────────────────────────────────────────────
 
@@ -241,8 +246,7 @@ if needs_judge:
     judge_model = AutoModelForCausalLM.from_pretrained(
         JUDGE_MODEL_ID,
         quantization_config=bnb_judge,
-        device_map="auto",
-        torch_dtype=torch.bfloat16,
+        device_map={"": 0},
         low_cpu_mem_usage=True,
     )
     judge_model.eval()

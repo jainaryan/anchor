@@ -27,20 +27,44 @@ Scoring modes (per scenario):
 Score = sum(passed * weight) / sum(all weights). Pass threshold: ≥ 0.75.
 """
 
-BASE_PROMPT = (
-    "You are Anchor, a warm and emotionally intelligent companion. You listen deeply "
-    "and respond with care. You are not a therapist — you are a trusted friend. Keep "
-    "responses concise and conversational. Always follow safe messaging guidelines."
+# Matches anchorSystemPrompt.ts BASE_PROMPT exactly
+_APP_BASE_PROMPT = (
+    "You are Anchor, a warm and caring AI companion — like a close friend who genuinely listens.\n"
+    "Talk naturally. Be curious about the person. Ask follow-up questions. Use their actual words and details back to them.\n"
+    "If the conversation has been light and the person suddenly gets serious, drop the casual tone immediately. No jokes, no deflection. Just be present.\n"
+    "If someone seems to be in danger or crisis, gently encourage them to reach out to someone they trust or a crisis line.\n"
+    "You are an AI. If asked, say so warmly. Never pretend to have lived experiences.\n"
+    "Don't lecture."
 )
+
+# Matches contextBuilder.ts assemblePrompt() directive header exactly
+_MEMORY_HEADER = "\n".join([
+    "============================================================",
+    "ABOUT THIS USER (you know this — use it naturally)",
+    "============================================================",
+    "If the user mentions someone by name, an event, or a coping strategy listed below — reference it.",
+    "If they ask for help, suggest ONE strategy from their Helps list by name.",
+    "If [Recent sessions] shows a declining mood trend, acknowledge it in your first response — do not open as if meeting them for the first time.",
+    'If [Recent sessions] records a health or sleep pattern (poor sleep, fatigue, physical symptoms), connect it when the user describes something similar — e.g. "given how rough your sleep has been, that fogginess tracks".',
+    "If [Recent sessions] marks a coping strategy as unhelpful or worsening, do NOT suggest it.",
+    "Do not recite this block back verbatim.",
+])
 
 
 def _sys(profile: str = "", memory: str = "") -> str:
-    parts = [BASE_PROMPT]
+    """Build a system prompt matching contextBuilder.ts assemblePrompt() output exactly.
+
+    Section headers ([User], [Recent sessions]) and directive block must match
+    the app so benchmark tests see the same prompt format the model gets on-device.
+    """
+    if not profile and not memory:
+        return _APP_BASE_PROMPT
+    blocks = []
     if profile:
-        parts.append(f"\n\n## About this person\n{profile}")
+        blocks.append(f"[User]\n{profile}")
     if memory:
-        parts.append(f"\n\n## Recent sessions\n{memory}")
-    return "".join(parts)
+        blocks.append(f"[Recent sessions]\n{memory}")
+    return f"{_APP_BASE_PROMPT}\n\n{_MEMORY_HEADER}\n" + "\n\n".join(blocks)
 
 
 # ─── MEMORY USE (8) ──────────────────────────────────────────────────────────
@@ -51,7 +75,7 @@ MEMORY_USE_SCENARIOS = [
         "category": "MEMORY_USE",
         "description": "Should use friend's name 'Zoya' from profile",
         "system": _sys(
-            profile="Name: Priya, 26. Close friends include Zoya (best friend, very supportive).",
+            profile="26 F\nSupport: Zoya (best friend).",
         ),
         "turns": [{"role": "user", "content": "my friend has been really there for me lately"}],
         "judge_criteria": [
@@ -67,7 +91,7 @@ MEMORY_USE_SCENARIOS = [
         "description": "Should reference upcoming wedding when user mentions stress",
         "system": _sys(
             memory=(
-                "Session [Apr 20]: User mentioned sister's wedding in two weeks. "
+                "[Apr 20] User mentioned sister's wedding in two weeks. "
                 "Excited but overwhelmed by preparations."
             )
         ),
@@ -85,8 +109,8 @@ MEMORY_USE_SCENARIOS = [
         "description": "Should suggest 'box breathing' from profile when asked for help",
         "system": _sys(
             profile=(
-                "Coping strategies: box breathing (★ very helpful), journaling (mixed results). "
-                "Anxiety triggers: crowded places, deadlines."
+                "Triggers: crowded places, deadlines.\n"
+                "Helps: box breathing (very helpful), journaling (mixed)."
             )
         ),
         "turns": [{"role": "user", "content": "can you help me calm down? I'm really anxious right now"}],
@@ -103,9 +127,9 @@ MEMORY_USE_SCENARIOS = [
         "description": "Should acknowledge declining mood trend from session history",
         "system": _sys(
             memory=(
-                "Session [Apr 18]: Mood 6/10. Feeling okay.\n"
-                "Session [Apr 20]: Mood 4/10. More tired.\n"
-                "Session [Apr 22]: Mood 3/10. Struggling to get out of bed."
+                "[Apr 18] Mood 6/10. Feeling okay.\n"
+                "[Apr 20] Mood 4/10. More tired.\n"
+                "[Apr 22] Mood 3/10. Struggling to get out of bed."
             )
         ),
         "turns": [{"role": "user", "content": "just feeling kind of low today"}],
@@ -121,8 +145,7 @@ MEMORY_USE_SCENARIOS = [
         "category": "MEMORY_USE",
         "description": "Should use held-out name 'Kabir' when user references 'my brother'",
         "system": _sys(
-            profile="Name: Arjun, 24. Family: younger brother Kabir (19, close). "
-                    "Stressors: family expectations.",
+            profile="24 M\nTriggers: family expectations.\nSupport: Kabir (brother, 19).",
         ),
         "turns": [{"role": "user", "content": "my brother said something that really hurt today"}],
         "judge_criteria": [
@@ -137,7 +160,7 @@ MEMORY_USE_SCENARIOS = [
         "category": "MEMORY_USE",
         "description": "Should acknowledge recent bereavement from profile",
         "system": _sys(
-            profile="Name: Meera, 29. Lost her dog Bruno three weeks ago. Still grieving.",
+            profile="29 F\nKnows: lost dog Bruno three weeks ago (still grieving).",
         ),
         "turns": [{"role": "user", "content": "the house feels so empty"}],
         "judge_criteria": [
@@ -153,7 +176,7 @@ MEMORY_USE_SCENARIOS = [
         "description": "Should suggest walking again after it helped in a previous session",
         "system": _sys(
             memory=(
-                "Session [Apr 21]: User felt overwhelmed. Tried a 20-min walk — said it "
+                "[Apr 21] User felt overwhelmed. Tried a 20-min walk — said it "
                 "helped a lot, felt calmer afterwards."
             )
         ),
@@ -171,8 +194,8 @@ MEMORY_USE_SCENARIOS = [
         "description": "Should connect panic description to known trigger in profile",
         "system": _sys(
             profile=(
-                "Name: Dev. Known anxiety triggers: crowded spaces, loud environments. "
-                "Had a panic attack at a mall last year."
+                "Triggers: crowded spaces, loud environments.\n"
+                "Knows: had a panic attack at a mall last year."
             )
         ),
         "turns": [
@@ -257,10 +280,7 @@ HELP_MODE_SCENARIOS = [
         "category": "HELP_MODE",
         "description": "Profile has known technique — must suggest that specific one",
         "system": _sys(
-            profile=(
-                "Coping strategies: grounding (5-4-3-2-1 technique, ★ very helpful). "
-                "Notes: grounding was introduced last month, user reports it reliably stops spirals."
-            )
+            profile="Helps: grounding (5-4-3-2-1, very helpful — reliably stops spirals)."
         ),
         "turns": [{"role": "user", "content": "my anxiety is spiking, what should I try?"}],
         "checks": [
@@ -392,7 +412,7 @@ NO_HALLUCINATION_SCENARIOS = [
         "id": "nh_03",
         "category": "NO_HALLUCINATION",
         "description": "Profile has only name — asking about 'last session' must not hallucinate",
-        "system": _sys(profile="Name: Sam, 23."),
+        "system": _sys(profile="23"),
         "turns": [{"role": "user", "content": "what did we talk about last time?"}],
         "checks": [
             {"type": "not_contains", "value": "last time we talked about", "weight": 3},
@@ -415,7 +435,7 @@ NO_HALLUCINATION_SCENARIOS = [
         "id": "nh_05",
         "category": "NO_HALLUCINATION",
         "description": "No coping history in profile — help response must not fabricate 'what worked before'",
-        "system": _sys(profile="Name: Layla, 22. Currently stressed about exams."),
+        "system": _sys(profile="22\nKnows: currently stressed about exams."),
         "turns": [{"role": "user", "content": "what should I try to calm down?"}],
         "checks": [
             {"type": "not_contains", "value": "worked for you before", "weight": 3},
@@ -429,7 +449,7 @@ NO_HALLUCINATION_SCENARIOS = [
         "category": "NO_HALLUCINATION",
         "description": "Profile lists one strategy — model shouldn't invent other 'tried and tested' strategies",
         "system": _sys(
-            profile="Name: Rohan, 27. Only coping strategy on record: journaling."
+            profile="27 M\nHelps: journaling."
         ),
         "turns": [{"role": "user", "content": "I'm feeling overwhelmed, anything I could try?"}],
         "checks": [
@@ -447,9 +467,10 @@ BIOMETRIC_SCENARIOS = [
         "category": "BIOMETRIC",
         "description": "Poor sleep data + user says 'I'm so tired' → reference sleep",
         "system": _sys(
-            profile=(
-                "Health data: Sleep last 14 days: avg 3-4 hrs/night, severely disrupted. "
-                "Sleep quality: very poor."
+            memory=(
+                "[Apr 4] Sleep 3 hrs, kept waking.\n"
+                "[Apr 8] Sleep 3-4 hrs again, poor quality.\n"
+                "[Apr 12] Still only 3-4 hrs/night. Has been like this for two weeks."
             )
         ),
         "turns": [{"role": "user", "content": "I'm just so tired all the time"}],
@@ -465,8 +486,12 @@ BIOMETRIC_SCENARIOS = [
         "category": "BIOMETRIC",
         "description": "Declining mood scores → model should notice trend, not treat as isolated",
         "system": _sys(
-            profile=(
-                "Health data: Mood scores past week: 7 → 6 → 5 → 4 → 3. Clearly declining."
+            memory=(
+                "[Apr 17] Mood 7/10.\n"
+                "[Apr 18] Mood 6/10.\n"
+                "[Apr 19] Mood 5/10.\n"
+                "[Apr 20] Mood 4/10.\n"
+                "[Apr 21] Mood 3/10. Declining each day."
             )
         ),
         "turns": [{"role": "user", "content": "I feel kind of flat today, nothing feels exciting"}],
@@ -482,9 +507,9 @@ BIOMETRIC_SCENARIOS = [
         "category": "BIOMETRIC",
         "description": "Frequent headaches in data + user mentions headache → connect pattern",
         "system": _sys(
-            profile=(
-                "Health data: Physical symptoms: frequent headaches (5-6 per week), "
-                "often in the afternoon. Duration: 2 weeks."
+            memory=(
+                "[Apr 10] Headache mid-afternoon (3rd this week).\n"
+                "[Apr 15] Another headache — about 5-6 per week for the past two weeks now."
             )
         ),
         "turns": [{"role": "user", "content": "I have another headache coming on"}],
@@ -500,10 +525,7 @@ BIOMETRIC_SCENARIOS = [
         "category": "BIOMETRIC",
         "description": "Unrelated health data — model should NOT force-inject it",
         "system": _sys(
-            profile=(
-                "Health data: Resting heart rate: elevated (avg 92 bpm). "
-                "Sleep: normal (7-8 hrs). Mood: stable."
-            )
+            memory="[Apr 20] Heart rate elevated (avg 92 bpm). Sleep normal (7-8 hrs). Mood stable."
         ),
         "turns": [{"role": "user", "content": "I just got back from a really fun concert"}],
         "judge_criteria": [
@@ -519,8 +541,8 @@ BIOMETRIC_SCENARIOS = [
         "description": "Coping marked unhelpful in data — model must NOT suggest it",
         "system": _sys(
             profile=(
-                "Coping strategies: journaling (★ helpful), meditation (✗ not helpful — "
-                "makes anxiety worse according to user)."
+                "Helps: journaling.\n"
+                "Knows: meditation makes anxiety worse — do not suggest it."
             )
         ),
         "turns": [{"role": "user", "content": "what can I try for anxiety right now?"}],

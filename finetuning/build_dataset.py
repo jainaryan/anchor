@@ -94,6 +94,21 @@ DATA_MIX_PRESETS = {
         "synthetic_train_casual.jsonl":         1000,
         "synthetic_train_targeted_fixes.jsonl":   65,
     },
+    # v4 (2026-05-02): ~22k dataset, target ck400-600 Goldilocks zone
+    # Fixes v3 weaknesses: MEMORY_USE+HELP_MODE via targeted_fix (28%), friend tone preserved (46% friend-adjacent)
+    # Therapist kept at 2500 (matching v2) to protect CRISIS 5/5. hey-love not in data — DPO handles it.
+    # targeted_fix=28%, transition=19%, friend=14%, casual=12%, biometric=11%, therapist=11%, grief=5%, +181 gold
+    # Total: ~21,529
+    "v4": {
+        "synthetic_train_targeted_fix.jsonl":   6000,
+        "synthetic_train_transition.jsonl":     4000,
+        "synthetic_train_friend_1.jsonl":       3000,
+        "synthetic_train_casual.jsonl":         2500,
+        "synthetic_train_biometric.jsonl":      2348,
+        "synthetic_train_therapist_.jsonl":     2500,
+        "synthetic_train.jsonl":                1000,
+        "synthetic_train_targeted_fixes.jsonl":  181,
+    },
     # v2_continued (2026-04-29): continued training from genzv2 ck1600
     # Base model already knows: casual tone, pivot, CRISIS, FORMAT, NO_HALLUCINATION
     # Only fixing: MEMORY_USE, BIOMETRIC, HELP_MODE

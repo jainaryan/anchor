@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=48G
 #SBATCH --partition=gpu-long
-#SBATCH --gres=gpu:a100-40:1
+#SBATCH --gres=gpu:a100-80:1
 #SBATCH --time=04:00:00
 
 # ── MindMate Benchmark Runner ─────────────────────────────────────────────────

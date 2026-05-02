@@ -2,7 +2,7 @@
 
 ## Metadata
 - Project: `mindmate`
-- Last updated: `2026-05-01`
+- Last updated: `2026-05-02`
 - Android app: `anchor-app/` (NOT `mindmate_app/` — that is a stale scratch fork)
 - Production: https://tryanchor.me
 
@@ -110,11 +110,20 @@ Synthetic Data Generation (Qwen3-30B)
 - **Checkpoint sweep:** jobs 601534–601544 (A100-40, LLM judge runner) — RUNNING/PENDING
 - **DPO re-run:** job 601548 (A100-80, RUNNING) — genzv2 ck1600 base, 1200 steps, 5,750 pairs
 
-### `adapters/genz_dpo_ck1600/` — **RUNNING** 🟢 (job 601548)
-- DPO on genzv2 ck1600, 1200 steps, `dpo_train.jsonl` (5,750 pairs incl. help_mode + memory_recall)
-- Previous attempt (job 595679) diverged — format mismatch fixed in CUDA_train_dpo.py
-- Saves every 200 steps → checkpoints at ck200, 400, 600, 800, 1000, 1200 + final
-- Est. completion: ~4-5h from submission
+### `adapters/genzv4/` — **RUNNING** 🟢 (job 602945)
+- Llama 3.2 3B, v4 data mix (21,529 total), 2400 steps, fresh from base, A100-80
+- v4 mix: targeted_fix 28%, transition 19%, friend 14%, therapist/casual/biometric ~11–12%, grief 5%, +181 gold
+- Checkpoints saved every 200 steps → ck200–2400
+
+### `adapters/genzv2_dpo_ck1200/` — **RUNNING** 🟢 (job 602946)
+- DPO on genzv2 ck1200, 800 steps, `dpo_train.jsonl` (5,750 pairs incl. help_mode + memory_recall)
+
+### `adapters/genzv3_dpo_ck200/` — **RUNNING** 🟢 (job 602947)
+- DPO on genzv3 ck200, 800 steps, `dpo_train.jsonl`
+
+### `adapters/genz_dpo_ck1600/` — **PENDING** ⏳ (job 602948)
+- DPO on genzv2 ck1600, 800 steps, `dpo_train.jsonl`
+- Previous attempt (job 601548, 1200 steps) completed but not yet benchmarked
 
 ### `adapters/CUDA_mindmate_llama32b/` — Llama v2 SFT
 - Same data mix as genz. Has checkpoints 200–1600.
@@ -214,13 +223,14 @@ All active data uses `conversations` format:
 | `CUDA_train_qlora.py` | Llama SFT trainer |
 | `CUDA_run_pipeline_qwen25_3b.py` | Qwen2.5-3B SFT orchestrator |
 | `CUDA_train_qlora_qwen25_3b.py` | Qwen2.5-3B SFT trainer |
-| `CUDA_train_dpo.py` | DPO trainer, `--model llama_ck1600 --steps 1200 --data v1` |
-| `build_dataset.py` | Merges JSONL files per DATA_MIX_PRESETS |
+| `CUDA_train_dpo.py` | DPO trainer, `--model genzv2_ck1200\|genzv3_ck200\|genzv2_ck1600 --steps 800` |
+| `build_dataset.py` | Merges JSONL files per DATA_MIX_PRESETS (v1/v2/v3/v4) |
 | `clean_dataset.py` | Deduplication + format validation |
 
 ### SLURM scripts
 | Script | Partition | GPU | Time | Purpose |
 |---|---|---|---|---|
+| `run_sft_v4.slurm` | gpu-long | a100-80 | 24h | SFT genzv4 (build → clean → train 2400 steps) |
 | `run_dpo_llama_ck1600.slurm` | gpu-long | a100-80 | 24h | DPO on genzv2 ck1600 |
 | `synthetic/run_biometric_datagen.slurm` | gpu-long | a100-80 | 24h | Biometric SFT+DPO datagen |
 | `synthetic/run_targeted_fix.slurm` | gpu-long | a100-40 | 24h | Targeted fix SFT datagen |
@@ -296,23 +306,27 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ---
 
-## Active Cluster Jobs (2026-05-01)
+## Active Cluster Jobs (2026-05-02)
 
 | Job | Name | Status | Purpose |
 |---|---|---|---|
-| 601548 | `mindmate-dpo-llama-ck1600` | 🟢 **RUNNING** | DPO on genzv2 ck1600, 1200 steps, 5,750 pairs (A100-80, ~5h) |
-| 601526–601533 | `mindmate-bench` | 🟢 **RUNNING/PENDING** | genzv3 ck200–1600 checkpoint sweep (A100-40, LLM judge) |
-| 601534–601544 | `mindmate-bench` | 🟢 **RUNNING/PENDING** | genzv2 ck200–1600 checkpoint sweep (A100-40, LLM judge) |
-| 601545–601547 | `mindmate-bench` | 🟡 **PENDING** | genzv2_continued ck200–500 checkpoint sweep (A100-40, LLM judge) |
+| 602945 | `mindmate-sft-v4` | 🟢 **RUNNING** | SFT genzv4, 2400 steps, ~21.5k examples, A100-80 |
+| 602946 | `dpo-genzv2-ck1200` | 🟢 **RUNNING** | DPO on genzv2 ck1200, 800 steps, dpo_train.jsonl, A100-80 |
+| 602947 | `dpo-genzv3-ck200` | 🟢 **RUNNING** | DPO on genzv3 ck200, 800 steps, dpo_train.jsonl, A100-80 |
+| 602948 | `dpo-genzv2-ck1600` | ⏳ **PENDING** | DPO on genzv2 ck1600, 800 steps, dpo_train.jsonl, A100-80 |
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
+| 602945 | SFT genzv4 | 🟢 **RUNNING** May 2 — 21,529 examples, 2400 steps, A100-80 |
+| 602946–602948 | DPO genzv2_ck1200 / genzv3_ck200 / genzv2_ck1600 | 🟢 **RUNNING/PENDING** May 2 — 800 steps, dpo_train.jsonl (5,750 pairs), A100-80 |
+| 602597–602599 | DPO genzv2_ck1200 / genzv3_ck200 / genzv2_ck1600 | FAILED May 2 — `source: not found` (--wrap uses /bin/sh, not bash); resubmitted as 602946–602948 |
+| 602531–602546 | Benchmark genzv3+genzv2 sweep | **DONE** May 2 — full results in Benchmarks section above |
+| 602438–602452 | Benchmark sweep (failed) | FAILED May 2 — cuDNN error on H200/H100, OOM on A100-40; fixed with `attn_implementation="eager"` + A100-80 |
 | —      | Gold examples expanded    | **DONE** May 1 — 65 → 181 examples in `synthetic_train_targeted_fixes.jsonl` (name_resolution×30, crisis_safety×20, session_recall×18, profile_coping×15, biometric_profile×12, help_cold_open×12, anti_hallucination×8) |
-| 601548 | DPO genzv2 ck1600 re-run | 🟢 **RUNNING** May 1 — genzv2 ck1600 base, 5,750 pairs, 1200 steps, A100-80 |
-| 601526–601533 | Benchmark genzv3 sweep | 🟢 **RUNNING** May 1 — ck200–1600, A100-40, LLM judge |
-| 601534–601544 | Benchmark genzv2 sweep | 🟢 **RUNNING/PENDING** May 1 — ck200–1600, A100-40, LLM judge |
-| 601545–601547 | Benchmark genzv2_continued sweep | 🟡 **PENDING** May 1 — ck200–500, A100-40, LLM judge |
+| 601548 | DPO genzv2 ck1600 re-run | **DONE** May 1 — genzv2 ck1600 base, 5,750 pairs, 1200 steps, A100-80 |
+| 601526–601533 | Benchmark genzv3 sweep | **DONE** May 1 — ck200–1600, A100-40, old runner (no judge; superseded by May 2 results) |
+| 601534–601544 | Benchmark genzv2 sweep | **DONE** May 1 — ck200–1600, A100-40, old runner (superseded by May 2 results) |
 | 601438–601465 | Benchmark (failed batch) | FAILED — CUDA path issue on node xgpj0 (a100-80); switched to a100-40 |
 | 600784 | Benchmark genzv2_continued final | COMPLETED Apr 30 — 50% (old runner, no judge) |
 | 600383 | Benchmark genzv3 ck1600 | COMPLETED Apr 30 — 53% (old runner, no judge) |
@@ -354,28 +368,23 @@ genzv3 ck200 peaks at 76% (new LLM judge runner). Remaining failures are all in 
 - `data/synthetic_train_targeted_fixes.jsonl`: **65 → 181 examples** (+116)
 - All new examples target specific benchmark failure patterns above
 
-### Proposed v4 data mix (10k total)
+### v4 data mix (SUBMITTED ✅ job 602945, 2026-05-02)
 ```
-targeted_fix (memory + help)  30%  (3,000 — up from 20%)
-biometric                     15%  (1,500 — keep)
-transition                    20%  (2,000 — slight decrease)
-therapist                     12%  (1,200 — slight decrease)
-casual                        10%  (1,000 — keep)
-friend                         8%    (800 — down from 15% to reduce "hey love" dominance)
-gold (targeted_fixes.jsonl)  +181  (always included at 100%)
+targeted_fix    6,000  28%  (up from 20% in v3 — memory + help mode fix)
+transition      4,000  19%  (down from 25%)
+friend          3,000  14%  (safe — "hey love" comes from Llama base weights, not friend_1.jsonl)
+therapist       2,500  11%  (same as v2 — protects CRISIS 5/5)
+casual          2,500  12%  (up from 10%)
+biometric       2,348  11%  (100% of available data)
+grief           1,000   5%  (down from 100% in v2)
+gold (targeted_fixes.jsonl)  181  bonus (always 100%)
+─────────────────────────────────────
+Total          21,529
 ```
 
-Within targeted_fix (3,000), enforce sub-distribution:
-- name_resolution (role→name recall): ~40% (1,200)
-- session_history_detail (specific event/coping recall): ~25% (750)
-- help_first (technique immediately on explicit help request): ~20% (600)
-- profile_strategy_recall (suggest the marked-helpful strategy): ~15% (450)
+**Steps: 2400** (vs 1600 for v3) — needed because ~21.5k samples means 1600 steps ≈ 0.59 epochs; 2400 steps ≈ 0.89 epochs, pushing the overfitting cliff to ~ck1200+.
 
-### Optimal checkpoint
-All evidence (Qwen-1.7B, genzv3) points to **ck200–400** as the Goldilocks zone for 10k datasets.
-Options:
-1. Train 1600 steps, run sweep, pick best early checkpoint (ck200–400 likely)
-2. Increase dataset to 20k+ (use more of the 13,524 targeted_fix examples) — pushes the overfitting threshold later
+**Target Goldilocks zone: ck400–800** (vs ck200 for v3 with only 10k data).
 
 ### Do NOT use genzv2_continued approach again
 Continued training (PeftModel.from_pretrained) catastrophically broke MEMORY_USE (0/8). Always train fresh from base.
@@ -418,16 +427,42 @@ Continued training (PeftModel.from_pretrained) catastrophically broke MEMORY_USE
 - MEMORY_USE collapsed: 0/8 ❌ — continued training broke memory context usage
 - FORMAT perfect: 4/4 ✅
 
-### Checkpoint sweeps (new LLM judge runner, 2026-05-01)
-- **genzv3 ck200–1600:** jobs 601526–601533 — RUNNING/PENDING
-- **genzv2 ck200–1600:** jobs 601534–601544 — RUNNING/PENDING
-- **genzv2_continued ck200–500:** jobs 601545–601547 — PENDING
-- Results will land in `benchmarks/results/` — compare against 59% baseline with new judge scores
+### Checkpoint sweeps — new LLM judge runner, 2026-05-02 ✅ COMPLETE
+
+Full genzv3 ck200–1600 + genzv2 ck200–1600 sweep on A100-80 (jobs 602531–602546).
+BIOMETRIC + MEMORY_USE scored by Qwen3-30B LLM judge. All other categories rule-based.
+
+| Checkpoint | BIO /5 | CRISIS /5 | FORMAT /4 | HELP /6 | MEM /8 | NOH /6 | Total /34 | % |
+|---|---|---|---|---|---|---|---|---|
+| genzv3_ck200 *(May 1 ref)* | 4 | 4 | 4 | 4 | 4 | 6 | **26** | **76%** |
+| genzv3_ck200 | 3 | 5 | 3 | 3 | 3 | 6 | 23 | 68% |
+| genzv3_ck400 | 2 | 5 | 4 | 2 | 2 | 5 | 20 | 59% |
+| genzv3_ck600 | 3 | 4 | 2 | 3 | 2 | 6 | 20 | 59% |
+| genzv3_ck800 | 2 | 5 | 4 | 1 | 2 | 6 | 20 | 59% |
+| genzv3_ck1000 | 2 | 4 | 4 | 1 | 1 | 5 | 17 | 50% |
+| genzv3_ck1200 | 1 | 4 | 4 | 1 | 2 | 5 | 17 | 50% |
+| genzv3_ck1400 | 3 | 5 | 4 | 1 | 2 | 6 | 21 | 62% |
+| genzv3_ck1600 | 3 | 5 | 3 | 2 | 2 | 6 | 21 | 62% |
+| genzv2_ck200 | 2 | 4 | 2 | 1 | 3 | 5 | 17 | 50% |
+| genzv2_ck400 | 3 | 5 | 4 | 1 | 3 | 6 | 22 | 65% |
+| genzv2_ck600 | 1 | 5 | 4 | 2 | 3 | 6 | 21 | 62% |
+| genzv2_ck800 | 1 | 5 | 4 | 3 | 3 | 6 | 22 | 65% |
+| genzv2_ck1000 | 1 | 5 | 4 | 3 | 3 | 6 | 22 | 65% |
+| **genzv2_ck1200** | 3 | 5 | 4 | 2 | **4** | 6 | **24** | **71%** |
+| genzv2_ck1400 | 3 | 4 | 4 | 2 | 2 | 6 | 21 | 62% |
+| genzv2_ck1600 | 4 | 5 | 4 | 1 | 2 | 6 | 22 | 65% |
+
+**Key findings:**
+- genzv3_ck200 is the peak genzv3 checkpoint — degrades sharply after ck200 (HELP_MODE collapses to 1/6 by ck800)
+- genzv2_ck1200 is the best stable checkpoint: 71%, MEMORY_USE 4/8, CRISIS 5/5, FORMAT 4/4
+- genzv2 is a better base than genzv3: more stable across checkpoints, MEMORY_USE stays at 3/8 from ck400–ck1000
+- Run variance on genzv3_ck200: scored 76% (May 1) vs 68% (May 2) — ~±3 point noise floor at temperature=0.7
+- **DPO targets: genzv2_ck1200, genzv3_ck200, genzv2_ck1600** (jobs 602946–602948, May 2)
 
 ### Files
 - `benchmarks/scenarios.py` — scenarios; MEMORY_USE + BIOMETRIC use `judge_criteria`, others use `checks`
 - `benchmarks/run_benchmarks.py` — two-phase: eval model → judge model (Qwen3-30B 4-bit)
-- `benchmarks/run_benchmarks.slurm` — gpu-long, **a100-40**, 48G, 4h; supports ADAPTER/LABEL/MODEL/CATEGORY env
+- `benchmarks/run_benchmarks.slurm` — gpu-long, **a100-80**, 48G, 4h; supports ADAPTER/LABEL/MODEL/CATEGORY env; uses `attn_implementation="eager"` to avoid cuDNN issues on H200/H100
 - `benchmarks/results/` — JSON + Markdown output per run (`<label>_<timestamp>.{json,md}`)
 
 ### Running
@@ -437,7 +472,7 @@ sbatch --export=MODEL=llama_ck1600 benchmarks/run_benchmarks.slurm
 sbatch --export=MODEL=llama_ck1600,CATEGORY=MEMORY_USE benchmarks/run_benchmarks.slurm
 ```
 
-**Note:** Use A100-40 only (a100-80 node xgpj0 has broken CUDA path — torch import fails).
+**Note:** Use A100-80 (benchmark runner requires 80GB for sequential eval→judge; A100-40 OOMs loading Qwen3-30B judge after eval model unload).
 
 ---
 
@@ -516,8 +551,9 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 ### Training
 - `finetuning/CUDA_run_pipeline.py` — Llama SFT orchestrator
 - `finetuning/CUDA_train_qlora.py` — Llama SFT trainer
-- `finetuning/CUDA_train_dpo.py` — DPO trainer (--model llama_ck1600 --steps 1200 --data v2)
-- `finetuning/build_dataset.py` — dataset builder
+- `finetuning/CUDA_train_dpo.py` — DPO trainer (--model genzv2_ck1200|genzv3_ck200|genzv2_ck1600 --steps 800)
+- `finetuning/build_dataset.py` — dataset builder (DATA_MIX_PRESETS: v1, v2, v3, v4)
+- `finetuning/run_sft_v4.slurm` — genzv4 SFT pipeline (build → clean → train 2400 steps)
 - `finetuning/run_dpo_llama_ck1600.slurm` — DPO SLURM job
 
 ### Synthetic data
@@ -562,3 +598,7 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 | May 1 | A100-80 node xgpj0 torch import fails: `libtorch_global_deps.so: No such file or directory` — CUDA libs not in LD_LIBRARY_PATH on that node | Switched `run_benchmarks.slurm` to A100-40 (40GB VRAM sufficient for sequential eval+judge) |
 | May 1 | `ends_question` check failed when model appended trailing non-question clause after the question | Fixed: now checks `"?" in response` instead of `response.rstrip().endswith("?")` |
 | May 1 | MEMORY_USE + BIOMETRIC benchmark checks were keyword-based → failed on semantically correct responses | Replaced with LLM judge (Qwen3-30B 4-bit, binary YES/NO per criterion) in `scenarios.py` + `run_benchmarks.py` |
+| May 2 | `CUDNN_STATUS_NOT_INITIALIZED` during `scaled_dot_product_attention` on H200/H100 nodes → benchmark Phase 1 crashed on jobs 602438–602452 | Added `attn_implementation="eager"` to eval model load in `run_benchmarks.py` — bypasses cuDNN/flash-attention |
+| May 2 | A100-40 OOM loading Qwen3-30B judge (Phase 2): after eval model `del` + `empty_cache`, VRAM still nearly full (only 4.5MB free of 39.49GB) | Added `model.cpu(); base.cpu()` before `del` to force VRAM release; switched default GPU to A100-80 in `run_benchmarks.slurm` |
+| May 2 | `ssh host "sbatch --export=ADAPTER=${ck}..."` — `$ck` expands in local shell (empty string), all submitted jobs had empty ADAPTER | Use single quotes for the remote command: `ssh host 'for ck in ...; do sbatch --export=ADAPTER=...${ck}...; done'` |
+| May 2 | `sbatch --wrap="source mindmatenv/bin/activate && python ..."` → `source: not found` — `--wrap` executes via `/bin/sh`, not `bash` | Wrap with `bash -c`: `--wrap="bash -c \"source mindmatenv/bin/activate && python ...\""` |
