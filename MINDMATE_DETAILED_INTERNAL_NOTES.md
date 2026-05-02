@@ -110,10 +110,11 @@ Synthetic Data Generation (Qwen3-30B)
 - **Checkpoint sweep:** jobs 601534–601544 (A100-40, LLM judge runner) — RUNNING/PENDING
 - **DPO re-run:** job 601548 (A100-80, RUNNING) — genzv2 ck1600 base, 1200 steps, 5,750 pairs
 
-### `adapters/genzv4/` — **RUNNING** 🟢 (job 602945)
-- Llama 3.2 3B, v4 data mix (21,529 total), 2400 steps, fresh from base, A100-80
+### `adapters/genzv4/` — **DONE** ✅ (job 602945)
+- Llama 3.2 3B, v4 data mix (21,529 total), 2400 steps, fresh from base, A100-80, 1h 2min
 - v4 mix: targeted_fix 28%, transition 19%, friend 14%, therapist/casual/biometric ~11–12%, grief 5%, +181 gold
-- Checkpoints saved every 200 steps → ck200–2400
+- Checkpoints: ck200–ck2400 (every 200 steps)
+- **Best: ck200 = 65%** — does NOT improve over genzv2_ck1200 (71%). See benchmark results.
 
 ### `adapters/genzv2_dpo_ck1200/` — **RUNNING** 🟢 (job 602946)
 - DPO on genzv2 ck1200, 800 steps, `dpo_train.jsonl` (5,750 pairs incl. help_mode + memory_recall)
@@ -310,16 +311,19 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 | Job | Name | Status | Purpose |
 |---|---|---|---|
-| 602945 | `mindmate-sft-v4` | 🟢 **RUNNING** | SFT genzv4, 2400 steps, ~21.5k examples, A100-80 |
-| 602946 | `dpo-genzv2-ck1200` | 🟢 **RUNNING** | DPO on genzv2 ck1200, 800 steps, dpo_train.jsonl, A100-80 |
-| 602947 | `dpo-genzv3-ck200` | 🟢 **RUNNING** | DPO on genzv3 ck200, 800 steps, dpo_train.jsonl, A100-80 |
-| 602948 | `dpo-genzv2-ck1600` | ⏳ **PENDING** | DPO on genzv2 ck1600, 800 steps, dpo_train.jsonl, A100-80 |
+| 603039 | `dpo-genzv2-ck1200` | 🟢 **RUNNING** | DPO on genzv2 ck1200, 800 steps, dpo_train.jsonl, A100-80 |
+| 603040 | `dpo-genzv3-ck200` | 🟢 **RUNNING** | DPO on genzv3 ck200, 800 steps, dpo_train.jsonl, A100-80 |
+| 603100 | `dpo-genzv2-ck1600` | ⏳ **PENDING** | DPO on genzv2 ck1600, 800 steps, dpo_train.jsonl, A100-80 |
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
-| 602945 | SFT genzv4 | 🟢 **RUNNING** May 2 — 21,529 examples, 2400 steps, A100-80 |
-| 602946–602948 | DPO genzv2_ck1200 / genzv3_ck200 / genzv2_ck1600 | 🟢 **RUNNING/PENDING** May 2 — 800 steps, dpo_train.jsonl (5,750 pairs), A100-80 |
+| 603100 | DPO genzv2_ck1600 | ⏳ **PENDING** May 2 — resubmit after argparse fix |
+| 603039–603040 | DPO genzv2_ck1200 / genzv3_ck200 | 🟢 **RUNNING** May 2 — 800 steps, dpo_train.jsonl |
+| 603027–603038 | Benchmark genzv4 sweep | **DONE** May 2 — ck200–ck2400, A100-80; results in Benchmarks section |
+| 602946–602948 | DPO genzv2_ck1200 / genzv3_ck200 / genzv2_ck1600 | FAILED May 2 — `max_prompt_length` not in DPOConfig (TRL version); resubmitted as 603039–603041 |
+| 603041 | DPO genzv2_ck1600 | FAILED May 2 — `genzv2_ck1600` missing from argparse choices; resubmitted as 603100 |
+| 602945 | SFT genzv4 | **DONE** May 2 — 21,529 examples, 2400 steps, 1h 2min on A100-80 |
 | 602597–602599 | DPO genzv2_ck1200 / genzv3_ck200 / genzv2_ck1600 | FAILED May 2 — `source: not found` (--wrap uses /bin/sh, not bash); resubmitted as 602946–602948 |
 | 602531–602546 | Benchmark genzv3+genzv2 sweep | **DONE** May 2 — full results in Benchmarks section above |
 | 602438–602452 | Benchmark sweep (failed) | FAILED May 2 — cuDNN error on H200/H100, OOM on A100-40; fixed with `attn_implementation="eager"` + A100-80 |
@@ -452,12 +456,38 @@ BIOMETRIC + MEMORY_USE scored by Qwen3-30B LLM judge. All other categories rule-
 | genzv2_ck1400 | 3 | 4 | 4 | 2 | 2 | 6 | 21 | 62% |
 | genzv2_ck1600 | 4 | 5 | 4 | 1 | 2 | 6 | 22 | 65% |
 
-**Key findings:**
+**Key findings (genzv2/genzv3):**
 - genzv3_ck200 is the peak genzv3 checkpoint — degrades sharply after ck200 (HELP_MODE collapses to 1/6 by ck800)
 - genzv2_ck1200 is the best stable checkpoint: 71%, MEMORY_USE 4/8, CRISIS 5/5, FORMAT 4/4
 - genzv2 is a better base than genzv3: more stable across checkpoints, MEMORY_USE stays at 3/8 from ck400–ck1000
 - Run variance on genzv3_ck200: scored 76% (May 1) vs 68% (May 2) — ~±3 point noise floor at temperature=0.7
-- **DPO targets: genzv2_ck1200, genzv3_ck200, genzv2_ck1600** (jobs 602946–602948, May 2)
+
+### Checkpoint sweep — genzv4, 2026-05-02 ✅ COMPLETE
+
+genzv4: 21,529 examples (targeted_fix 28%, transition 19%, friend 14%, therapist/casual/biometric ~11–12%, grief 5%, +181 gold), 2400 steps, fresh from base, A100-80. Jobs 603027–603038.
+
+| Checkpoint | BIO /5 | CRISIS /5 | FORMAT /4 | HELP /6 | MEM /8 | NOH /6 | Total /34 | % |
+|---|---|---|---|---|---|---|---|---|
+| genzv4_ck200 | 2 | 5 | 4 | 1 | **4** | 6 | 22 | 65% |
+| genzv4_ck400 | 1 | 4 | 4 | **3** | 3 | 5 | 20 | 59% |
+| genzv4_ck600 | **4** | 4 | 3 | 1 | 3 | 6 | 21 | 62% |
+| genzv4_ck800 | 2 | 4 | 4 | 0 | 2 | 6 | 18 | 53% |
+| genzv4_ck1000 | 3 | 5 | 3 | 1 | 2 | 5 | 19 | 56% |
+| genzv4_ck1200 | 1 | 4 | 4 | 2 | 2 | 6 | 19 | 56% |
+| genzv4_ck1400 | 1 | 4 | 3 | 2 | 3 | 5 | 18 | 53% |
+| genzv4_ck1600 | 1 | 4 | 4 | 1 | 2 | 5 | 17 | 50% |
+| genzv4_ck1800 | 3 | 5 | 4 | 2 | 2 | 6 | 22 | 65% |
+| genzv4_ck2000 | 2 | 4 | 4 | 0 | 2 | 6 | 18 | 53% |
+| genzv4_ck2200 | 3 | 5 | 3 | 2 | 2 | 5 | 20 | 59% |
+| genzv4_ck2400 | 2 | 4 | 4 | 1 | 2 | 6 | 19 | 56% |
+
+**Key findings (genzv4):**
+- **Best: ck200 = 65%** — does NOT beat genzv2_ck1200 (71%). genzv2_ck1200 remains the best SFT model.
+- MEMORY_USE peaks at ck200 (4/8) same as genzv3 — the larger dataset did not push the Goldilocks zone later as expected
+- HELP_MODE and MEMORY_USE still don't peak at the same checkpoint (HELP peaks at ck400 but MEM drops there)
+- CRISIS inconsistent (4/5 at many checkpoints vs 5/5 for genzv2_ck1200) — therapist data at 2,500 may still be insufficient
+- BIOMETRIC best at ck600 (4/5) suggesting biometric recall takes more training than memory recall
+- **Conclusion:** genzv4 architecture (more data + more steps) did not solve the HELP+MEM co-optimization problem. **DPO on genzv2_ck1200 remains the most promising path.**
 
 ### Files
 - `benchmarks/scenarios.py` — scenarios; MEMORY_USE + BIOMETRIC use `judge_criteria`, others use `checks`
@@ -602,3 +632,5 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 | May 2 | A100-40 OOM loading Qwen3-30B judge (Phase 2): after eval model `del` + `empty_cache`, VRAM still nearly full (only 4.5MB free of 39.49GB) | Added `model.cpu(); base.cpu()` before `del` to force VRAM release; switched default GPU to A100-80 in `run_benchmarks.slurm` |
 | May 2 | `ssh host "sbatch --export=ADAPTER=${ck}..."` — `$ck` expands in local shell (empty string), all submitted jobs had empty ADAPTER | Use single quotes for the remote command: `ssh host 'for ck in ...; do sbatch --export=ADAPTER=...${ck}...; done'` |
 | May 2 | `sbatch --wrap="source mindmatenv/bin/activate && python ..."` → `source: not found` — `--wrap` executes via `/bin/sh`, not `bash` | Wrap with `bash -c`: `--wrap="bash -c \"source mindmatenv/bin/activate && python ...\""` |
+| May 2 | `DPOConfig.__init__() got an unexpected keyword argument 'max_prompt_length'` — removed from TRL's DPOConfig in cluster version | Removed `max_prompt_length=1024` from DPOConfig in `CUDA_train_dpo.py` |
+| May 2 | `CUDA_train_dpo.py: error: argument --model: invalid choice: 'genzv2_ck1600'` — alias not added to argparse choices | Added `genzv2_ck1600` to argparse choices and CONFIGS dict (maps to `adapters/genz/checkpoint-1600`) |
