@@ -69,6 +69,22 @@ MODELS = {
         "out_name": "mindmate_gemma4_e4b",
         "gemma4": True,
     },
+    # Top-3 SFT checkpoints (benchmark 2026-05-03)
+    "genzv3_ck200": {
+        "base": "meta-llama/Llama-3.2-3B-Instruct",
+        "adapter": PROJECT_ROOT / "adapters" / "genzv3" / "checkpoint-200",
+        "out_name": "mindmate_genzv3_ck200",
+    },
+    "genzv2_ck1200": {
+        "base": "meta-llama/Llama-3.2-3B-Instruct",
+        "adapter": PROJECT_ROOT / "adapters" / "genz" / "checkpoint-1200",
+        "out_name": "mindmate_genzv2_ck1200",
+    },
+    "genzv4_ck200": {
+        "base": "meta-llama/Llama-3.2-3B-Instruct",
+        "adapter": PROJECT_ROOT / "adapters" / "genzv4" / "checkpoint-200",
+        "out_name": "mindmate_genzv4_ck200",
+    },
     # Legacy
     "genz": {
         "base": "meta-llama/Llama-3.2-3B-Instruct",

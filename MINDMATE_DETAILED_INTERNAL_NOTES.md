@@ -2,7 +2,7 @@
 
 ## Metadata
 - Project: `mindmate`
-- Last updated: `2026-05-02`
+- Last updated: `2026-05-03`
 - Android app: `anchor-app/` (NOT `mindmate_app/` — that is a stale scratch fork)
 - Production: https://tryanchor.me
 
@@ -21,6 +21,7 @@ Synthetic Data (Qwen3-30B teacher)
 ```
 
 **Best model:** `adapters/genz/checkpoint-1200` (genzv2 SFT, Llama 3.2 3B, 71%). Beats all DPO variants and all other SFT checkpoints under LLM judge runner.
+**Top 3 SFT models (full leaderboard):** genzv3_ck200 26/34 (76%), genzv2_ck1200 24/34 (71%), genzv4_ck200 22/34 (65%) — GGUFs exporting as job 603632.
 **Production deploy:** https://tryanchor.me (FastAPI, DigitalOcean c-4)
 **On-device:** Pixel 8a, `/sdcard/Download/mindmate.gguf`, ~5.5 TPS
 
@@ -109,6 +110,11 @@ Synthetic Data Generation (Qwen3-30B)
 - Benchmark baseline (old runner): 59% — CRISIS/FORMAT/NO_HALLUCINATION 100%, HELP_MODE 50%, BIOMETRIC 20%, MEMORY_USE 12%
 - **Checkpoint sweep:** jobs 601534–601544 (A100-40, LLM judge runner) — RUNNING/PENDING
 - **DPO re-run:** job 601548 (A100-80, RUNNING) — genzv2 ck1600 base, 1200 steps, 5,750 pairs
+
+### `exports/mindmate_genzv3_ck200/`, `exports/mindmate_genzv2_ck1200/`, `exports/mindmate_genzv4_ck200/` — **EXPORTING** 🔄 (job 603632)
+- GGUF Q4_K_M export of top 3 SFT checkpoints, A100-80, ~4h
+- Outputs: `mindmate_genzv3_ck200_q4_k_m.gguf`, `mindmate_genzv2_ck1200_q4_k_m.gguf`, `mindmate_genzv4_ck200_q4_k_m.gguf`
+- Purpose: on-device testing + production deployment candidates
 
 ### `adapters/genzv4/` — **DONE** ✅ (job 602945)
 - Llama 3.2 3B, v4 data mix (21,529 total), 2400 steps, fresh from base, A100-80, 1h 2min
@@ -311,11 +317,14 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ## Active Cluster Jobs (2026-05-03)
 
-No active jobs — all complete as of May 3.
+| Job | Name | Status |
+|---|---|---|
+| 603632 | GGUF export top 3 (genzv3_ck200, genzv2_ck1200, genzv4_ck200) | 🟢 RUNNING |
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
+| 603632 | GGUF export top 3 SFT models | **RUNNING** May 3 — genzv3_ck200 / genzv2_ck1200 / genzv4_ck200, A100-80, 4h |
 | 603293–603295 | Benchmark DPO sweep | **DONE** May 3 — genzv2_dpo_ck1200/genzv3_dpo_ck200/genzv2_dpo_ck1600; results in Benchmarks section |
 | 603039–603040 | DPO genzv2_ck1200 / genzv3_ck200 | **DONE** May 3 — 1h 42min each on A100-80 |
 | 603100 | DPO genzv2_ck1600 | **DONE** May 3 — 1h 42min on A100-80 |
@@ -537,6 +546,24 @@ sbatch --export=MODEL=llama_ck1600,CATEGORY=MEMORY_USE benchmarks/run_benchmarks
 
 ---
 
+## System Prompt Architecture (anchor-app)
+
+Two system prompt files exist — they serve different purposes:
+
+| File | Content | Used by |
+|---|---|---|
+| `src/utils/anchorSystemPrompt.ts` | "You are Anchor..." 6-line prompt | **Production chat** (`ChatScreen.tsx`) |
+| `src/constants/mindmatePrompt.ts` | "You are MindMate..." ~150-line structured prompt | **Eval runner only** (`EvalRunner.ts`, `MultiTurnRunner.ts`) |
+
+`anchorSystemPrompt.ts` is what real users see. `mindmatePrompt.ts` is only used in the in-app eval screen.
+
+**Benchmark fidelity (verified 2026-05-03):** `benchmarks/scenarios.py` uses `_APP_BASE_PROMPT` which is a byte-for-byte match of `anchorSystemPrompt.ts`. The `_sys()` / `_MEMORY_HEADER` format matches `contextBuilder.ts assemblePrompt()` exactly. All benchmark scores reflect real production conditions.
+
+### Memory injection in production chat
+`ChatScreen.tsx` passes `getAnchorSystemPrompt()` to `useChatSession` → `prepareCompletion()` calls `buildEnhancedSystemPrompt(basePrompt, userMessage)` which injects tier1/tier2/tier3 from DB. The final system prompt the model sees = Anchor base + memory header + `[User]` + `[Recent sessions]`.
+
+---
+
 ## Android App (`anchor-app/`)
 
 ### Runtime flow
@@ -617,10 +644,12 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 
 ### Inference
 - `inference/CUDA_chat_mindmate.py` — Llama chat (--checkpoint checkpoint-1600)
+- `scripts/chat_cluster.py` — **interactive chat on cluster GPU** (full production stack: Anchor prompt + memory engine, TextStreamer, `/memory` `/reset` commands); run via `srun --partition=gpu-long --gres=gpu:a100-80:1 --pty bash` then `python scripts/chat_cluster.py --adapter adapters/genzv3/checkpoint-200`
 - `deploy/server.py` — production FastAPI server
 
 ### Export
-- `scripts/export_gguf_cuda.py` — merge + convert + quantize
+- `scripts/export_gguf_cuda.py` — merge + convert + quantize (models: genzv3_ck200, genzv2_ck1200, genzv4_ck200 + legacy)
+- `scripts/run_export_top3.slurm` — SLURM job exporting genzv3_ck200 + genzv2_ck1200 + genzv4_ck200 sequentially
 
 ### Android
 - `anchor-app/src/memory/contextBuilder.ts` — system prompt builder
