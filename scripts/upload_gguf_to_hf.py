@@ -20,6 +20,11 @@ EXPORTS_DIR  = PROJECT_ROOT / "exports"
 
 # All available Q4_K_M GGUFs
 ALL_MODELS = {
+    # Top-3 SFT checkpoints (benchmark 2026-05-03)
+    "genzv3_ck200":       EXPORTS_DIR / "mindmate_genzv3_ck200"       / "mindmate_genzv3_ck200_q4_k_m.gguf",
+    "genzv2_ck1200":      EXPORTS_DIR / "mindmate_genzv2_ck1200"      / "mindmate_genzv2_ck1200_q4_k_m.gguf",
+    "genzv4_ck200":       EXPORTS_DIR / "mindmate_genzv4_ck200"       / "mindmate_genzv4_ck200_q4_k_m.gguf",
+    # Legacy
     "llama_sft_ck200":    EXPORTS_DIR / "mindmate_llama_sft_ck200"    / "mindmate_llama_sft_ck200_q4_k_m.gguf",
     "llama_dpo_ck200":    EXPORTS_DIR / "mindmate_llama_dpo_ck200"    / "mindmate_llama_dpo_ck200_q4_k_m.gguf",
     "llama_sft_ck1600":   EXPORTS_DIR / "mindmate_llama_sft_ck1600"   / "mindmate_llama_sft_ck1600_q4_k_m.gguf",

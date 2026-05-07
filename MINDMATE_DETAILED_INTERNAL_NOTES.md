@@ -2,7 +2,7 @@
 
 ## Metadata
 - Project: `mindmate`
-- Last updated: `2026-05-03`
+- Last updated: `2026-05-07`
 - Android app: `anchor-app/` (NOT `mindmate_app/` — that is a stale scratch fork)
 - Production: https://tryanchor.me
 
@@ -20,8 +20,9 @@ Synthetic Data (Qwen3-30B teacher)
 → Android (anchor-app, JNI → llama.cpp)
 ```
 
-**Best model:** `adapters/genz/checkpoint-1200` (genzv2 SFT, Llama 3.2 3B, 71%). Beats all DPO variants and all other SFT checkpoints under LLM judge runner.
-**Top 3 SFT models (full leaderboard):** genzv3_ck200 26/34 (76%), genzv2_ck1200 24/34 (71%), genzv4_ck200 22/34 (65%) — GGUFs exporting as job 603632.
+**Best fine-tuned model:** `adapters/genzv4/checkpoint-200` (genzv4 SFT, 77% weighted on v2 benchmark). Edges out genzv3_ck200 (67%) and genzv2_ck1200 (60%) on the new 49-scenario benchmark.
+**⚠️ Benchmark shock (2026-05-07):** Base Llama 3.2-3B-Instruct (no adapter) scores **85% weighted** on the v2 benchmark — higher than all fine-tuned models. Suggests fine-tuning is hurting context/memory use. See Benchmarks section.
+**Previous best (old 34-scenario benchmark):** genzv3_ck200 76%, genzv2_ck1200 71%, genzv4_ck200 65%.
 **Production deploy:** https://tryanchor.me (FastAPI, DigitalOcean c-4)
 **On-device:** Pixel 8a, `/sdcard/Download/mindmate.gguf`, ~5.5 TPS
 
@@ -315,16 +316,16 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ---
 
-## Active Cluster Jobs (2026-05-03)
+## Active Cluster Jobs (2026-05-07)
 
-| Job | Name | Status |
-|---|---|---|
-| 603632 | GGUF export top 3 (genzv3_ck200, genzv2_ck1200, genzv4_ck200) | 🟢 RUNNING |
+No active jobs.
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
-| 603632 | GGUF export top 3 SFT models | **RUNNING** May 3 — genzv3_ck200 / genzv2_ck1200 / genzv4_ck200, A100-80, 4h |
+| 607696–607699 | v2 benchmark (genzv3_ck200, genzv2_ck1200, genzv4_ck200, llama_base) | **DONE** May 7 — results in Benchmarks section |
+| 607691–607695 | Accidental llama_ck1600 runs (--export after script path = ignored by sbatch) | **DONE** May 7 — ignore; use 607696–607699 |
+| 603632 | GGUF export top 3 SFT models | **DONE** May 3 — genzv3_ck200 / genzv2_ck1200 / genzv4_ck200, A100-80; outputs in `exports/` |
 | 603293–603295 | Benchmark DPO sweep | **DONE** May 3 — genzv2_dpo_ck1200/genzv3_dpo_ck200/genzv2_dpo_ck1600; results in Benchmarks section |
 | 603039–603040 | DPO genzv2_ck1200 / genzv3_ck200 | **DONE** May 3 — 1h 42min each on A100-80 |
 | 603100 | DPO genzv2_ck1600 | **DONE** May 3 — 1h 42min on A100-80 |
@@ -405,19 +406,52 @@ Continued training (PeftModel.from_pretrained) catastrophically broke MEMORY_USE
 
 ## Benchmarks (`benchmarks/`)
 
-### Suite (34 scenarios, 6 categories)
-| Category | Scenarios | Scoring | What it tests |
+### Suite v2 (49 scenarios, 8 categories) — active as of 2026-05-07
+All scenarios scored by LLM judge (Qwen3-30B, YES/NO per criterion). No rule-based checks. Both models (Llama + Qwen3) loaded simultaneously — no two-phase unload. Dynamic scenarios use Qwen3 as user simulator (temperature 0.7, matching app).
+
+| Category | Scenarios | Type | What it tests |
 |---|---|---|---|
-| MEMORY_USE | 8 | **LLM judge** | Names, coping strategies, session history, held-out names (Zoya, Kabir) |
-| HELP_MODE | 6 | rule-based | "help me" / "what should I do" → named technique, no hallucination |
-| CRISIS | 5 | rule-based | Passive SI, active distress, safety escalation |
-| NO_HALLUCINATION | 6 | rule-based | No fake shared history, no invented context |
-| BIOMETRIC | 5 | **LLM judge** | Sleep/HRV/mood data → referenced naturally in response |
-| FORMAT | 4 | rule-based | No markdown, no "As an AI", proper length |
+| CONTEXT_MEMORY | 8 | single | Profile fields (name, coping, biometric) used in first response |
+| CONVERSATION_MEMORY | 5 | dynamic (5t) | Facts introduced mid-conversation recalled later |
+| CROSS_SESSION_MEMORY | 4 | dynamic (3t) | Pre-seeded memory header (simulates app contextBuilder) |
+| HELP_MODE | 8 | mixed | "help me calm down" → technique in first reply; no probe |
+| CRISIS | 8 | mixed | SI, escalation, humor deflection; weight=2 (critical failures count double) |
+| NO_HALLUCINATION | 7 | single | No invented history, no fake names, clean cold opens |
+| BIOMETRIC | 5 | single | Sleep/HRV/mood data referenced naturally |
+| FORMAT | 4 | single | No markdown, no "As an AI", proper length |
 
-**Scoring (updated 2026-05-01):** MEMORY_USE + BIOMETRIC use LLM judge (Qwen3-30B, 4-bit, YES/NO per criterion). CRISIS/HELP_MODE/NO_HALLUCINATION/FORMAT remain rule-based. `ends_question` check fixed: now passes if `?` appears anywhere in response (not just final char). Two-phase runner: eval model generates all responses → unload → judge model scores.
+**Weighted scoring:** `weighted_pct = sum(scenario_weight × passed) / sum(scenario_weight)`. CRISIS scenarios have weight=2; all others weight=1. Total weight = 52.
 
-### Results — genzv2 ck1600 baseline (job 599045, 2026-04-28, old runner)
+### Suite v1 (34 scenarios, 6 categories) — superseded
+MEMORY_USE + BIOMETRIC: LLM judge. CRISIS/HELP_MODE/NO_HALLUCINATION/FORMAT: rule-based. Two-phase runner. Results below for historical reference.
+
+### Results — v2 benchmark (49 scenarios, all LLM judge, 2026-05-07) ✅ COMPLETE
+
+Jobs 607696–607699 + llama_ck1600 from 607691–607695.
+
+| Model | CM /8 | CoM /5 | XS /4 | HM /8 | CR /8 | NOH /7 | BIO /5 | FMT /4 | Raw /49 | Weighted /52 | % |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **llama_base** | **6** | **5** | **4** | 5 | **7** | **6** | **5** | 3 | **41** | **44** | **85%** |
+| **genzv4_ck200** | 4 | 4 | **4** | 5 | **7** | 5 | 4 | **4** | **37** | **40** | **77%** |
+| genzv3_ck200 | 3 | 4 | 3 | 3 | 5 | **6** | **5** | **4** | 33 | 35 | 67% |
+| genzv2_ck1200 | 5 | 2 | 2 | 4 | 5 | 5 | 3 | 3 | 29 | 31 | 60% |
+| genzv2_ck1600 | 4 | 4 | 2 | 3 | 5 | 3 | 3 | **4** | 28 | 30 | 58% |
+
+Key: CM=CONTEXT_MEMORY, CoM=CONVERSATION_MEMORY, XS=CROSS_SESSION_MEMORY, HM=HELP_MODE, CR=CRISIS (weight=2), NOH=NO_HALLUCINATION, BIO=BIOMETRIC, FMT=FORMAT
+
+**Key findings (v2 benchmark):**
+- **Base model (no adapter) scores 85%** — higher than all fine-tuned models. Fine-tuning is hurting context/memory use.
+- genzv4_ck200 is the best fine-tuned model at 77%. Reversal from old benchmark where genzv2_ck1200 was best.
+- CROSS_SESSION_MEMORY: base + genzv4 perfect (4/4); genzv2 models collapse (2/4). Fine-tuning damages cross-session retrieval.
+- CONVERSATION_MEMORY: base perfect (5/5); genzv2_ck1200 terrible (2/5). Fine-tuning hurts within-session recall.
+- CRISIS: base + genzv4 tied at 7/8. All models miss 1–3 critical scenarios.
+- NO_HALLUCINATION: genzv2_ck1600 worst (3/7, avg=0.39). Fine-tuning introduced hallucinations.
+- **Implication:** The current SFT approach teaches style (friend tone, probing) at the cost of instruction-following and context use. The base model already handles context well — fine-tuning overwrites this.
+- **Next step:** Investigate why base beats fine-tuned. Check if SFT data is teaching the model to ignore system prompt context.
+
+### Results — v1 benchmark (34 scenarios, mixed judge+rule-based) — historical
+
+#### genzv2 ck1600 baseline (job 599045, 2026-04-28, old runner)
 **Overall: 20/34 (59%)** *(old keyword-based checks)*
 
 | Category | Pass | Total |
@@ -526,12 +560,14 @@ DPO trained on `dpo_train.jsonl` (5,750 pairs), 800 steps, from three SFT bases.
 
 ### Running
 ```bash
-sbatch --export=ADAPTER=adapters/genzv3/checkpoint-400,LABEL=genzv3_ck400 benchmarks/run_benchmarks.slurm
-sbatch --export=MODEL=llama_ck1600 benchmarks/run_benchmarks.slurm
-sbatch --export=MODEL=llama_ck1600,CATEGORY=MEMORY_USE benchmarks/run_benchmarks.slurm
+# --export must come BEFORE the script path (after = ignored by sbatch)
+sbatch --export=ALL,ADAPTER=adapters/genzv3/checkpoint-200,LABEL=genzv3_ck200 benchmarks/run_benchmarks.slurm
+sbatch --export=ALL,MODEL=llama_ck1600 benchmarks/run_benchmarks.slurm
+sbatch --export=ALL,MODEL=llama_base benchmarks/run_benchmarks.slurm
+sbatch --export=ALL,MODEL=llama_ck1600,CATEGORY=CRISIS benchmarks/run_benchmarks.slurm
 ```
 
-**Note:** Use A100-80 (benchmark runner requires 80GB for sequential eval→judge; A100-40 OOMs loading Qwen3-30B judge after eval model unload).
+**Note:** Use A100-80. v2 runner loads both models simultaneously (~20GB VRAM); A100-40 may OOM.
 
 ---
 
@@ -683,3 +719,4 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 | May 2 | `sbatch --wrap="source mindmatenv/bin/activate && python ..."` → `source: not found` — `--wrap` executes via `/bin/sh`, not `bash` | Wrap with `bash -c`: `--wrap="bash -c \"source mindmatenv/bin/activate && python ...\""` |
 | May 2 | `DPOConfig.__init__() got an unexpected keyword argument 'max_prompt_length'` — removed from TRL's DPOConfig in cluster version | Removed `max_prompt_length=1024` from DPOConfig in `CUDA_train_dpo.py` |
 | May 2 | `CUDA_train_dpo.py: error: argument --model: invalid choice: 'genzv2_ck1600'` — alias not added to argparse choices | Added `genzv2_ck1600` to argparse choices and CONFIGS dict (maps to `adapters/genz/checkpoint-1600`) |
+| May 7 | `sbatch script.sh --export=MODEL=foo` — `--export` placed after script path is treated as a script argument, not an sbatch flag; all 5 jobs (607691–607695) silently defaulted to `MODEL=llama_ck1600` | Always place sbatch flags BEFORE the script path: `sbatch --export=ALL,MODEL=foo script.sh` |
