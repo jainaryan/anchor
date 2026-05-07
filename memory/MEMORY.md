@@ -41,7 +41,7 @@ Build a finetuned, local mental-health wellness assistant that runs on Android.
   - Qwen2.5-3B SFT: `finetuning/CUDA_run_pipeline_qwen25_3b.py` → `CUDA_train_qlora_qwen25_3b.py`
   - Gemma 4 E2B IT SFT: `finetuning/CUDA_run_pipeline_gemma4_e2b.py` → `CUDA_train_qlora_gemma4_e2b.py`
   - DPO: `finetuning/CUDA_train_dpo.py --model llama_ck200|qwen25_3b --steps 800`
-- Data: Synthetic dialogues generated via Qwen3-30B-A3B-Instruct-2507 teacher model (bfloat16)
+- Data: Synthetic dialogues generated via Gemma 4 26B A4B IT teacher model (bfloat16, `google/gemma-4-26B-A4B-it`)
 - Export: GGUF Q4_K_M via llama.cpp (`scripts/export_gguf_cuda.py`)
 - **Production webapp:** FastAPI + SSE (`deploy/server.py`), nginx reverse proxy, systemd service
   - URL: https://tryanchor.me
@@ -73,7 +73,7 @@ Build a finetuned, local mental-health wellness assistant that runs on Android.
 - **Cached HuggingFace models on cluster:**
   - `Qwen/Qwen3-1.7B`
   - `Qwen/Qwen2.5-3B-Instruct`
-  - `Qwen/Qwen3-30B-A3B-Instruct-2507` ← teacher model for all data gen
+  - `google/gemma-4-26B-A4B-it` ← teacher model for all data gen (not yet cached — downloads on first run)
   - `meta-llama/Llama-3.2-3B-Instruct`
 
 ---

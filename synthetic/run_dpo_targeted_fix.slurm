@@ -24,7 +24,7 @@
 # Partial recovery file:
 #   data/dpo_targeted_fix_partial.jsonl
 #
-# Requires A100-80 (Qwen3-30B-A3B-Instruct-2507 teacher in bfloat16, ~60GB VRAM)
+# Requires A100-80 (Gemma 4 26B A4B IT teacher in bfloat16, ~52GB VRAM)
 # ─────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -47,6 +47,15 @@ echo ""
 
 cd $SYNTHETIC_DIR
 export USE_4BIT=0
+export TEACHER_MODEL=gemma4
+
+# Gemma 4 is gated — HF_TOKEN required
+if [ -z "${HF_TOKEN:-}" ] && [ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
+  export HF_TOKEN="${HUGGING_FACE_HUB_TOKEN}"
+fi
+if [ -z "${HF_TOKEN:-}" ]; then
+  echo "ERROR: HF_TOKEN not set — Gemma 4 download will fail (gated model)" && exit 1
+fi
 
 echo "[Pipeline] Generating DPO pairs (help_mode + memory_recall)..."
 echo "  Output: $PROJECT_DIR/data/dpo_train.jsonl + dpo_val.jsonl"

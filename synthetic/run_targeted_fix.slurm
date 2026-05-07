@@ -26,6 +26,15 @@ echo ""
 
 cd $PROJECT_DIR
 export USE_4BIT=0
+export TEACHER_MODEL=gemma4
+
+# Gemma 4 is gated — HF_TOKEN required
+if [ -z "${HF_TOKEN:-}" ] && [ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
+  export HF_TOKEN="${HUGGING_FACE_HUB_TOKEN}"
+fi
+if [ -z "${HF_TOKEN:-}" ]; then
+  echo "ERROR: HF_TOKEN not set — Gemma 4 download will fail (gated model)" && exit 1
+fi
 
 echo "Starting targeted fix data pipeline (help_mode + memory_recall)..."
 python synthetic/targeted_fix_pipeline.py

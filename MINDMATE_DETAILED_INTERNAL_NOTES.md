@@ -13,7 +13,7 @@
 MindMate is a finetuned, local mental-health companion that runs on Android. The full pipeline is:
 
 ```
-Synthetic Data (Qwen3-30B teacher)
+Synthetic Data (Gemma 4 26B A4B IT teacher)
 → SFT (QLoRA, Llama 3.2 3B)
 → DPO (preference training on SFT adapter)
 → GGUF Q4_K_M export
@@ -33,7 +33,7 @@ Synthetic Data (Qwen3-30B teacher)
 ### Top-level flow
 
 ```
-Synthetic Data Generation (Qwen3-30B)
+Synthetic Data Generation (Gemma 4 26B A4B IT)
         ↓
   Raw JSONL Data (data/*.jsonl)
         ↓
@@ -217,10 +217,12 @@ All active data uses `conversations` format:
 - Runtime randomization: `randomize_health_context()` in `utils.py` varies sleep hours, mood scores (coherent declining sequence for multi-session), dates, and qualitative descriptors — prevents memorizing specific number strings from 24 fixed profile seeds
 
 ### Teacher model
-- `Qwen/Qwen3-30B-A3B-Instruct-2507` in bfloat16 (~60GB VRAM → requires A100-80)
-- **Always pass `enable_thinking=False`** — Qwen3 is a thinking model
-- `parse_json_robust` strips `<think>` blocks as safety fallback
-- Cached on cluster at `~/.cache/huggingface/hub/`
+- `google/gemma-4-26B-A4B-it` in bfloat16 (~52GB VRAM → requires A100-80)
+- MoE: ~26B total params, ~4B active per token — fast inference
+- Gated model — `HF_TOKEN` must be set on cluster before first use
+- **Will download ~52GB on first run** (~20-30 min); subsequent runs use HF cache
+- `enable_thinking=False` not applicable (Gemma-specific to Qwen3); `parse_json_robust` still strips any stray `<think>` blocks as fallback
+- Set `TEACHER_MODEL=gemma4` (now the default in `synthetic/utils.py`)
 
 ---
 
@@ -652,7 +654,8 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 **A100-80** is best for long jobs. H200-141 only in `gpu` partition (3h limit — not usable for training).
 
 ### Cached HuggingFace models on cluster
-- `Qwen/Qwen3-30B-A3B-Instruct-2507` ← teacher
+- `google/gemma-4-26B-A4B-it` ← teacher (download on first datagen run, ~52GB)
+- `Qwen/Qwen3-30B-A3B-Instruct-2507` ← benchmark judge (still used in run_benchmarks.py)
 - `Qwen/Qwen3-1.7B`
 - `Qwen/Qwen2.5-3B-Instruct`
 - `meta-llama/Llama-3.2-3B-Instruct`

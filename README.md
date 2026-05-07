@@ -24,7 +24,7 @@ A finetuned, local mental-health wellness assistant that runs on Android. Models
 | Base model | Llama 3.2 3B Instruct |
 | SFT | QLoRA (4-bit NF4, PEFT), `CUDA_train_qlora.py` |
 | DPO | TRL DPOTrainer, two-model architecture, `CUDA_train_dpo.py` |
-| Teacher (datagen) | Qwen3-30B-A3B-Instruct-2507 (bfloat16, A100-80) |
+| Teacher (datagen) | Gemma 4 26B A4B IT (bfloat16, ~52GB, A100-80) |
 | Export | GGUF Q4_K_M via llama.cpp, `scripts/export_gguf_cuda.py` |
 | Android runtime | JNI → llama.cpp (`android/llama/src/main/cpp/llama-android.cpp`) |
 | Webapp | FastAPI + SSE (`deploy/server.py`) |
@@ -35,7 +35,7 @@ A finetuned, local mental-health wellness assistant that runs on Android. Models
 ## Training Pipeline
 
 ```
-Synthetic Data (Qwen3-30B teacher)
+Synthetic Data (Gemma 4 26B A4B IT teacher)
         ↓
   SFT: CUDA_run_pipeline.py → CUDA_train_qlora.py
         ↓

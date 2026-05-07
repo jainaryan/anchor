@@ -10,11 +10,14 @@ import time
 
 # Configuration
 # TEACHER_MODEL env var selects the teacher:
-#   "30b"  → Qwen3-30B-A3B MoE (default, ~20GB VRAM, runs on A100-80 in bfloat16)
-#   "72b"  → Qwen3-72B dense (stronger, ~40GB in 4-bit, runs on H100-96 or H200-141)
-_TEACHER = os.environ.get("TEACHER_MODEL", "30b").lower()
+#   "30b"     → Qwen3-30B-A3B MoE (default, ~60GB VRAM bfloat16, A100-80)
+#   "72b"     → Qwen3-72B dense (~40GB in 4-bit, H100-96 or H200-141)
+#   "gemma4"  → Gemma 4 26B A4B MoE (~52GB bfloat16, A100-80, ~4B active params)
+_TEACHER = os.environ.get("TEACHER_MODEL", "gemma4").lower()
 if _TEACHER == "72b":
     MODEL_ID = "Qwen/Qwen3-72B-Instruct"
+elif _TEACHER == "gemma4":
+    MODEL_ID = "google/gemma-4-26B-A4B-it"
 else:
     MODEL_ID = "Qwen/Qwen3-30B-A3B-Instruct-2507"
 
@@ -23,7 +26,7 @@ USE_VLLM = False # Set to True for vLLM deployment
 
 # Set USE_4BIT=1 in environment to load in 4-bit (required for 72B on H100/H200)
 # Default: bfloat16 full precision (higher quality, requires ~60GB VRAM e.g. A100-80)
-# Note: 72B model always forces 4-bit regardless of USE_4BIT setting
+# Note: 72B always forces 4-bit; gemma4 and 30b run bfloat16 on A100-80
 USE_4BIT = os.environ.get("USE_4BIT", "0") == "1" or _TEACHER == "72b"
 
 class TeacherModel:

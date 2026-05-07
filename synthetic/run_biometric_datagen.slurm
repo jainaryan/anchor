@@ -11,8 +11,8 @@
 # ── Biometric Data Generation (SFT + DPO) ────────────────────────────────────
 #
 # Runs both biometric_sft_pipeline.py and biometric_dpo_pipeline.py
-# sequentially. Both use Qwen3-30B-A3B-Instruct-2507 teacher in bfloat16
-# (~60GB VRAM → requires A100-80).
+# sequentially. Both use Gemma 4 26B A4B IT teacher in bfloat16
+# (~52GB VRAM → requires A100-80).
 #
 # SFT pipeline generates:
 #   data/synthetic_train_biometric.jsonl
@@ -51,6 +51,15 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 echo ""
 
 cd $SYNTHETIC_DIR
+export TEACHER_MODEL=gemma4
+
+# Gemma 4 is gated — HF_TOKEN required
+if [ -z "${HF_TOKEN:-}" ] && [ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
+  export HF_TOKEN="${HUGGING_FACE_HUB_TOKEN}"
+fi
+if [ -z "${HF_TOKEN:-}" ]; then
+  echo "ERROR: HF_TOKEN not set — Gemma 4 download will fail (gated model)" && exit 1
+fi
 
 # ── Phase 1: SFT data generation (12 hours) ──────────────────────────────────
 echo ""

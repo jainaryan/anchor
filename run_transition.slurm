@@ -20,8 +20,17 @@ source mindmatenv/bin/activate
 
 uv pip install torch transformers bitsandbytes tqdm accelerate
 
-# A100-80 has 80GB VRAM — run full bfloat16 for higher quality outputs
+# A100-80 has 80GB VRAM — Gemma 4 26B A4B bfloat16 uses ~52GB, fits fine
 export USE_4BIT=0
+export TEACHER_MODEL=gemma4
+
+# Gemma 4 is gated — HF_TOKEN required
+if [ -z "${HF_TOKEN:-}" ] && [ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
+  export HF_TOKEN="${HUGGING_FACE_HUB_TOKEN}"
+fi
+if [ -z "${HF_TOKEN:-}" ]; then
+  echo "ERROR: HF_TOKEN not set — Gemma 4 download will fail (gated model)" && exit 1
+fi
 
 echo "Starting transition dialogue data pipeline..."
 mindmatenv/bin/python synthetic/transition_pipeline.py

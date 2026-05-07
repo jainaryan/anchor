@@ -28,8 +28,17 @@ echo "Clearing old outputs..."
 > synthetic/outputs/scenarios.jsonl
 > synthetic/outputs/dialogues_raw.jsonl
 
-# H100-96 has 96GB VRAM but Qwen3-30B bf16 uses ~60GB — use 4-bit to be safe
-export USE_4BIT=1
+# Gemma 4 26B A4B bfloat16 uses ~52GB — fits fine on H100-96
+export USE_4BIT=0
+export TEACHER_MODEL=gemma4
+
+# Gemma 4 is gated — HF_TOKEN required
+if [ -z "${HF_TOKEN:-}" ] && [ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
+  export HF_TOKEN="${HUGGING_FACE_HUB_TOKEN}"
+fi
+if [ -z "${HF_TOKEN:-}" ]; then
+  echo "ERROR: HF_TOKEN not set — Gemma 4 download will fail (gated model)" && exit 1
+fi
 
 echo "Starting synthetic data pipeline..."
 mindmatenv/bin/python synthetic/pipeline.py
