@@ -36,13 +36,6 @@ from pathlib import Path
 from utils import TeacherModel, parse_json_robust
 
 TARGET = 999999  # wall-time controlled
-BAD_OPENER_PHRASES = [
-    "i hear you", "that sounds really hard", "i understand how you feel",
-    "it sounds like", "let's unpack", "i can imagine how",
-    "that must be", "it's completely normal", "you went quiet",
-    "been a while since", "haven't heard from you",
-]
-
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUTS_DIR = BASE_DIR / "outputs"
 OUT_RAW = OUTPUTS_DIR / "conv_memory_raw.jsonl"
@@ -408,10 +401,10 @@ def heuristic_check(conv: list[dict], profile: dict, new_fact: str) -> bool:
     if not has_context_ref:
         return False
 
-    # Filter therapy-speak openers and hallucination phrases
-    first_assistant = assistant_turns[0].lower()
-    for phrase in BAD_OPENER_PHRASES:
-        if first_assistant.startswith(phrase):
+    # Filter known hallucination phrases only
+    all_assistant_lower = " ".join(assistant_turns).lower()
+    for phrase in ["you went quiet", "been a while since", "haven't heard from you"]:
+        if phrase in all_assistant_lower:
             return False
 
     return True
