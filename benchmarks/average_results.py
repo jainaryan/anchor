@@ -57,8 +57,13 @@ def summarise(groups, min_runs: int = 2):
 
         for run in runs:
             d = run["data"]
-            weighted_pass.append(d["weighted_pass"])
-            weighted_total.append(d["weighted_total"])
+            # Support both flat and nested (overall.weighted_pass) result formats
+            if "weighted_pass" in d:
+                weighted_pass.append(d["weighted_pass"])
+                weighted_total.append(d["weighted_total"])
+            else:
+                weighted_pass.append(d["overall"]["weighted_pass"])
+                weighted_total.append(d["overall"]["weighted_total"])
             for s in d.get("scenarios", []):
                 per_scenario[s["id"]].append(s["passed"])
 
