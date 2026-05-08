@@ -8,7 +8,7 @@
 #SBATCH --mem=32G
 #SBATCH --partition=gpu-long
 #SBATCH --gres=gpu:a100-80:1
-#SBATCH --time=24:00:00
+#SBATCH --time=72:00:00
 
 PROJECT_DIR=~/projects/mindmate
 
