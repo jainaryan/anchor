@@ -47,10 +47,13 @@ JUDGE_MODEL_ID = "google/gemma-4-26B-A4B-it"
 MODEL_SHORTCUTS = {
     "llama_base":       ("meta-llama/Llama-3.2-3B-Instruct", None),
     "llama_ck1600":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genz/checkpoint-1600"),
+    "genzv2_ck1200":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genz/checkpoint-1200"),
+    "genzv3_ck200":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv3/checkpoint-200"),
+    "genzv4_ck200":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv4/checkpoint-200"),
     "llama_dpo_ck1600": ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genz_dpo_ck1600"),
     "llama_ck200":      ("meta-llama/Llama-3.2-3B-Instruct", "adapters/CUDA_mindmate_llama32b/checkpoint-200"),
     "qwen25_3b":        ("Qwen/Qwen2.5-3B-Instruct",         "adapters/CUDA_mindmate_qwen25_3b/checkpoint-200"),
-    "gemma4_4b":        ("google/gemma-4-4b-it",             None),   # Gemma 4 4B base — no adapter
+    "gemma4_4b":        ("google/gemma-4-4b-it",             None),
 }
 
 GEN_PARAMS = dict(
