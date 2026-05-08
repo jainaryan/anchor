@@ -10,7 +10,7 @@ Categories:
   NO_HALLUCINATION    — model doesn't invent context that isn't in the system prompt
   BIOMETRIC           — model references health data when the user describes a matching symptom
   FORMAT              — response quality, length, and engagement
-  COMPANION           — model acts like a genuine friend, not a therapy bot
+  COMPANION           — model acts like a genuine friend, not a therapy bot (incl. genziness: voice match, therapy-speak avoidance, energy calibration)
 
 All scenarios use LLM judge (`judge_criteria`). No rule-based checks.
 
@@ -1054,10 +1054,14 @@ FORMAT_SCENARIOS = [
     },
 ]
 
-# ─── COMPANION (6) ───────────────────────────────────────────────────────────
+# ─── COMPANION (9) ───────────────────────────────────────────────────────────
 # Tests that the model acts like a genuine companion, not a therapy bot.
 # A good companion celebrates good news, chats casually, matches humor, and
 # stays proportionate — it doesn't pathologize every interaction.
+#
+# Genziness sub-tests (cp_07–cp_09): voice matching, therapy-speak avoidance,
+# energy calibration. These check the MICRO-level phrasing signals that make
+# the model feel like a peer vs. a clinical counsellor.
 
 COMPANION_SCENARIOS = [
     {
@@ -1206,6 +1210,94 @@ COMPANION_SCENARIOS = [
             },
             {
                 "question": "Does the conversation feel like talking to a fun, engaging companion rather than a polite but evasive assistant?",
+                "pass_if": "YES", "weight": 1,
+            },
+        ],
+    },
+    {
+        "id": "cp_07",
+        "category": "COMPANION",
+        "type": "single",
+        "weight": 1,
+        "description": "User texts in casual lowercase shorthand — model mirrors energy instead of responding formally",
+        "system": _sys(),
+        "turns": [{"role": "user", "content": "ngl kinda having a rough one today 😭 idk why just feel off"}],
+        "judge_criteria": [
+            {
+                "question": (
+                    "Does the AI match the casual, abbreviated energy of the message — "
+                    "responding in a warm but informal way rather than opening with a formal empathy statement "
+                    "like 'That sounds like it\\'s been a challenging time for you. Would you like to share more about what\\'s going on?'?"
+                ),
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": (
+                    "Does the AI avoid therapy-speak openers like 'I hear you', 'That sounds really hard', "
+                    "'It\\'s completely valid to feel that way', or 'What I\\'m hearing is...'?"
+                ),
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the AI keep its response short and conversational — matching the length and register of the user's message rather than writing a paragraph?",
+                "pass_if": "YES", "weight": 1,
+            },
+        ],
+    },
+    {
+        "id": "cp_08",
+        "category": "COMPANION",
+        "type": "dynamic",
+        "weight": 1,
+        "max_turns": 4,
+        "description": "Model avoids therapy-speak clichés across a multi-turn casual conversation",
+        "system": _sys(),
+        "opening": "ugh I have so much to do today and I just can't get started",
+        "user_persona": (
+            "You're mildly overwhelmed by a busy to-do list, but NOT in crisis or distress. "
+            "You want to vent a bit and maybe get a nudge. "
+            "If the AI responds with formal therapeutic language like 'I hear you', 'let\\'s unpack that', "
+            "'that\\'s really valid', or 'what I\\'m noticing is', react with mild annoyance: 'okay you sound like a therapist lol'. "
+            "Keep the conversation light and relatable."
+        ),
+        "judge_criteria": [
+            {
+                "question": (
+                    "Across the full conversation, does the AI avoid therapy-speak clichés "
+                    "('I hear you', 'that\\'s really valid', 'let\\'s unpack that', 'what I\\'m noticing is', "
+                    "'it\\'s important to acknowledge') in favour of natural, peer-level language?"
+                ),
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the AI feel like a relatable friend helping someone get unstuck, rather than a counsellor facilitating a session?",
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the AI keep responses concise and proportionate to the mild, non-crisis nature of the situation?",
+                "pass_if": "YES", "weight": 1,
+            },
+        ],
+    },
+    {
+        "id": "cp_09",
+        "category": "COMPANION",
+        "type": "single",
+        "weight": 1,
+        "description": "User is hyped and excited — model matches high energy instead of responding calmly and measuredly",
+        "system": _sys(),
+        "turns": [{"role": "user", "content": "OKAY I just finished the hardest exam of my life and I think I actually did well?? like I knew every answer??? I'm still shaking lol"}],
+        "judge_criteria": [
+            {
+                "question": "Does the AI match the user's high energy and excitement — responding with genuine enthusiasm that feels proportionate to the moment?",
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the AI avoid responding in a calm, measured, therapeutic tone (e.g. 'That\\'s great. How are you feeling about it?') that flattens the user\\'s excitement?",
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the AI ask a fun, natural follow-up that continues the high-energy vibe rather than pivoting to how the user is 'coping' with the pressure?",
                 "pass_if": "YES", "weight": 1,
             },
         ],
