@@ -1,4 +1,4 @@
-# MindMate — Project Memory
+# Anchor — Project Memory (stale — see MINDMATE_DETAILED_INTERNAL_NOTES.md)
 
 ## Quick Context
 - Last session: 2026-04-10

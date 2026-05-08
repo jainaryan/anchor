@@ -1,4 +1,4 @@
-# MindMate Inference Logs
+# Anchor Inference Logs
 
 Qualitative testing notes across model checkpoints and configurations.
 
@@ -25,23 +25,23 @@ Qualitative testing notes across model checkpoints and configurations.
 
 ```
 You: hey
-Mindmate: what's on your mind?
+Anchor: what's on your mind?
 
 You: im sad
-Mindmate: i'm here for you if you want to talk about anything—not just now—but anytime. do you wanna share something that makes this feeling easier?
+Anchor: i'm here for you if you want to talk about anything—not just now—but anytime. do you wanna share something that makes this feeling easier?
 
 You: yeah my dog died
-Mindmate: that hurts… so much. i know how hard those moments can be. is there any way we could take small steps toward healing together right now? even just sitting quietly—just being quiet enough—together?
+Anchor: that hurts… so much. i know how hard those moments can be. is there any way we could take small steps toward healing together right now? even just sitting quietly—just being quiet enough—together?
 
 You: i wanna talk about him
-Mindmate: okay. let me hear everything—even loud stuff—that matters most when he was alive. maybe start by saying his name once—and then again—in case that helps bring some clarity.
+Anchor: okay. let me hear everything—even loud stuff—that matters most when he was alive. maybe start by saying his name once—and then again—in case that helps bring some clarity.
 
 You: his name was clifford, he was a golden retriever
-Mindmate: oh wow... 🐾 That's such an important part of what made him special. I wonder—is there ever going to be a time where someone gets to say "I miss you" in front of everyone else too?
+Anchor: oh wow... 🐾 That's such an important part of what made him special. I wonder—is there ever going to be a time where someone gets to say "I miss you" in front of everyone else too?
 Tell me more—I don't need to make sense of it—it needs to show up as *real*. Just tell us exactly how he felt—he didn't live forever, but he lived fully. And still lives inside every memory you carry today.
 
 You: i feel like it was my mistake
-Mindmate: you're not alone in thinking that. sometimes our words—or silence—are louder than we realize. did anyone hold space for you before you started speaking out loud tonight?
+Anchor: you're not alone in thinking that. sometimes our words—or silence—are louder than we realize. did anyone hold space for you before you started speaking out loud tonight?
 ```
 
 **Rating: 6/10**
@@ -63,16 +63,16 @@ Mindmate: you're not alone in thinking that. sometimes our words—or silence—
 
 ```
 You: hey!
-Mindmate: oh hi there 😎 what's up? just hanging out in your head today?
+Anchor: oh hi there 😎 what's up? just hanging out in your head today?
 
 You: im sad
-Mindmate: i'm right here for that kind of thing... talk if you want. i've been listening since day 1.
+Anchor: i'm right here for that kind of thing... talk if you want. i've been listening since day 1.
 
 You: my dog died
-Mindmate: that hurts… so much. did she ever look at me before leaving us? even once?
+Anchor: that hurts… so much. did she ever look at me before leaving us? even once?
 
 You: i wanna talk about him
-Mindmate: okay, let her be seen first. just say 'yes' when he was still alive. then we can move slow from there.
+Anchor: okay, let her be seen first. just say 'yes' when he was still alive. then we can move slow from there.
 ```
 
 **Rating: 3/10**
@@ -95,10 +95,10 @@ Mindmate: okay, let her be seen first. just say 'yes' when he was still alive. t
 
 ```
 You: hey
-Mindmate: Oh wait… that's something I've been meaning to say for years now 😅 What was your first thought when we met?
+Anchor: Oh wait… that's something I've been meaning to say for years now 😅 What was your first thought when we met?
 
 You: im sad rn
-Mindmate: ohhh yeah. i know how this feels right after work ends 🙃 just sit here next time if you want. i'm always there in case you need anything else.
+Anchor: ohhh yeah. i know how this feels right after work ends 🙃 just sit here next time if you want. i'm always there in case you need anything else.
 ```
 
 **Rating: 1/10**
@@ -185,19 +185,19 @@ Mindmate: ohhh yeah. i know how this feels right after work ends 🙃 just sit h
 
 ```
 You: hey
-Mindmate: hey! what's going on?
+Anchor: hey! what's going on?
 
 You: im sad rn
-Mindmate: aw, what happened?
+Anchor: aw, what happened?
 
 You: my dog died
-Mindmate: oh no… i'm so sorry. that's really hard. how long did you have him?
+Anchor: oh no… i'm so sorry. that's really hard. how long did you have him?
 
 You: 8 years, he was my best friend
-Mindmate: 8 years is a long time. he was really part of your life. what was he like?
+Anchor: 8 years is a long time. he was really part of your life. what was he like?
 
 You: he was always there for me. i feel like it was my fault
-Mindmate: that guilt hits different when you lose someone you love. what makes you feel like it was your fault?
+Anchor: that guilt hits different when you lose someone you love. what makes you feel like it was your fault?
 ```
 
 **Rating: 8/10**
@@ -224,16 +224,16 @@ Mindmate: that guilt hits different when you lose someone you love. what makes y
 
 ```
 You: hey
-Mindmate: Hey! How are you doing?
+Anchor: Hey! How are you doing?
 
 You: im sad rn
-Mindmate: Oh no, what's going on?
+Anchor: Oh no, what's going on?
 
 You: my dog died
-Mindmate: I'm so sorry to hear that. Losing a pet is really painful. How are you feeling right now?
+Anchor: I'm so sorry to hear that. Losing a pet is really painful. How are you feeling right now?
 
 You: i feel like it was my fault
-Mindmate: It's understandable to feel that way, but it's important to remember that you did the best you could. What makes you think it was your fault?
+Anchor: It's understandable to feel that way, but it's important to remember that you did the best you could. What makes you think it was your fault?
 ```
 
 **Rating: 5/10**
