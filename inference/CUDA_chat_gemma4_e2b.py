@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 from threading import Thread
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, TextIteratorStreamer
+from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
 from peft import PeftModel
 
 # ========= ARGS =========
@@ -70,18 +70,11 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
     tokenizer.pad_token = tokenizer.eos_token
 
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
-    )
-
     model = AutoModelForCausalLM.from_pretrained(
         BASE_MODEL,
-        quantization_config=bnb_config,
         device_map="auto",
-        attn_implementation="eager",  # required for Gemma 4
+        torch_dtype=torch.bfloat16,
+        attn_implementation="eager",
     )
     model.config.use_cache = True
 
@@ -95,7 +88,7 @@ def main():
         return m
 
     model = unwrap_gemma4_clippable_linears(model)
-    print("[gemma4-fix] Unwrapped Gemma4ClippableLinear → inner Linear4bit for PEFT compatibility.")
+    print("[gemma4-fix] Unwrapped Gemma4ClippableLinear for PEFT compatibility.")
 
     print(f"[info] loading adapter from {ADAPTER_DIR}")
     model = PeftModel.from_pretrained(model, str(ADAPTER_DIR))

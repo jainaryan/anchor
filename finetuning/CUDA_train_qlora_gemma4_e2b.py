@@ -6,7 +6,6 @@ from transformers import (
     TrainingArguments,
     Trainer,
     DataCollatorForSeq2Seq,
-    BitsAndBytesConfig,
 )
 from peft import LoraConfig, get_peft_model
 import os
@@ -42,23 +41,16 @@ if not TRAIN_FILE.exists() or not VAL_FILE.exists():
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_DIR)
 tokenizer.pad_token = tokenizer.eos_token
 
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True,
-)
-
 model = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL_DIR,
-    quantization_config=bnb_config,
     device_map="auto",
+    torch_dtype=torch.bfloat16,
     attn_implementation="eager",
 )
 
 # Gemma 4 wraps its linear layers in Gemma4ClippableLinear, which PEFT's LoRA
 # injector doesn't recognise. Replace each wrapper with its inner Linear4bit so
-# PEFT sees a standard quantised linear and can inject adapters normally.
+# PEFT sees the unwrapped linear and can inject adapters normally.
 # The clipping constraint only applies to base-weight updates; since LoRA keeps
 # the base weights frozen this is safe.
 def unwrap_gemma4_clippable_linears(model):
@@ -69,7 +61,7 @@ def unwrap_gemma4_clippable_linears(model):
     return model
 
 model = unwrap_gemma4_clippable_linears(model)
-print("[gemma4-fix] Unwrapped Gemma4ClippableLinear → inner Linear4bit for PEFT compatibility.")
+print("[gemma4-fix] Unwrapped Gemma4ClippableLinear for PEFT compatibility.")
 
 lora_config = LoraConfig(
     r=8,

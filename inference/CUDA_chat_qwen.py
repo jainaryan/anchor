@@ -6,7 +6,7 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 from threading import Thread
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, TextIteratorStreamer
+from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
 from peft import PeftModel
 
 # ========= ARGS =========
@@ -77,29 +77,20 @@ def save_conversation(history: list, log_dir: Path):
 def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"[info] project root: {PROJECT_ROOT}")
-    print(f"[info] loading tokenizer and model (4-bit NF4)...")
-    
+    print(f"[info] loading tokenizer and model (bfloat16)...")
+
     tokenizer = AutoTokenizer.from_pretrained(
-        str(MODEL_DIR), 
+        str(MODEL_DIR),
         trust_remote_code=True
     )
     tokenizer.pad_token = tokenizer.eos_token
-    
-    quant_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True
-    )
-    
+
     model = AutoModelForCausalLM.from_pretrained(
         str(MODEL_DIR),
-        quantization_config=quant_config,
         device_map="auto",
-        torch_dtype=torch.float16,
+        torch_dtype=torch.bfloat16,
         low_cpu_mem_usage=True,
         trust_remote_code=True,
-        # attn_implementation="sdpa", # Qwen might not support sdpa out of the box in the same way, best to let it choose based on env
     )
     model.config.use_cache = True
     

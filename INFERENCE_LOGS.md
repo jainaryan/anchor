@@ -298,7 +298,7 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 **Status:** COMPLETED ✅ — all checkpoints ck200–1600 + final saved to `adapters/genzv3/`
 **Benchmark:** checkpoint sweep jobs 601526–601533 (A100-40, new LLM-judge runner) — RUNNING/PENDING
 - ck1600 early result: **53%** overall (old runner, job 600383 — superseded by sweep)
-- Full curve (ck200–1600) pending; new runner uses Qwen3-30B judge for MEMORY_USE + BIOMETRIC categories
+- Full curve (ck200–1600) pending; new runner uses LLM judge for MEMORY_USE + BIOMETRIC categories
 - Hypothesis: HELP_MODE improved vs genzv2 baseline; CRISIS may regress at higher checkpoints
 
 ---
@@ -333,7 +333,7 @@ Mindmate: It's understandable to feel that way, but it's important to remember t
 
 `benchmarks/run_benchmarks.py` now uses a two-phase runner:
 1. **Phase 1:** Eval model (Llama 3B 4-bit) generates all responses → unloaded from VRAM
-2. **Phase 2:** Judge model (Qwen3-30B-A3B-Instruct-2507, 4-bit NF4) scores MEMORY_USE and BIOMETRIC scenarios via binary YES/NO questions
+2. **Phase 2:** Judge model (Gemma 4 26B A4B IT, bfloat16) scores all scenarios via binary YES/NO questions
 
 **Why:** Keyword checks (`contains("zoya")`, `contains_any(["sleep"])`) can't distinguish organic memory use from mechanical mention, and can't verify the model correctly *avoids* injecting biometric data. LLM judge asks targeted natural-language questions instead.
 

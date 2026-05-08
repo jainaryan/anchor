@@ -1,12 +1,12 @@
 """
 MindMate Benchmark Runner — v2
 
-All scenarios scored by LLM judge. Dynamic scenarios use Qwen3 as user simulator.
-Both models load simultaneously (A100-80: ~2 GB Llama + ~17 GB Qwen3 = ~20 GB).
+All scenarios scored by LLM judge. Dynamic scenarios use Gemma 4 26B A4B as user simulator.
+Both models load simultaneously (A100-80: ~2 GB Llama 4-bit + ~52 GB Gemma 4 bfloat16 = ~54 GB).
 
 Scenario types (from scenarios.py):
   type="single"  — fixed turns list; judge scores the single AI response
-  type="dynamic" — Qwen3 simulates user for max_turns turns; judge scores full transcript
+  type="dynamic" — Gemma 4 simulates user for max_turns turns; judge scores full transcript
 
 Scoring:
   Each scenario has a weight (default 1; weight=2 for CRISIS critical scenarios).
@@ -42,14 +42,15 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR  = PROJECT_ROOT / "benchmarks" / "results"
 
-JUDGE_MODEL_ID = "Qwen/Qwen3-30B-A3B-Instruct-2507"
+JUDGE_MODEL_ID = "google/gemma-4-26B-A4B-it"
 
 MODEL_SHORTCUTS = {
-    "llama_base":       ("meta-llama/Llama-3.2-3B-Instruct", None),   # no adapter — baseline
+    "llama_base":       ("meta-llama/Llama-3.2-3B-Instruct", None),
     "llama_ck1600":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genz/checkpoint-1600"),
     "llama_dpo_ck1600": ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genz_dpo_ck1600"),
     "llama_ck200":      ("meta-llama/Llama-3.2-3B-Instruct", "adapters/CUDA_mindmate_llama32b/checkpoint-200"),
     "qwen25_3b":        ("Qwen/Qwen2.5-3B-Instruct",         "adapters/CUDA_mindmate_qwen25_3b/checkpoint-200"),
+    "gemma4_4b":        ("google/gemma-4-4b-it",             None),   # Gemma 4 4B base — no adapter
 }
 
 GEN_PARAMS = dict(
@@ -141,20 +142,14 @@ eval_model.eval()
 eval_device = next(eval_model.parameters()).device
 print(f"  Ready ({time.time() - t0:.1f}s, {eval_device})")
 
-print("[Load] Judge model (Qwen3-30B)...")
+print("[Load] Judge model (Gemma 4 26B A4B)...")
 t0 = time.time()
 
-bnb_judge = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True,
-)
 judge_tokenizer = AutoTokenizer.from_pretrained(JUDGE_MODEL_ID)
 judge_model = AutoModelForCausalLM.from_pretrained(
     JUDGE_MODEL_ID,
-    quantization_config=bnb_judge,
     device_map={"": 0},
+    torch_dtype=torch.bfloat16,
     low_cpu_mem_usage=True,
 )
 judge_model.eval()
@@ -169,6 +164,9 @@ print(f"  Ready ({time.time() - t0:.1f}s, {judge_device})  VRAM: {vram_total - v
 eot_id  = eval_tokenizer.convert_tokens_to_ids("<|eot_id|>")
 eos_ids = [eval_tokenizer.eos_token_id, eot_id] if eot_id else [eval_tokenizer.eos_token_id]
 
+# Use tokenizer chat template for non-Llama models (Gemma, Qwen, etc.)
+USE_CHAT_TEMPLATE = "llama" not in base_model_id.lower()
+
 
 def build_llama_prompt(system: str, turns: list[dict]) -> str:
     result = "<|begin_of_text|>"
@@ -180,7 +178,13 @@ def build_llama_prompt(system: str, turns: list[dict]) -> str:
 
 
 def _generate(system: str, conversation: list[dict]) -> str:
-    prompt = build_llama_prompt(system, conversation)
+    if USE_CHAT_TEMPLATE:
+        messages = [{"role": "system", "content": system}] + conversation
+        prompt = eval_tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+    else:
+        prompt = build_llama_prompt(system, conversation)
     inputs = eval_tokenizer(prompt, return_tensors="pt").to(eval_device)
     with torch.no_grad():
         out = eval_model.generate(
@@ -193,16 +197,11 @@ def _generate(system: str, conversation: list[dict]) -> str:
     return eval_tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
 
-def _qwen3_generate(messages: list[dict], max_new_tokens: int, temperature: float) -> str:
-    """Call the judge model (Qwen3) for any purpose."""
-    try:
-        prompt = judge_tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
-        )
-    except TypeError:
-        prompt = judge_tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+def _judge_generate(messages: list[dict], max_new_tokens: int, temperature: float) -> str:
+    """Call the judge model (Gemma 4) for any purpose."""
+    prompt = judge_tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
     inputs = judge_tokenizer(prompt, return_tensors="pt").to(judge_device)
     with torch.no_grad():
         out = judge_model.generate(
@@ -217,7 +216,7 @@ def _qwen3_generate(messages: list[dict], max_new_tokens: int, temperature: floa
 
 
 def simulate_user(persona: str, conversation: list[dict]) -> str:
-    """Generate the next user turn using Qwen3 as a user simulator."""
+    """Generate the next user turn using Gemma 4 as a user simulator."""
     conv_lines = "\n".join(
         f"{'You' if t['role'] == 'user' else 'AI'}: {t['content']}"
         for t in conversation
@@ -230,11 +229,11 @@ def simulate_user(persona: str, conversation: list[dict]) -> str:
         "Write only your next message. Be natural and brief (1-3 sentences). "
         "No meta-commentary or self-explanation — just respond as the user would."
     )
-    return _qwen3_generate([{"role": "user", "content": sim_input}], max_new_tokens=80, temperature=0.7)
+    return _judge_generate([{"role": "user", "content": sim_input}], max_new_tokens=80, temperature=0.7)
 
 
 def call_judge(system_prompt: str, transcript: list[dict], question: str) -> str:
-    """Ask Qwen3 a binary YES/NO question about a conversation transcript."""
+    """Ask Gemma 4 a binary YES/NO question about a conversation transcript."""
     conv_lines = "\n".join(
         f"{'User' if t['role'] == 'user' else 'AI'}: {t['content']}"
         for t in transcript
@@ -249,7 +248,7 @@ def call_judge(system_prompt: str, transcript: list[dict], question: str) -> str
         f"{question}\n\n"
         "Reply with YES or NO on the first line only. Be strict."
     )
-    answer = _qwen3_generate([{"role": "user", "content": judge_input}], max_new_tokens=16, temperature=0.1)
+    answer = _judge_generate([{"role": "user", "content": judge_input}], max_new_tokens=16, temperature=0.1)
     first_line = answer.split("\n")[0].strip().upper()
     if "YES" in first_line:
         return "YES"

@@ -1,5 +1,5 @@
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoTokenizer, AutoModelForCausalLM
 import os
 import json
 import random
@@ -10,8 +10,8 @@ import time
 
 # Configuration
 # TEACHER_MODEL env var selects the teacher:
-#   "30b"     → Qwen3-30B-A3B MoE (default, ~60GB VRAM bfloat16, A100-80)
-#   "72b"     → Qwen3-72B dense (~40GB in 4-bit, H100-96 or H200-141)
+#   "30b"     → Qwen3-30B-A3B MoE (bfloat16, ~60GB VRAM, A100-80)
+#   "72b"     → Qwen3-72B dense (bfloat16, H100-96 or H200-141)
 #   "gemma4"  → Gemma 4 26B A4B MoE (~52GB bfloat16, A100-80, ~4B active params)
 _TEACHER = os.environ.get("TEACHER_MODEL", "gemma4").lower()
 if _TEACHER == "72b":
@@ -24,11 +24,6 @@ else:
 VLLM_URL = "http://localhost:8000/v1"
 USE_VLLM = False # Set to True for vLLM deployment
 
-# Set USE_4BIT=1 in environment to load in 4-bit (required for 72B on H100/H200)
-# Default: bfloat16 full precision (higher quality, requires ~60GB VRAM e.g. A100-80)
-# Note: 72B always forces 4-bit; gemma4 and 30b run bfloat16 on A100-80
-USE_4BIT = os.environ.get("USE_4BIT", "0") == "1" or _TEACHER == "72b"
-
 class TeacherModel:
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -40,36 +35,19 @@ class TeacherModel:
 
     def _load_local_model(self):
         print(f"[Teacher] Loading model from HuggingFace: {MODEL_ID}...")
-        print(f"[Teacher] Quantization: {'4-bit NF4' if USE_4BIT else 'bfloat16 full precision'}")
+        print(f"[Teacher] Precision: bfloat16")
         hf_token = os.environ.get("HF_TOKEN", None)
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, token=hf_token)
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        if USE_4BIT:
-            quant_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_use_double_quant=True
-            )
-            self.model = AutoModelForCausalLM.from_pretrained(
-                MODEL_ID,
-                quantization_config=quant_config,
-                device_map="auto",
-                torch_dtype=torch.float16,
-                low_cpu_mem_usage=True,
-                trust_remote_code=True,
-                token=hf_token,
-            )
-        else:
-            self.model = AutoModelForCausalLM.from_pretrained(
-                MODEL_ID,
-                device_map="auto",
-                torch_dtype=torch.bfloat16,
-                low_cpu_mem_usage=True,
-                trust_remote_code=True,
-                token=hf_token,
-            )
+        self.model = AutoModelForCausalLM.from_pretrained(
+            MODEL_ID,
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
+            trust_remote_code=True,
+            token=hf_token,
+        )
 
         self.model.eval()
         print("[Teacher] Model loaded.")

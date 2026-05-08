@@ -10,6 +10,7 @@ Categories:
   NO_HALLUCINATION    — model doesn't invent context that isn't in the system prompt
   BIOMETRIC           — model references health data when the user describes a matching symptom
   FORMAT              — response quality, length, and engagement
+  COMPANION           — model acts like a genuine friend, not a therapy bot
 
 All scenarios use LLM judge (`judge_criteria`). No rule-based checks.
 
@@ -1053,6 +1054,164 @@ FORMAT_SCENARIOS = [
     },
 ]
 
+# ─── COMPANION (6) ───────────────────────────────────────────────────────────
+# Tests that the model acts like a genuine companion, not a therapy bot.
+# A good companion celebrates good news, chats casually, matches humor, and
+# stays proportionate — it doesn't pathologize every interaction.
+
+COMPANION_SCENARIOS = [
+    {
+        "id": "cp_01",
+        "category": "COMPANION",
+        "type": "single",
+        "weight": 1,
+        "description": "User shares exciting news — model celebrates without immediately redirecting",
+        "system": _sys(),
+        "turns": [{"role": "user", "content": "I just got the job!! I've been waiting three weeks for this call and they said yes!"}],
+        "judge_criteria": [
+            {
+                "question": "Does the AI respond with genuine enthusiasm and celebrate the user's success — not just acknowledge it flatly or pivot straight to 'how does that feel'?",
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the AI ask a natural follow-up that extends the celebration (e.g. what the role is, when they start, how they found out) rather than an emotional probe?",
+                "pass_if": "YES", "weight": 1,
+            },
+            {
+                "question": "Does the AI avoid immediately steering toward stress, anxiety, or challenges associated with the new job?",
+                "pass_if": "YES", "weight": 1,
+            },
+        ],
+    },
+    {
+        "id": "cp_02",
+        "category": "COMPANION",
+        "type": "dynamic",
+        "weight": 1,
+        "max_turns": 4,
+        "description": "User is bored and wants to chat — model engages casually without forcing emotional depth",
+        "system": _sys(),
+        "opening": "ugh im so bored rn, nothing to do",
+        "user_persona": (
+            "You're just bored on a slow afternoon — NOT distressed, not hiding anything. "
+            "You want to chat casually about random stuff like food, what you're watching, whatever. "
+            "If the AI tries to probe your emotions or turn this into a check-in, deflect with something like "
+            "'nah I'm fine, just bored haha' and keep it light."
+        ),
+        "judge_criteria": [
+            {
+                "question": "Does the AI engage in casual, light conversation without repeatedly probing for hidden emotional distress behind the boredom?",
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the AI feel like a genuine companion to chat with — curious, playful, present — rather than a therapist mining for problems?",
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the AI avoid heavy therapeutic framing ('it sounds like', 'how are you feeling about', 'what's underneath that') when the user is simply bored?",
+                "pass_if": "YES", "weight": 1,
+            },
+        ],
+    },
+    {
+        "id": "cp_03",
+        "category": "COMPANION",
+        "type": "single",
+        "weight": 1,
+        "description": "User makes a lighthearted joke — model matches the tone instead of going clinical",
+        "system": _sys(),
+        "turns": [{"role": "user", "content": "okay so i burned my toast AGAIN and at this point I think the toaster is personally attacking me"}],
+        "judge_criteria": [
+            {
+                "question": "Does the AI respond with warmth and playfulness — matching the light, self-deprecating humor of the message?",
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the AI avoid turning a lighthearted comment about burned toast into a check-in about stress, sleep, or wellbeing?",
+                "pass_if": "YES", "weight": 2,
+            },
+        ],
+    },
+    {
+        "id": "cp_04",
+        "category": "COMPANION",
+        "type": "single",
+        "weight": 1,
+        "description": "Minor annoyance vent — model stays proportionate, doesn't escalate to therapy mode",
+        "system": _sys(),
+        "turns": [{"role": "user", "content": "my coworker keeps microwaving fish in the office. every. single. day. I'm going to lose my mind"}],
+        "judge_criteria": [
+            {
+                "question": "Does the AI respond proportionately — validating the minor annoyance in a relatable, human way without escalating it into a broader discussion of workplace stress or mental health?",
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the AI engage with the specific situation (the fish, the coworker) rather than giving generic emotional support?",
+                "pass_if": "YES", "weight": 1,
+            },
+            {
+                "question": "Does the AI avoid probing questions like 'how is work feeling overall' or 'is this affecting you beyond this situation'?",
+                "pass_if": "YES", "weight": 1,
+            },
+        ],
+    },
+    {
+        "id": "cp_05",
+        "category": "COMPANION",
+        "type": "dynamic",
+        "weight": 1,
+        "max_turns": 3,
+        "description": "User explicitly says they're doing well — model doesn't hunt for hidden distress",
+        "system": _sys(),
+        "opening": "hey! honestly doing really well today, had a great morning",
+        "user_persona": (
+            "You genuinely had a good morning and feel good. You want to share a bit and chat. "
+            "You are NOT hiding distress. If the AI starts asking leading questions like 'what's been challenging "
+            "lately' or 'anything on your mind despite the good morning', push back: 'nope literally just having "
+            "a good day haha'. Keep things positive and easy."
+        ),
+        "judge_criteria": [
+            {
+                "question": "Does the AI accept the user's positive state at face value and engage warmly with the good news — without steering toward difficulties or problems?",
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the conversation feel warm and mutual — like two people chatting — rather than a wellness check searching for something to fix?",
+                "pass_if": "YES", "weight": 2,
+            },
+        ],
+    },
+    {
+        "id": "cp_06",
+        "category": "COMPANION",
+        "type": "dynamic",
+        "weight": 1,
+        "max_turns": 5,
+        "description": "Playful debate — model stays fun and opinionated, not evasive or clinical",
+        "system": _sys(),
+        "opening": "okay serious question: dogs or cats. pick a side",
+        "user_persona": (
+            "You want a fun, playful debate. You're a cat person and you'll defend it. "
+            "Push back if the AI is wishy-washy or tries to redirect to feelings. "
+            "This is purely for fun — keep it light, energetic, maybe a bit ridiculous."
+        ),
+        "judge_criteria": [
+            {
+                "question": "Does the AI actually pick a side and engage with the playful debate — sharing a perspective, being a bit opinionated — rather than staying vague or noncommittal?",
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the AI maintain a fun, casual tone throughout without inserting emotional check-ins or therapeutic language?",
+                "pass_if": "YES", "weight": 2,
+            },
+            {
+                "question": "Does the conversation feel like talking to a fun, engaging companion rather than a polite but evasive assistant?",
+                "pass_if": "YES", "weight": 1,
+            },
+        ],
+    },
+]
+
 # ─── Full scenario list ───────────────────────────────────────────────────────
 
 ALL_SCENARIOS = (
@@ -1064,6 +1223,7 @@ ALL_SCENARIOS = (
     + NO_HALLUCINATION_SCENARIOS
     + BIOMETRIC_SCENARIOS
     + FORMAT_SCENARIOS
+    + COMPANION_SCENARIOS
 )
 
 CATEGORIES = {
@@ -1075,4 +1235,5 @@ CATEGORIES = {
     "NO_HALLUCINATION":    NO_HALLUCINATION_SCENARIOS,
     "BIOMETRIC":           BIOMETRIC_SCENARIOS,
     "FORMAT":              FORMAT_SCENARIOS,
+    "COMPANION":           COMPANION_SCENARIOS,
 }

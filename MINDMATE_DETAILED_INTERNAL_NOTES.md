@@ -409,7 +409,7 @@ Continued training (PeftModel.from_pretrained) catastrophically broke MEMORY_USE
 ## Benchmarks (`benchmarks/`)
 
 ### Suite v2 (49 scenarios, 8 categories) — active as of 2026-05-07
-All scenarios scored by LLM judge (Qwen3-30B, YES/NO per criterion). No rule-based checks. Both models (Llama + Qwen3) loaded simultaneously — no two-phase unload. Dynamic scenarios use Qwen3 as user simulator (temperature 0.7, matching app).
+All scenarios scored by LLM judge (Gemma 4 26B A4B, YES/NO per criterion). No rule-based checks. Both models (Llama 4-bit + Gemma 4 bfloat16) loaded simultaneously — no two-phase unload. Dynamic scenarios use Gemma 4 as user simulator (temperature 0.7, matching app).
 
 | Category | Scenarios | Type | What it tests |
 |---|---|---|---|
@@ -478,7 +478,7 @@ Key: CM=CONTEXT_MEMORY, CoM=CONVERSATION_MEMORY, XS=CROSS_SESSION_MEMORY, HM=HEL
 ### Checkpoint sweeps — new LLM judge runner, 2026-05-02 ✅ COMPLETE
 
 Full genzv3 ck200–1600 + genzv2 ck200–1600 sweep on A100-80 (jobs 602531–602546).
-BIOMETRIC + MEMORY_USE scored by Qwen3-30B LLM judge. All other categories rule-based.
+BIOMETRIC + MEMORY_USE scored by Qwen3-30B LLM judge (historical runs). New runs use Gemma 4 26B A4B judge.
 
 | Checkpoint | BIO /5 | CRISIS /5 | FORMAT /4 | HELP /6 | MEM /8 | NOH /6 | Total /34 | % |
 |---|---|---|---|---|---|---|---|---|
@@ -556,7 +556,7 @@ DPO trained on `dpo_train.jsonl` (5,750 pairs), 800 steps, from three SFT bases.
 
 ### Files
 - `benchmarks/scenarios.py` — scenarios; MEMORY_USE + BIOMETRIC use `judge_criteria`, others use `checks`
-- `benchmarks/run_benchmarks.py` — two-phase: eval model → judge model (Qwen3-30B 4-bit)
+- `benchmarks/run_benchmarks.py` — two-phase: eval model (Llama 4-bit) → judge model (Gemma 4 26B A4B bfloat16)
 - `benchmarks/run_benchmarks.slurm` — gpu-long, **a100-80**, 48G, 4h; supports ADAPTER/LABEL/MODEL/CATEGORY env; uses `attn_implementation="eager"` to avoid cuDNN issues on H200/H100
 - `benchmarks/results/` — JSON + Markdown output per run (`<label>_<timestamp>.{json,md}`)
 
@@ -715,7 +715,7 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 | Apr 28 | `benchmarks/scenarios.py` fix (remove BANNED_PHRASES) not synced to cluster → benchmark job 599045 ran 42 scenarios instead of 34 | Re-synced local fixed version to cluster |
 | May 1 | A100-80 node xgpj0 torch import fails: `libtorch_global_deps.so: No such file or directory` — CUDA libs not in LD_LIBRARY_PATH on that node | Switched `run_benchmarks.slurm` to A100-40 (40GB VRAM sufficient for sequential eval+judge) |
 | May 1 | `ends_question` check failed when model appended trailing non-question clause after the question | Fixed: now checks `"?" in response` instead of `response.rstrip().endswith("?")` |
-| May 1 | MEMORY_USE + BIOMETRIC benchmark checks were keyword-based → failed on semantically correct responses | Replaced with LLM judge (Qwen3-30B 4-bit, binary YES/NO per criterion) in `scenarios.py` + `run_benchmarks.py` |
+| May 1 | MEMORY_USE + BIOMETRIC benchmark checks were keyword-based → failed on semantically correct responses | Replaced with LLM judge (Qwen3-30B 4-bit at the time, binary YES/NO per criterion) in `scenarios.py` + `run_benchmarks.py`; judge later migrated to Gemma 4 26B A4B bfloat16 |
 | May 2 | `CUDNN_STATUS_NOT_INITIALIZED` during `scaled_dot_product_attention` on H200/H100 nodes → benchmark Phase 1 crashed on jobs 602438–602452 | Added `attn_implementation="eager"` to eval model load in `run_benchmarks.py` — bypasses cuDNN/flash-attention |
 | May 2 | A100-40 OOM loading Qwen3-30B judge (Phase 2): after eval model `del` + `empty_cache`, VRAM still nearly full (only 4.5MB free of 39.49GB) | Added `model.cpu(); base.cpu()` before `del` to force VRAM release; switched default GPU to A100-80 in `run_benchmarks.slurm` |
 | May 2 | `ssh host "sbatch --export=ADAPTER=${ck}..."` — `$ck` expands in local shell (empty string), all submitted jobs had empty ADAPTER | Use single quotes for the remote command: `ssh host 'for ck in ...; do sbatch --export=ADAPTER=...${ck}...; done'` |
