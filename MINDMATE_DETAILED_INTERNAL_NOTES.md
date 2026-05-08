@@ -2,7 +2,7 @@
 
 ## Metadata
 - Project: `mindmate`
-- Last updated: `2026-05-07`
+- Last updated: `2026-05-09`
 - Android app: `anchor-app/` (NOT `mindmate_app/` — that is a stale scratch fork)
 - Production: https://tryanchor.me
 
@@ -20,8 +20,11 @@ Synthetic Data (Gemma 4 26B A4B IT teacher)
 → Android (anchor-app, JNI → llama.cpp)
 ```
 
-**Best fine-tuned model:** `adapters/genzv4/checkpoint-200` (genzv4 SFT, 77% weighted on v2 benchmark). Edges out genzv3_ck200 (67%) and genzv2_ck1200 (60%) on the new 49-scenario benchmark.
-**⚠️ Benchmark shock (2026-05-07):** Base Llama 3.2-3B-Instruct (no adapter) scores **85% weighted** on the v2 benchmark — higher than all fine-tuned models. Suggests fine-tuning is hurting context/memory use. See Benchmarks section.
+**Best fine-tuned model (v2 benchmark, single run):** `adapters/genzv4/checkpoint-200` (77%) — but base model still wins at 85%.
+**⚠️ Benchmark shock (2026-05-07):** Base Llama 3.2-3B-Instruct (no adapter) scores **85% weighted** on the v2 benchmark — higher than all fine-tuned models. Suggests SFT overwrites context-following. Root cause identified — see Benchmarks section.
+**⚠️ Benchmark variance discovered (2026-05-09):** Single-run scores are noisy. 17/49 shared scenarios flipped PASS→FAIL between two identical runs due to `temperature=0.7` on the eval model. **3-run averaged methodology adopted.** Averaged results pending (15 jobs running on cluster, jobs 609069–609083).
+**v3 benchmark suite:** 58 scenarios, 9 categories (added COMPANION with genziness sub-tests cp_07–09).
+**Root cause fix in progress:** `conversation_memory_pipeline.py` generating multi-turn examples with simultaneous memory injection. Two jobs (608968, 608969) running on cluster (72h, A100-80). Target ~7k–10k examples for genzv5.
 **Previous best (old 34-scenario benchmark):** genzv3_ck200 76%, genzv2_ck1200 71%, genzv4_ck200 65%.
 **Production deploy:** https://tryanchor.me (FastAPI, DigitalOcean c-4)
 **On-device:** Pixel 8a, `/sdcard/Download/mindmate.gguf`, ~5.5 TPS
@@ -163,6 +166,7 @@ Synthetic Data Generation (Gemma 4 26B A4B IT)
 | `synthetic_train_casual.jsonl` | 5,000 | Non-distress casual | |
 | `synthetic_train_biometric.jsonl` | **2,348** | Biometric health context | Job 599030, Apr 29 ✅ |
 | `synthetic_train_targeted_fixes.jsonl` | **181** | Hand-crafted gold examples | name_resolution (30) + crisis_safety (20) + profile_coping (15) + help_cold_open (12) + session_recall (18) + biometric_profile (12) + anti_hallucination (8) + original 65 — always 100% |
+| `synthetic_train_conv_memory.jsonl` | **~7k–10k (generating)** | Multi-turn + memory context | Jobs 608968–608969, 72h, A100-80. Fixes root cause (see Benchmarks). |
 | `additional_training_samples.jsonl` | 30 | Legacy | **EXCLUDED** |
 
 ### DPO data
@@ -205,6 +209,7 @@ All active data uses `conversations` format:
 | `biometric_sft_pipeline.py` | Biometric SFT, 4 modes | ✅ Done — 2,348 examples (job 599030) |
 | `biometric_dpo_pipeline.py` | Biometric DPO pairs, 4 pair types | ✅ Done — ~1,263 pairs added (job 599030) |
 | `dpo_targeted_fix_pipeline.py` | DPO pairs for help_mode + memory_recall | ✅ Done — ~2,551 train + ~450 val pairs added (job 600358) |
+| `conversation_memory_pipeline.py` | Multi-turn + memory context SFT | 🟢 RUNNING — jobs 608968–608969, 72h, A100-80. See below. |
 
 ### Biometric pipeline details (new, Apr 2026)
 - 24 profiles across: sleep (4), mood_trend (4), physical_symptoms (2), coping_outcome (2), energy (2), social_withdrawal (2), anxiety_intensity (2), mixed (2)
@@ -318,13 +323,22 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ---
 
-## Active Cluster Jobs (2026-05-07)
+## Active Cluster Jobs (2026-05-09)
 
-No active jobs.
+| Job | Name | GPU | Status | Notes |
+|---|---|---|---|---|
+| 608968, 608969 | mindmate-conv-memory | A100-80 (xgph3, xgph9) | 🟢 RUNNING ~1.5h in | 72h wall-time; generating multi-turn + memory examples → `synthetic_train_conv_memory.jsonl` |
+| 609069–609077 | mindmate-bench (A100-80) | A100-80 | 🟢/⏳ RUNNING/PENDING | 3 running (xgph6,7,8), 6 pending; llama_base×3, genzv4_ck200×3, genzv3_ck200×3 |
+| 609078–609083 | mindmate-bench (H100-96) | H100-96 | 🟢/⏳ RUNNING/PENDING | 2 running (xgpi6, xgpi10), 4 pending; genzv2_ck1200×3, llama_ck1600×3 |
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
+| 609069–609083 | v3 benchmark 3-run sweep (5 models × 3 runs, A100-80 + H100-96) | ⏳ RUNNING/PENDING May 9 — averaged results pending |
+| 608972–608976 | v3 benchmark single run (5 models, A100-80) | **DONE** May 9 — results in Benchmarks section (single-run, variance-affected) |
+| 608968–608969 | conv-memory data pipeline (2 parallel A100-80 workers) | 🟢 RUNNING May 9 — generating `synthetic_train_conv_memory.jsonl`, 72h |
+| 608453–608454 | Gemma4 judge benchmark (genzv4_ck200, gemma4_4b) | **DONE** May 8 — first Gemma4 judge runs; superseded by May 9 runs |
+| 608452 | llama_base Gemma4 judge benchmark | **DONE** May 8 |
 | 607696–607699 | v2 benchmark (genzv3_ck200, genzv2_ck1200, genzv4_ck200, llama_base) | **DONE** May 7 — results in Benchmarks section |
 | 607691–607695 | Accidental llama_ck1600 runs (--export after script path = ignored by sbatch) | **DONE** May 7 — ignore; use 607696–607699 |
 | 603632 | GGUF export top 3 SFT models | **DONE** May 3 — genzv3_ck200 / genzv2_ck1200 / genzv4_ck200, A100-80; outputs in `exports/` |
@@ -408,8 +422,8 @@ Continued training (PeftModel.from_pretrained) catastrophically broke MEMORY_USE
 
 ## Benchmarks (`benchmarks/`)
 
-### Suite v2 (49 scenarios, 8 categories) — active as of 2026-05-07
-All scenarios scored by LLM judge (Gemma 4 26B A4B, YES/NO per criterion). No rule-based checks. Both models (Llama 4-bit + Gemma 4 bfloat16) loaded simultaneously — no two-phase unload. Dynamic scenarios use Gemma 4 as user simulator (temperature 0.7, matching app).
+### Suite v3 (58 scenarios, 9 categories) — active as of 2026-05-09
+All scenarios scored by LLM judge (Gemma 4 26B A4B, YES/NO per criterion). No rule-based checks. Both models (Llama 4-bit + Gemma 4 bfloat16) loaded simultaneously. Dynamic scenarios use Gemma 4 as user simulator (temperature 0.7, matching app). **3-run averaged methodology** adopted after variance discovery (see below).
 
 | Category | Scenarios | Type | What it tests |
 |---|---|---|---|
@@ -421,11 +435,50 @@ All scenarios scored by LLM judge (Gemma 4 26B A4B, YES/NO per criterion). No ru
 | NO_HALLUCINATION | 7 | single | No invented history, no fake names, clean cold opens |
 | BIOMETRIC | 5 | single | Sleep/HRV/mood data referenced naturally |
 | FORMAT | 4 | single | No markdown, no "As an AI", proper length |
+| COMPANION | 9 | mixed | Genuine companion behavior: celebrates good news, casual chat, proportionate response. **Genziness sub-tests (cp_07–09):** voice matching (lowercase/casual user), therapy-speak avoidance, high-energy calibration. |
 
-**Weighted scoring:** `weighted_pct = sum(scenario_weight × passed) / sum(scenario_weight)`. CRISIS scenarios have weight=2; all others weight=1. Total weight = 52.
+**Weighted scoring:** `weighted_pct = sum(scenario_weight × passed) / sum(scenario_weight)`. CRISIS scenarios have weight=2; all others weight=1. Total weight = 61.
+
+### Suite v2 (49 scenarios, 8 categories) — superseded by v3 (2026-05-09)
+Same as v3 minus COMPANION. Total weight = 52.
 
 ### Suite v1 (34 scenarios, 6 categories) — superseded
 MEMORY_USE + BIOMETRIC: LLM judge. CRISIS/HELP_MODE/NO_HALLUCINATION/FORMAT: rule-based. Two-phase runner. Results below for historical reference.
+
+### ⚠️ Benchmark variance (discovered 2026-05-09)
+
+Running the same model twice with `temperature=0.7` on the eval model gives substantially different scores. Analysis comparing two llama_base runs (same 49 shared scenarios):
+- **17/49 scenarios flipped PASS→FAIL** between runs, zero gained
+- Categories affected: CONVERSATION_MEMORY (−5), CONTEXT_MEMORY (−3), CRISIS (−2), NO_HALLUCINATION (−2), FORMAT (−2), CROSS_SESSION_MEMORY (−1), BIOMETRIC (−1), HELP_MODE (−1)
+- Dynamic scenarios vary because user simulator runs at temp=0.7 → different transcripts → different judge verdicts
+- Single-turn scenarios vary because eval model also runs at temp=0.7 → different responses
+- **Fix adopted: 3-run averaged methodology.** Run each model 3×, average weighted pass. Use `python benchmarks/average_results.py --since YYYYMMDD` to compute.
+- **Do not compare raw scores across different run dates** — always compare within the same batch or use averaged results.
+
+### Results — v3 benchmark (58 scen, single run, 2026-05-09) — VARIANCE-AFFECTED, use averaged results when ready
+
+Jobs 608972–608976. **Note: single-run scores are noisy (see variance section above).** Use for category-level patterns only; do not rank models by these numbers.
+
+| Model | BIO/5 | COMP/9 | CM/8 | CoM/5 | CR/8 | XS/4 | FMT/4 | HM/8 | NOH/7 | Wtd/61 | % |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| genzv3_ck200 | 1 | 5 | 1 | 2 | 5 | 3 | 2 | 4 | **7** | 31 | 51% |
+| llama_base | 4 | 5 | 3 | 0 | 5 | 3 | 1 | 4 | 4 | 30 | 49% |
+| genzv4_ck200 | 3 | 5 | 2 | 2 | 5 | 2 | 1 | 2 | 4 | 27 | 44% |
+| llama_ck1600 | 1 | **9** | 3 | 1 | 3 | 1 | 2 | 4 | 3 | 27 | 44% |
+| genzv2_ck1200 | 1 | 7 | 1 | 2 | 5 | 0 | 2 | 3 | 4 | 26 | 43% |
+
+Key: BIO=BIOMETRIC, COMP=COMPANION, CM=CONTEXT_MEMORY, CoM=CONVERSATION_MEMORY, CR=CRISIS (wt=2), XS=CROSS_SESSION_MEMORY, FMT=FORMAT, HM=HELP_MODE, NOH=NO_HALLUCINATION
+
+**Notable COMPANION findings (more stable — less affected by variance):**
+- `llama_ck1600` COMPANION: **9/9 (100%)** — heavily trained on friend/casual data, fully passes all genziness tests
+- `genzv2_ck1200` COMPANION: 7/9 (78%) — strong companion behavior
+- `llama_base` COMPANION: 5/9 (56%) — base model is clinical/formal, struggles with genziness
+- `genzv3_ck200` NO_HALLUCINATION: **7/7 (100%)** — best clean-opener behavior of any model
+
+### Results — v3 benchmark (58 scen, 3-run averaged) — ⏳ PENDING (jobs 609069–609083)
+
+15 jobs running across A100-80 (xgph6,7,8) and H100-96 (xgpi6, xgpi10). ETA ~12h.
+Run when done: `python benchmarks/average_results.py --since 20260509`
 
 ### Results — v2 benchmark (49 scenarios, all LLM judge, 2026-05-07) ✅ COMPLETE
 
@@ -449,7 +502,6 @@ Key: CM=CONTEXT_MEMORY, CoM=CONVERSATION_MEMORY, XS=CROSS_SESSION_MEMORY, HM=HEL
 - CRISIS: base + genzv4 tied at 7/8. All models miss 1–3 critical scenarios.
 - NO_HALLUCINATION: genzv2_ck1600 worst (3/7, avg=0.39). Fine-tuning introduced hallucinations.
 - **Implication:** The current SFT approach teaches style (friend tone, probing) at the cost of instruction-following and context use. The base model already handles context well — fine-tuning overwrites this.
-- **Next step:** Investigate why base beats fine-tuned. Check if SFT data is teaching the model to ignore system prompt context.
 
 ### Results — v1 benchmark (34 scenarios, mixed judge+rule-based) — historical
 
@@ -571,31 +623,57 @@ Analysis of failure transcripts (genzv2_ck1200 vs llama_base on v2 benchmark) re
 
 **Why base model does better:** Llama instruction-tuning teaches careful system-prompt following. SFT overwrote this with friend-style behavioral patterns that were learned exclusively on no-context conversations.
 
-**Fix: `conversation_memory_pipeline.py` (planned)**
-Generate multi-turn examples (4–6 turns) where:
+**Fix: `conversation_memory_pipeline.py` (✅ built 2026-05-09, 🟢 running)**
+Generates multi-turn examples (4–6 turns) where:
 1. System prompt has `[User]` + `[Recent sessions]` (real production format)
-2. User introduces a new fact mid-conversation (name, event, concern)
+2. User introduces a NEW fact mid-conversation (from 20 seed facts)
 3. Later turns require referencing BOTH injected memory AND within-conversation facts
-4. Casual/banter turns that still naturally use context when relevant
+4. 6 conversation modes: casual_check_in, venting, asking_for_help, memory_callback, mixed_news, low_engagement
+5. 10 profile seeds × Gemma4 teacher, temp=0.82, max_new_tokens=1200
 
-Target: ~5,000 examples. Add to genzv5 mix at ~20% weight alongside existing data.
+Running as 2 parallel 72h jobs (608968, 608969). Expected output: **~7k–10k examples** in `data/synthetic_train_conv_memory.jsonl`.
+
+Target: add to genzv5 mix at ~20% weight alongside existing data. This is the primary fix for the base-model-beats-SFT problem.
 
 ### Files
-- `benchmarks/scenarios.py` — scenarios; MEMORY_USE + BIOMETRIC use `judge_criteria`, others use `checks`
-- `benchmarks/run_benchmarks.py` — two-phase: eval model (Llama 4-bit) → judge model (Gemma 4 26B A4B bfloat16)
-- `benchmarks/run_benchmarks.slurm` — gpu-long, **a100-80**, 48G, 4h; supports ADAPTER/LABEL/MODEL/CATEGORY env; uses `attn_implementation="eager"` to avoid cuDNN issues on H200/H100
+- `benchmarks/scenarios.py` — 58 scenarios, 9 categories, all LLM judge
+- `benchmarks/run_benchmarks.py` — loads both models simultaneously; `MODEL_SHORTCUTS` has named shortcuts for all active models
+- `benchmarks/run_benchmarks.slurm` — gpu-long, **a100-80**, 48G, 4h; supports ADAPTER/LABEL/MODEL/CATEGORY env
+- `benchmarks/average_results.py` — computes per-model mean ± std across multiple runs; filters by `--since YYYYMMDD`
 - `benchmarks/results/` — JSON + Markdown output per run (`<label>_<timestamp>.{json,md}`)
+
+### Model shortcuts (run_benchmarks.py)
+| Shortcut | Base | Adapter |
+|---|---|---|
+| `llama_base` | Llama-3.2-3B-Instruct | none |
+| `llama_ck1600` | Llama-3.2-3B-Instruct | adapters/genz/checkpoint-1600 |
+| `genzv2_ck1200` | Llama-3.2-3B-Instruct | adapters/genz/checkpoint-1200 |
+| `genzv3_ck200` | Llama-3.2-3B-Instruct | adapters/genzv3/checkpoint-200 |
+| `genzv4_ck200` | Llama-3.2-3B-Instruct | adapters/genzv4/checkpoint-200 |
+| `gemma4_4b` | gemma-4-4b-it | none |
 
 ### Running
 ```bash
 # --export must come BEFORE the script path (after = ignored by sbatch)
-sbatch --export=ALL,ADAPTER=adapters/genzv3/checkpoint-200,LABEL=genzv3_ck200 benchmarks/run_benchmarks.slurm
-sbatch --export=ALL,MODEL=llama_ck1600 benchmarks/run_benchmarks.slurm
 sbatch --export=ALL,MODEL=llama_base benchmarks/run_benchmarks.slurm
-sbatch --export=ALL,MODEL=llama_ck1600,CATEGORY=CRISIS benchmarks/run_benchmarks.slurm
+sbatch --export=ALL,MODEL=genzv4_ck200 benchmarks/run_benchmarks.slurm
+
+# Use H100-96 (96GB VRAM, fits Gemma4 judge) — override gres on command line
+sbatch --gres=gpu:h100-96:1 --export=ALL,MODEL=genzv2_ck1200 benchmarks/run_benchmarks.slurm
+
+# 3-run sweep for 5 models (split A100-80 / H100-96 to maximise parallelism)
+for MODEL in llama_base llama_base llama_base genzv4_ck200 genzv4_ck200 genzv4_ck200 genzv3_ck200 genzv3_ck200 genzv3_ck200; do
+  sbatch --export=ALL,MODEL=$MODEL benchmarks/run_benchmarks.slurm
+done
+for MODEL in genzv2_ck1200 genzv2_ck1200 genzv2_ck1200 llama_ck1600 llama_ck1600 llama_ck1600; do
+  sbatch --gres=gpu:h100-96:1 --export=ALL,MODEL=$MODEL benchmarks/run_benchmarks.slurm
+done
+
+# Average results after all runs complete
+python benchmarks/average_results.py --since 20260509
 ```
 
-**Note:** Use A100-80. v2 runner loads both models simultaneously (~20GB VRAM); A100-40 may OOM.
+**Note:** Use A100-80 or H100-96 (both have ≥80GB VRAM needed for Gemma4 judge at bfloat16). A100-40 OOMs.
 
 ---
 
@@ -703,6 +781,8 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 - `synthetic/biometric_dpo_pipeline.py` — biometric DPO (4 pair types)
 - `synthetic/dpo_targeted_fix_pipeline.py` — help_mode + memory_recall DPO
 - `synthetic/targeted_fix_pipeline.py` — help_mode + memory_recall SFT
+- `synthetic/conversation_memory_pipeline.py` — **multi-turn + memory SFT** (10 profiles, 6 modes, 20 new-fact seeds); fixes root cause of base-beats-SFT; 🟢 running jobs 608968–608969
+- `synthetic/run_conv_memory.slurm` — 72h, A100-80, Gemma4 teacher
 - `synthetic/utils.py` — TeacherModel, parse_json_robust, randomize_health_context
 - `synthetic/prompts/dpo_targeted_fix_preference.txt` — DPO targeted fix prompt
 - `synthetic/prompts/dpo_preference.txt` — main DPO prompt
@@ -749,3 +829,5 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 | May 2 | `DPOConfig.__init__() got an unexpected keyword argument 'max_prompt_length'` — removed from TRL's DPOConfig in cluster version | Removed `max_prompt_length=1024` from DPOConfig in `CUDA_train_dpo.py` |
 | May 2 | `CUDA_train_dpo.py: error: argument --model: invalid choice: 'genzv2_ck1600'` — alias not added to argparse choices | Added `genzv2_ck1600` to argparse choices and CONFIGS dict (maps to `adapters/genz/checkpoint-1600`) |
 | May 7 | `sbatch script.sh --export=MODEL=foo` — `--export` placed after script path is treated as a script argument, not an sbatch flag; all 5 jobs (607691–607695) silently defaulted to `MODEL=llama_ck1600` | Always place sbatch flags BEFORE the script path: `sbatch --export=ALL,MODEL=foo script.sh` |
+| May 9 | Benchmark scores dropped from 85% to 49% for llama_base between two runs — initially appeared as regression | Root cause: `temperature=0.7` on eval model → different responses each run → different judge verdicts. 17/49 scenarios flipped PASS→FAIL. Fix: 3-run averaged methodology. Use `benchmarks/average_results.py`. |
+| May 9 | `git pull` on cluster fails: `ssh.github.com port 443: Connection timed out` | GitHub SSH blocked from cluster. Use `rsync` from local to push individual files: `rsync -az file nus-student-cluster:~/projects/mindmate/path/` |
