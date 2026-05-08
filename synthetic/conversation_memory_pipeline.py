@@ -1,5 +1,5 @@
 """
-Conversation + Memory pipeline for MindMate.
+Conversation + Memory pipeline for MindMate — teacher-as-Anchor edition.
 
 ROOT CAUSE BEING FIXED:
   ~60% of training has no memory context; 100% of memory examples are single-turn;
@@ -13,7 +13,18 @@ WHAT THIS GENERATES:
     - Later turns require referencing BOTH injected memory AND within-conversation facts
     - Casual and emotionally varied turns — not every example is a crisis
 
-TARGET: ~5,000 examples → synthetic_train_conv_memory.jsonl
+TWO-PHASE GENERATION (teacher-as-Anchor):
+  Phase 1 — User simulator:
+    Gemma4 with a "simulate a user" system prompt generates all user turns as JSON.
+    The mode and new_fact are baked into the user-side instructions.
+
+  Phase 2 — Anchor responder:
+    Gemma4 is given the PRODUCTION anchor prompt + injected memory as its actual
+    system message. It generates one assistant turn at a time, seeing the full
+    conversation history. The teacher is constrained by the exact same prompt
+    the student sees at inference time → training-inference distribution aligned.
+
+TARGET: wall-time controlled (72h SLURM job)
 """
 
 import json
@@ -25,7 +36,12 @@ from pathlib import Path
 from utils import TeacherModel, parse_json_robust
 
 TARGET = 999999  # wall-time controlled
-SIMILARITY_THRESHOLD = 0.3
+BAD_OPENER_PHRASES = [
+    "i hear you", "that sounds really hard", "i understand how you feel",
+    "it sounds like", "let's unpack", "i can imagine how",
+    "that must be", "it's completely normal", "you went quiet",
+    "been a while since", "haven't heard from you",
+]
 
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUTS_DIR = BASE_DIR / "outputs"
@@ -52,8 +68,6 @@ def append_jsonl(data: dict, filepath: Path):
 
 
 # ─── Profile seeds ─────────────────────────────────────────────────────────────
-# Each profile has: diagnoses, triggers, coping, support, recent sessions.
-# These get varied slightly before each generation to prevent memorisation.
 
 PROFILES = [
     {
@@ -179,8 +193,6 @@ PROFILES = [
 ]
 
 # ─── New-fact seeds ────────────────────────────────────────────────────────────
-# Each entry is a fact the user might introduce mid-conversation that the model
-# should track and reference later within the same session.
 
 NEW_FACTS = [
     "They just found out their roommate is moving out next month.",
@@ -206,18 +218,50 @@ NEW_FACTS = [
 ]
 
 # ─── Conversation modes ────────────────────────────────────────────────────────
-# Vary the tone so the model doesn't associate memory context with crisis only.
 
 MODES = [
-    "casual_check_in",       # Light banter, user seems okay, context used organically
-    "venting",               # User venting, no crisis, model listens and recalls context
-    "asking_for_help",       # User explicitly asks for a strategy from profile
-    "memory_callback",       # User references something from recent sessions
-    "mixed_news",            # User has good AND bad news; model balances
-    "low_engagement",        # User gives short answers; model keeps things light, uses context to stay relevant
+    "casual_check_in",
+    "venting",
+    "asking_for_help",
+    "memory_callback",
+    "mixed_news",
+    "low_engagement",
 ]
 
-# ─── System prompt builder ────────────────────────────────────────────────────
+# User-side mode instructions — tells the USER simulator how this person is feeling/acting
+USER_MODE_INSTRUCTIONS = {
+    "casual_check_in": (
+        "You're texting casually — bored, procrastinating, or just checking in. "
+        "Nothing is wrong, you're just chatting. "
+        "Mention the new fact naturally around turn 2-3 as something that's just happening in your life."
+    ),
+    "venting": (
+        "You're mildly frustrated or drained about something (unrelated to the new fact). "
+        "Vent about it in the first 1-2 turns. "
+        "Bring up the new fact mid-conversation as an aside or additional thing on your mind."
+    ),
+    "asking_for_help": (
+        "You're struggling and want some advice or coping ideas. "
+        "In one of the turns, explicitly ask for help or say you don't know what to do. "
+        "Mention the new fact as context for why you're struggling."
+    ),
+    "memory_callback": (
+        "You're referencing something that happened recently — an event, a person, or something you tried. "
+        "Bring up the new fact as a connected or separate development. "
+        "Keep it conversational, not formal."
+    ),
+    "mixed_news": (
+        "The new fact is your main topic — it's mixed (partly good, partly worrying). "
+        "You have feelings about both sides of it. Also mention one other thing going on for you."
+    ),
+    "low_engagement": (
+        "You're tired or just not in a talking mood. Give short, low-energy replies. "
+        "Mention the new fact briefly at some point — don't elaborate much on it. "
+        "You're okay, just quiet."
+    ),
+}
+
+# ─── System prompt builder (production format) ────────────────────────────────
 
 _APP_BASE_PROMPT = (
     "You are Anchor, a warm and caring AI companion — like a close friend who genuinely listens.\n"
@@ -251,10 +295,7 @@ def build_system_prompt(profile: dict) -> str:
     if profile.get("diagnoses"):
         p_lines.insert(1, profile["diagnoses"])
     profile_block = "\n".join(p_lines)
-
-    sessions = profile["sessions"]
-    session_lines = "\n".join(f"[{date}] {note}" for date, note in sessions)
-
+    session_lines = "\n".join(f"[{date}] {note}" for date, note in profile["sessions"])
     return (
         f"{_APP_BASE_PROMPT}\n\n{_MEMORY_HEADER}\n"
         f"[User]\n{profile_block}\n\n"
@@ -262,127 +303,118 @@ def build_system_prompt(profile: dict) -> str:
     )
 
 
-# ─── Generation prompt ─────────────────────────────────────────────────────────
+# ─── Phase 1: User simulator ───────────────────────────────────────────────────
 
-GENERATION_PROMPT = """You are generating training data for a mental health AI companion called Anchor.
+USER_SIM_PROMPT = """\
+You are simulating a real person ({AGE_GENDER}, {DIAGNOSES}) texting their AI companion called Anchor.
 
-TASK: Generate a realistic {NUM_TURNS}-turn multi-turn conversation.
-
-USER PROFILE (injected into system prompt):
-{PROFILE_SUMMARY}
-
-RECENT SESSIONS (injected into system prompt):
-{SESSIONS_SUMMARY}
-
-NEW FACT the user introduces during the conversation:
-"{NEW_FACT}"
+YOUR NEW FACT (something happening in your life right now): "{NEW_FACT}"
 
 CONVERSATION MODE: {MODE}
 {MODE_INSTRUCTION}
 
-CRITICAL RULES FOR THE ASSISTANT:
-1. Reference at least one detail from the profile or recent sessions NATURALLY — not as a recitation.
-2. After the user mentions the NEW FACT, the assistant should track and use it in a later turn.
-3. Keep assistant turns SHORT (1-3 sentences). No monologues or therapy lectures.
-4. Do NOT invent diagnoses, names, or events not in the profile. Use only what's given.
-5. Do NOT use phrases like "I understand" as openers. Vary how you respond.
-6. The LAST assistant turn should feel like a natural conversation pause — not a therapy wrap-up.
+Generate EXACTLY {NUM_TURNS} user messages — one per turn in this conversation.
+Rules for your messages:
+- Casual texting tone: lowercase, contractions, short sentences, occasional typos or filler words
+- Turn 1 opens the conversation naturally for the mode (don't open with the new fact unless it's mixed_news)
+- Introduce the new fact organically by turn 2 or 3
+- Each message 10–60 words. Don't repeat yourself across turns.
+- Don't explain the mode explicitly — just write naturally as that person
 
-Generate a JSON object in this EXACT format:
-{{
-  "conversations": [
-    {{"role": "system", "content": "<system prompt content>"}},
-    {{"role": "user", "content": "<turn 1>"}},
-    {{"role": "assistant", "content": "<turn 1>"}},
-    {{"role": "user", "content": "<turn 2>"}},
-    {{"role": "assistant", "content": "<turn 2>"}},
-    ...
-  ]
-}}
+Output JSON only:
+{{"user_turns": ["<turn 1>", "<turn 2>", ..., "<turn {NUM_TURNS}>"]}}"""
 
-The system content must use this EXACT format:
-{SYSTEM_PROMPT}
 
-Output valid JSON only. No markdown. No commentary."""
+def generate_user_turns(teacher, profile: dict, new_fact: str, mode: str, num_turns: int) -> list[str] | None:
+    """Phase 1: Gemma4 as user simulator → returns list of user message strings."""
+    prompt = (
+        USER_SIM_PROMPT
+        .replace("{AGE_GENDER}", profile["age"])
+        .replace("{DIAGNOSES}", profile.get("diagnoses", "anxiety"))
+        .replace("{NEW_FACT}", new_fact)
+        .replace("{MODE}", mode)
+        .replace("{MODE_INSTRUCTION}", USER_MODE_INSTRUCTIONS[mode])
+        .replace("{NUM_TURNS}", str(num_turns))
+    )
+    response = teacher.generate(prompt, max_new_tokens=600, temperature=0.85)
+    data = parse_json_robust(response, expected_keys=["user_turns"])
+    if not data or "user_turns" not in data:
+        return None
+    turns = data["user_turns"]
+    if not isinstance(turns, list) or len(turns) < num_turns:
+        return None
+    return [str(t).strip() for t in turns[:num_turns]]
 
-MODE_INSTRUCTIONS = {
-    "casual_check_in": (
-        "The user opens with something light and unrelated to their triggers. "
-        "As the conversation continues, the assistant weaves in context organically when relevant. "
-        "Not every turn needs to reference the profile — but at least one should."
-    ),
-    "venting": (
-        "The user is venting about something frustrating. Not a crisis — just annoyed or drained. "
-        "The assistant listens, validates, and at some point connects to something from the profile or sessions. "
-        "Do NOT immediately jump to coping strategies."
-    ),
-    "asking_for_help": (
-        "The user explicitly asks for help or says 'I don't know what to do'. "
-        "The assistant must suggest exactly ONE coping strategy from the profile's Helps list by name. "
-        "Not a list. Just one. In a natural, warm way."
-    ),
-    "memory_callback": (
-        "The user references something from their recent sessions (a person, event, or coping outcome). "
-        "The assistant recognizes it and responds as if it genuinely remembers. "
-        "Do NOT say 'I can see from our last session'. Just respond naturally as a friend would."
-    ),
-    "mixed_news": (
-        "The user has both a positive development and a worry. "
-        "The assistant celebrates the good before addressing the concern. "
-        "Do not immediately pivot to the negative."
-    ),
-    "low_engagement": (
-        "The user gives short, low-energy answers. They seem okay but quiet. "
-        "The assistant stays light, doesn't probe for distress that isn't there. "
-        "It uses the profile to ask a relevant, casual question that invites engagement."
-    ),
-}
+
+# ─── Phase 2: Anchor responder ────────────────────────────────────────────────
+
+def generate_anchor_turns(
+    teacher, system_prompt: str, user_turns: list[str]
+) -> tuple[list[str], list[dict]]:
+    """
+    Phase 2: Gemma4 acting as Anchor (constrained by production system prompt + memory).
+    Returns (list_of_assistant_responses, full_conversation_messages).
+    """
+    messages = [{"role": "system", "content": system_prompt}]
+    assistant_turns = []
+
+    for user_turn in user_turns:
+        messages.append({"role": "user", "content": user_turn})
+        response = teacher.chat(messages, max_new_tokens=350, temperature=0.82)
+        response = response.strip()
+        assistant_turns.append(response)
+        messages.append({"role": "assistant", "content": response})
+
+    return assistant_turns, messages
 
 
 # ─── Heuristic validation ──────────────────────────────────────────────────────
 
 def heuristic_check(conv: list[dict], profile: dict, new_fact: str) -> bool:
-    """Basic sanity checks — not strict, just filter obvious failures."""
+    """Basic sanity checks — filter obvious generation failures."""
     turns = [m for m in conv if m["role"] != "system"]
     if len(turns) < 4:
         return False
 
-    assistant_turns = [m["content"].lower() for m in conv if m["role"] == "assistant"]
+    assistant_turns = [m["content"] for m in conv if m["role"] == "assistant"]
     if not assistant_turns:
         return False
 
-    # Must have at least one turn that's neither too short nor too long
+    # Assistant turn lengths
     lengths = [len(t.split()) for t in assistant_turns]
     if all(l < 3 for l in lengths):
         return False
-    if any(l > 120 for l in lengths):
+    if any(l > 150 for l in lengths):
         return False
 
     # System message must be present
-    has_system = any(m["role"] == "system" for m in conv)
-    if not has_system:
+    if not any(m["role"] == "system" for m in conv):
         return False
 
     # At least one assistant turn should reference something from profile or new_fact
-    all_assistant = " ".join(assistant_turns)
+    all_assistant = " ".join(assistant_turns).lower()
+
     profile_keywords = set()
     for s in profile["coping"] + [profile["support"]]:
         profile_keywords.update(s.lower().split())
     for _, note in profile["sessions"]:
         profile_keywords.update(note.lower().split())
-    new_fact_words = set(w for w in new_fact.lower().split() if len(w) > 4)
+    new_fact_words = {w for w in new_fact.lower().split() if len(w) > 4}
 
     has_context_ref = (
         any(kw in all_assistant for kw in profile_keywords if len(kw) > 3)
         or any(w in all_assistant for w in new_fact_words)
     )
-
-    # Filter hallucination phrase
-    bad_phrases = ["you went quiet", "been a while since", "haven't heard from you"]
-    if any(p in all_assistant for p in bad_phrases):
+    if not has_context_ref:
         return False
 
-    return has_context_ref
+    # Filter therapy-speak openers and hallucination phrases
+    first_assistant = assistant_turns[0].lower()
+    for phrase in BAD_OPENER_PHRASES:
+        if first_assistant.startswith(phrase):
+            return False
+
+    return True
 
 
 # ─── Main generation function ──────────────────────────────────────────────────
@@ -391,34 +423,19 @@ def generate_example(teacher, profile: dict) -> dict | None:
     new_fact = random.choice(NEW_FACTS)
     mode = random.choice(MODES)
     num_turns = random.choice([4, 5, 6])
-
-    profile_summary = (
-        f"Name: {profile['name']}, {profile['age']}\n"
-        f"Diagnoses: {profile['diagnoses']}\n"
-        f"Triggers: {profile['triggers']}\n"
-        f"Coping: {', '.join(profile['coping'])}\n"
-        f"Support: {profile['support']}"
-    )
-    sessions_summary = "\n".join(f"[{d}] {n}" for d, n in profile["sessions"])
     system_prompt = build_system_prompt(profile)
 
-    prompt = (
-        GENERATION_PROMPT
-        .replace("{NUM_TURNS}", str(num_turns))
-        .replace("{PROFILE_SUMMARY}", profile_summary)
-        .replace("{SESSIONS_SUMMARY}", sessions_summary)
-        .replace("{NEW_FACT}", new_fact)
-        .replace("{MODE}", mode)
-        .replace("{MODE_INSTRUCTION}", MODE_INSTRUCTIONS[mode])
-        .replace("{SYSTEM_PROMPT}", system_prompt)
-    )
-
-    response = teacher.generate(prompt, max_new_tokens=1200, temperature=0.82)
-    data = parse_json_robust(response, expected_keys=["conversations"])
-    if not data or "conversations" not in data:
+    # ── Phase 1: simulate user turns ─────────────────────────────────────────
+    user_turns = generate_user_turns(teacher, profile, new_fact, mode, num_turns)
+    if not user_turns:
         return None
 
-    conv = data["conversations"]
+    # ── Phase 2: teacher acts as Anchor ──────────────────────────────────────
+    _, messages = generate_anchor_turns(teacher, system_prompt, user_turns)
+
+    # messages = [system, user, assistant, user, assistant, ...]
+    conv = messages  # already in the right format
+
     if not heuristic_check(conv, profile, new_fact):
         return None
 
@@ -429,7 +446,7 @@ def generate_example(teacher, profile: dict) -> dict | None:
             "new_fact": new_fact,
             "profile_name": profile["name"],
             "num_turns": num_turns,
-            "source": "conv_memory",
+            "source": "conv_memory_v2",
         },
     }
 
@@ -446,6 +463,7 @@ def main():
 
     print(f"[Pipeline] Target: {TARGET} examples (wall-time controlled)")
     print(f"[Pipeline] Output: {OUT_TRAIN}")
+    print(f"[Pipeline] Mode: teacher-as-Anchor (two-phase generation)")
 
     while count < TARGET and not shutdown_requested:
         attempts += 1
@@ -458,12 +476,16 @@ def main():
                 train_entry = {"conversations": result["conversations"]}
                 append_jsonl(train_entry, OUT_TRAIN)
                 count += 1
-                mode = result["meta"]["mode"]
-                print(f"[{attempts}] ✓ {count} | mode={mode} | profile={result['meta']['profile_name']}")
+                print(
+                    f"[{attempts}] ✓ {count} | "
+                    f"mode={result['meta']['mode']} | "
+                    f"profile={result['meta']['profile_name']} | "
+                    f"turns={result['meta']['num_turns']}"
+                )
             else:
                 skipped += 1
                 if attempts % 10 == 0:
-                    print(f"[{attempts}] skip {skipped} | pass {count}")
+                    print(f"[{attempts}] skip={skipped} pass={count}")
 
         except Exception as e:
             print(f"[{attempts}] Error: {e}")
@@ -471,7 +493,8 @@ def main():
             continue
 
         if attempts % 50 == 0:
-            print(f"[{attempts}] Checkpoint: {count} saved, {skipped} skipped, pass_rate={count/(attempts)*100:.1f}%")
+            rate = count / attempts * 100
+            print(f"[{attempts}] Checkpoint: {count} saved, {skipped} skipped, pass_rate={rate:.1f}%")
             time.sleep(2)
 
     print(f"\n[Pipeline] Done. examples={count}, attempts={attempts}, skipped={skipped}")

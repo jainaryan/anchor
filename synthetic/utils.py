@@ -22,7 +22,8 @@ else:
     MODEL_ID = "Qwen/Qwen3-30B-A3B-Instruct-2507"
 
 VLLM_URL = "http://localhost:8000/v1"
-USE_VLLM = False # Set to True for vLLM deployment
+USE_VLLM = False  # Set to True for vLLM deployment
+
 
 class TeacherModel:
     def __init__(self):
@@ -54,22 +55,41 @@ class TeacherModel:
 
     def generate(self, prompt: str, max_new_tokens: int = 1000, temperature: float = 0.7) -> str:
         """
-        Generates text using the loaded model or vLLM API.
+        Structured data generation: wraps prompt in a JSON-assistant meta-system message.
+        Use this for generating JSON outputs (user turn lists, scenario data, etc.).
         """
         if USE_VLLM:
-            # Placeholder for vLLM API call
-            # import openai
-            # client = openai.Client(base_url=VLLM_URL, api_key="EMPTY")
-            # ...
             raise NotImplementedError("vLLM integration not yet enabled.")
-        else:
-            return self._generate_local(prompt, max_new_tokens, temperature)
-
-    def _generate_local(self, prompt: str, max_new_tokens: int, temperature: float) -> str:
         messages = [
-            {"role": "system", "content": "You are a data generation assistant. You must output strict, valid JSON only. Do not output markdown blocks or conversational text."},
-            {"role": "user", "content": prompt}
+            {
+                "role": "system",
+                "content": (
+                    "You are a data generation assistant. "
+                    "You must output strict, valid JSON only. "
+                    "Do not output markdown blocks or conversational text."
+                ),
+            },
+            {"role": "user", "content": prompt},
         ]
+        return self._generate_from_messages(messages, max_new_tokens, temperature)
+
+    def chat(self, messages: list, max_new_tokens: int = 400, temperature: float = 0.82) -> str:
+        """
+        Generate the next assistant turn given a full messages list (system + history).
+
+        Teacher-as-Anchor mode: caller sets messages[0]["role"]="system" to the
+        production anchor prompt + injected memory. The teacher is constrained by
+        that prompt exactly as the student model will be at inference time, so
+        responses are anchor-aligned by construction.
+
+        Returns raw assistant text (not JSON).
+        """
+        if USE_VLLM:
+            raise NotImplementedError("vLLM integration not yet enabled.")
+        return self._generate_from_messages(messages, max_new_tokens, temperature)
+
+    def _generate_from_messages(self, messages: list, max_new_tokens: int, temperature: float) -> str:
+        """Shared generation logic — tokenise messages, run model, decode."""
         # enable_thinking=False: Qwen3 is a thinking model — without this it prepends
         # <think>...</think> blocks that break JSON extraction downstream.
         template_kwargs = {"return_tensors": "pt", "add_generation_prompt": True}
@@ -79,37 +99,31 @@ class TeacherModel:
             )
         except TypeError:
             # Fallback for non-Qwen3 tokenizers that don't support enable_thinking
-            outputs = self.tokenizer.apply_chat_template(
-                messages, **template_kwargs
-            )
-        
-        # Handle BatchEncoding vs Tensor output
+            outputs = self.tokenizer.apply_chat_template(messages, **template_kwargs)
+
+        # Handle BatchEncoding vs raw Tensor output
         input_ids = outputs
         if hasattr(outputs, "input_ids"):
             input_ids = outputs.input_ids
-            
+
         if isinstance(input_ids, list):
             input_ids = torch.tensor([input_ids])
-            
+
         if not isinstance(input_ids, torch.Tensor):
-             # Fallback: maybe it's a BatchEncoding that behaves like a dict but didn't have input_ids attr?
-             if hasattr(input_ids, "to"):
-                 pass 
-             else:
-                 input_ids = torch.tensor(input_ids)
+            if not hasattr(input_ids, "to"):
+                input_ids = torch.tensor(input_ids)
 
         input_ids = input_ids.to(self.device)
-        
+
         if input_ids.dim() == 1:
-             input_ids = input_ids.unsqueeze(0)
-        
+            input_ids = input_ids.unsqueeze(0)
+
         terminators = [
             self.tokenizer.eos_token_id,
-            self.tokenizer.convert_tokens_to_ids("<|eot_id|>")
+            self.tokenizer.convert_tokens_to_ids("<|eot_id|>"),
         ]
-	 # Filter out None values (e.g. <|eot_id|> doesn't exist in Qwen3)
+        # Filter out None values (e.g. <|eot_id|> doesn't exist in Gemma4 / Qwen3)
         terminators = [t for t in terminators if t is not None]
-
 
         with torch.no_grad():
             output_ids = self.model.generate(
@@ -121,12 +135,10 @@ class TeacherModel:
                 eos_token_id=terminators,
                 pad_token_id=self.tokenizer.eos_token_id,
             )
-        
-        generated_ids = output_ids[0][input_ids.shape[-1]:]
-        response = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        return response
 
-import re
+        generated_ids = output_ids[0][input_ids.shape[-1]:]
+        return self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+
 
 def parse_json_robust(response: str, expected_keys: list = None):
     """
@@ -140,83 +152,74 @@ def parse_json_robust(response: str, expected_keys: list = None):
     """
     # 1. Strip Qwen3 thinking blocks <think>...</think>
     resp_clean = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
-    
-    # 2. Try Standard JSON parsing from block or raw
+
+    # 2. Try standard JSON parsing from block or raw
     try:
         data = None
         if "```json" in resp_clean:
             data = json.loads(resp_clean.split("```json")[1].split("```")[0].strip())
         elif resp_clean.startswith("{"):
-             # Try to find the matching closing brace for a raw object
-             match = re.search(r"\{.*\}", resp_clean, re.DOTALL)
-             if match:
-                 data = json.loads(match.group(0))
-        
+            match = re.search(r"\{.*\}", resp_clean, re.DOTALL)
+            if match:
+                data = json.loads(match.group(0))
+
         if data:
             if expected_keys:
                 if all(k in data for k in expected_keys):
                     return data
             else:
                 return data
-    except:
+    except Exception:
         pass
 
-    # 3. Try fixing truncated JSON (common with Llama 3 smaller models)
+    # 3. Try fixing truncated JSON (common with smaller models)
     try:
-        # If it ends with a number or quote but no brace
         fixed = resp_clean
         if not fixed.rstrip().endswith("}"):
             fixed = fixed.rstrip() + "}"
-        
         match = re.search(r"\{.*\}", fixed, re.DOTALL)
         if match:
             data = json.loads(match.group(0))
             if data and (not expected_keys or all(k in data for k in expected_keys)):
                 return data
-    except:
+    except Exception:
         pass
 
-    # 4. Regex Fallback (Last Resort)
+    # 4. Regex fallback (last resort)
     if expected_keys:
         try:
             extracted = {}
             for key in expected_keys:
-                # Basic string extractor
                 p = rf'"{key}":\s*"(.*?)"'
                 m = re.search(p, resp_clean)
                 if m:
                     extracted[key] = m.group(1)
                 else:
-                    # Try int extractor
                     p_int = rf'"{key}":\s*(\d+)'
                     m_int = re.search(p_int, resp_clean)
                     if m_int:
                         extracted[key] = int(m_int.group(1))
-            
-            # Special case for "conversations" list (harder via regex, but let's try a simple one)
-            if "conversations" in expected_keys and "conversations" not in extracted:
-                # If we need conversations, regex is risky. Let's not fake it too much.
-                pass
-            
-            if len(extracted) >= 2: # At least core info
+            if len(extracted) >= 2:
                 return extracted
-        except:
-             pass
+        except Exception:
+            pass
+
+    return None
+
 
 def calculate_similarity(s1: str, s2: str) -> float:
     """Calculates Jaccard similarity based on word tokens."""
-    words1 = set(re.findall(r'\w+', s1.lower()))
-    words2 = set(re.findall(r'\w+', s2.lower()))
-    if not words1 or not words2: return 0.0
-    
-    # Remove common stop words for better comparison
+    words1 = set(re.findall(r"\w+", s1.lower()))
+    words2 = set(re.findall(r"\w+", s2.lower()))
+    if not words1 or not words2:
+        return 0.0
     stop_words = {"a", "the", "and", "or", "in", "with", "to", "for", "of", "on", "at"}
-    words1 = words1 - stop_words
-    words2 = words2 - stop_words
-    
+    words1 -= stop_words
+    words2 -= stop_words
     intersection = words1.intersection(words2)
     union = words1.union(words2)
     return len(intersection) / len(union) if union else 0.0
+
 
 def randomize_health_context(profile: dict) -> dict:
     """
@@ -229,12 +232,12 @@ def randomize_health_context(profile: dict) -> dict:
     learns the general skill of referencing any health data in the context block.
     """
     import copy
+
     p = copy.copy(profile)
     ctx = p["health_context"]
     health_type = p["health_type"]
 
     # ── Date randomization ─────────────────────────────────────────────────────
-    # Shift all dates together so multi-session ordering is preserved
     DATE_POOL = [
         "Mar 28", "Mar 29", "Mar 30", "Mar 31",
         "Apr 2",  "Apr 3",  "Apr 4",  "Apr 5",  "Apr 6",  "Apr 7",
@@ -243,23 +246,22 @@ def randomize_health_context(profile: dict) -> dict:
         "Apr 20", "Apr 21", "Apr 22", "Apr 23", "Apr 24", "Apr 25",
         "May 1",  "May 2",  "May 3",  "May 4",  "May 5",
     ]
-    existing_dates = re.findall(r'\[([A-Z][a-z]{2} \d+)\]', ctx)
+    existing_dates = re.findall(r"\[([A-Z][a-z]{2} \d+)\]", ctx)
     if existing_dates:
         max_offset = max(0, len(DATE_POOL) - len(existing_dates))
         offset = random.randint(0, max_offset)
         new_dates = DATE_POOL[offset: offset + len(existing_dates)]
         for old, new in zip(existing_dates, new_dates):
-            ctx = ctx.replace(f'[{old}]', f'[{new}]', 1)
+            ctx = ctx.replace(f"[{old}]", f"[{new}]", 1)
 
     # ── Sleep randomization ────────────────────────────────────────────────────
     if health_type == "sleep":
         hrs_lo = random.randint(2, 5)
         hrs_hi = min(hrs_lo + random.randint(0, 2), 6)
-        ctx = re.sub(r'\d-\d hrs', f'{hrs_lo}-{hrs_hi} hrs', ctx)
-        ctx = re.sub(r'\b\d hrs\b',   f'{random.randint(2, 5)} hrs',   ctx)
-        ctx = re.sub(r'\b\d hours\b', f'{random.randint(2, 5)} hours', ctx)
-        ctx = re.sub(r'wok(e|ing) \d+-?\d* times',
-                     f'wok\\1 {random.randint(2, 6)} times', ctx)
+        ctx = re.sub(r"\d-\d hrs", f"{hrs_lo}-{hrs_hi} hrs", ctx)
+        ctx = re.sub(r"\b\d hrs\b", f"{random.randint(2, 5)} hrs", ctx)
+        ctx = re.sub(r"\b\d hours\b", f"{random.randint(2, 5)} hours", ctx)
+        ctx = re.sub(r"wok(e|ing) \d+-?\d* times", f"wok\\1 {random.randint(2, 6)} times", ctx)
         for q in ["very poor", "severely disrupted", "extremely poor",
                   "very disrupted", "badly disrupted", "terrible"]:
             if q in ctx:
@@ -269,8 +271,8 @@ def randomize_health_context(profile: dict) -> dict:
                 ]), 1)
                 break
         ctx = re.sub(
-            r'about a week|a week\b|ten days|over a week|nearly two weeks'
-            r'|almost two weeks|several days|more than a week',
+            r"about a week|a week\b|ten days|over a week|nearly two weeks"
+            r"|almost two weeks|several days|more than a week",
             random.choice([
                 "about a week", "nearly two weeks", "several days",
                 "over a week", "more than a week", "almost ten days",
@@ -278,27 +280,25 @@ def randomize_health_context(profile: dict) -> dict:
 
     # ── Mood score randomization ───────────────────────────────────────────────
     elif health_type == "mood_trend":
-        n_scores = len(re.findall(r'\d+/10', ctx))
+        n_scores = len(re.findall(r"\d+/10", ctx))
         if n_scores >= 2:
-            # Multi-session: generate a coherent declining sequence
             start = random.randint(6, 9)
             scores = [start]
             for _ in range(n_scores - 1):
                 scores.append(max(1, scores[-1] - random.randint(1, 3)))
             idx = [0]
+
             def _replace_score(m):
                 s = scores[min(idx[0], n_scores - 1)]
                 idx[0] += 1
-                return f'{s}/10'
-            ctx = re.sub(r'\d+/10', _replace_score, ctx)
-            # Also fix "was X/10" back-references (appear in parentheses)
-            # These are already replaced above in the same pass — fine.
+                return f"{s}/10"
+
+            ctx = re.sub(r"\d+/10", _replace_score, ctx)
         elif n_scores == 1:
             score = random.randint(2, 6)
-            ctx = re.sub(r'\d+/10', f'{score}/10', ctx, count=1)
-            # Fix "was X/10" to be higher than current score
+            ctx = re.sub(r"\d+/10", f"{score}/10", ctx, count=1)
             prev = min(score + random.randint(2, 4), 9)
-            ctx = re.sub(r'was \d+/10', f'was {prev}/10', ctx)
+            ctx = re.sub(r"was \d+/10", f"was {prev}/10", ctx)
         for low_desc in ["noticeably lower", "significantly lower", "much lower",
                          "considerably worse", "markedly lower"]:
             if low_desc in ctx:
@@ -318,10 +318,8 @@ def randomize_health_context(profile: dict) -> dict:
 
     # ── Anxiety intensity randomization ───────────────────────────────────────
     elif health_type == "anxiety_intensity":
-        # Replace "Anxiety X/10" with a varied score in the moderate-high range
-        ctx = re.sub(r'Anxiety \d+/10',
-                     lambda m: f'Anxiety {random.randint(5, 9)}/10', ctx)
-        # "always braced" / "constant background" descriptors
+        ctx = re.sub(r"Anxiety \d+/10",
+                     lambda m: f"Anxiety {random.randint(5, 9)}/10", ctx)
         for phrase in ["always braced for something bad", "constantly braced"]:
             if phrase in ctx:
                 ctx = ctx.replace(phrase, random.choice([
@@ -344,10 +342,11 @@ def randomize_health_context(profile: dict) -> dict:
                     "almost nothing left",
                 ]), 1)
                 break
-        # Randomize "hitting a wall by Xpm"
-        ctx = re.sub(r'by \d+(am|pm)',
-                     f'by {random.choice([11, 12, 1, 2, 3])}{"am" if random.random() < 0.1 else "pm"}',
-                     ctx)
+        ctx = re.sub(
+            r"by \d+(am|pm)",
+            f"by {random.choice([11, 12, 1, 2, 3])}{'am' if random.random() < 0.1 else 'pm'}",
+            ctx,
+        )
 
     # ── Physical symptoms randomization ───────────────────────────────────────
     elif health_type == "physical_symptoms":
@@ -364,11 +363,16 @@ def randomize_health_context(profile: dict) -> dict:
     # ── Social withdrawal randomization ───────────────────────────────────────
     elif health_type == "social_withdrawal":
         n = random.randint(2, 5)
-        ctx = re.sub(r'declined? (two|three|four|five|\d+) invitations?',
-                     f'declined {n} invitation{"s" if n > 1 else ""}', ctx)
-        ctx = re.sub(r"hasn't seen anyone in person for (a week|two weeks|\d+ days)",
-                     f"hasn't seen anyone in person for {random.choice(['a week', 'ten days', 'over a week', 'nearly two weeks'])}",
-                     ctx)
+        ctx = re.sub(
+            r"declined? (two|three|four|five|\d+) invitations?",
+            f"declined {n} invitation{'s' if n > 1 else ''}",
+            ctx,
+        )
+        ctx = re.sub(
+            r"hasn't seen anyone in person for (a week|two weeks|\d+ days)",
+            f"hasn't seen anyone in person for {random.choice(['a week', 'ten days', 'over a week', 'nearly two weeks'])}",
+            ctx,
+        )
 
     p = dict(p)
     p["health_context"] = ctx
@@ -380,10 +384,10 @@ def load_prompt(filename: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read().strip()
 
+
 def save_jsonl(data: List[Dict], filename: str):
     path = Path(__file__).resolve().parent / "outputs" / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         for entry in data:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
