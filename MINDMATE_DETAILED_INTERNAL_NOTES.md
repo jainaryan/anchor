@@ -554,6 +554,32 @@ DPO trained on `dpo_train.jsonl` (5,750 pairs), 800 steps, from three SFT bases.
 - **Conclusion: DPO with current data + beta=0.1 + 800 steps does not work for this task. Abandon DPO, focus on SFT data quality.**
 - **Current production-best: `adapters/genz/checkpoint-1200`** (genzv2 SFT, 71%) — note this is ck1200 not ck1600.
 
+### Root cause: why fine-tuning degrades context use (2026-05-08)
+
+Analysis of failure transcripts (genzv2_ck1200 vs llama_base on v2 benchmark) reveals three structural problems in the training data:
+
+| Problem | Evidence |
+|---|---|
+| 60% of training has zero memory context | friend_1 (7,380), casual (5,000), therapist (2,637), transition (6,184) = 0% `[Recent sessions]` |
+| 100% of memory examples are single-turn | targeted_fix (13,524): has memory but 0% multi-turn. Model never sees memory + multi-turn together |
+| Multi-turn training teaches "ignore context" | All 21k+ multi-turn examples have no system prompt context — model learns: multi-turn = chat freely |
+
+**What the failing models do:**
+- `cv_03` (reconnect to dad argument after topic switch): genzv2 pivots to "otters hold hands while they sleep" — pure friend banter, zero context tracking
+- `xs_04` (dark session history, user shares small win): genzv2 replies "basil + squash = unstoppable combo" — treats it as fresh casual chat
+- `xs_03` (partner named Rohan in memory): genzv2 never uses the name — single-turn memory pattern doesn't transfer to multi-turn
+
+**Why base model does better:** Llama instruction-tuning teaches careful system-prompt following. SFT overwrote this with friend-style behavioral patterns that were learned exclusively on no-context conversations.
+
+**Fix: `conversation_memory_pipeline.py` (planned)**
+Generate multi-turn examples (4–6 turns) where:
+1. System prompt has `[User]` + `[Recent sessions]` (real production format)
+2. User introduces a new fact mid-conversation (name, event, concern)
+3. Later turns require referencing BOTH injected memory AND within-conversation facts
+4. Casual/banter turns that still naturally use context when relevant
+
+Target: ~5,000 examples. Add to genzv5 mix at ~20% weight alongside existing data.
+
 ### Files
 - `benchmarks/scenarios.py` — scenarios; MEMORY_USE + BIOMETRIC use `judge_criteria`, others use `checks`
 - `benchmarks/run_benchmarks.py` — two-phase: eval model (Llama 4-bit) → judge model (Gemma 4 26B A4B bfloat16)
