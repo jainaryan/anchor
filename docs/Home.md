@@ -93,3 +93,4 @@ These are the non-obvious invariants that burn time if unknown:
 - [[System Prompt]] — production vs eval prompt, memory injection tiers, training format
 - [[Next Steps]] — genzv5 plan, open questions
 - [[Bug Log]] — chronological bug history (Apr 7 → May 9)
+- [[Anchor App]] — Android app architecture, memory system, screens, chat lifecycle, eval harness
