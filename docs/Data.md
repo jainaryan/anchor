@@ -10,104 +10,171 @@ tags: [anchor, data]
 
 ## SFT Training Files
 
-| File | Examples | Content | Status |
-|---|---|---|---|
-| `synthetic_train_targeted_fix.jsonl` | **13,524** | help_mode + memory_recall | ✅ normalized (c3acdc9) |
-| `synthetic_train_friend_1.jsonl` | 7,380 | Casual friend-style support | ✅ normalized |
-| `synthetic_train_transition.jsonl` | 6,184 | Casual→emotional pivot (fix for joke-mode-lock) | ✅ normalized |
-| `synthetic_train.jsonl` | 5,565 | Grief/loss | ✅ normalized |
-| `synthetic_train_casual.jsonl` | 5,000 | Non-distress casual | ✅ normalized |
-| `synthetic_train_therapist_.jsonl` | 2,637 | Therapeutic dialogue | ✅ normalized |
-| `synthetic_train_biometric.jsonl` | **2,348** | Biometric health context | ✅ normalized (c3acdc9) |
-| `synthetic_train_targeted_fixes.jsonl` | **181** | Hand-crafted gold examples | ✅ normalized; always 100% weight |
-| `synthetic_train_conv_memory.jsonl` | **~7k–10k (generating)** | Multi-turn + memory, teacher-as-Anchor v2 | 🟢 jobs 609110–609111, 72h A100-80 |
+All files live in `~/projects/mindmate/data/` (local) and mirrored on cluster. All 42,038 examples were normalized to production system prompt format in commit c3acdc9 (2026-05-09).
 
-**Total normalized: 42,038 examples** (excluding conv_memory which generates in correct format)
+| File | Examples | Content | Generation | Status |
+|---|---|---|---|---|
+| `synthetic_train_targeted_fix.jsonl` | **13,524** | help_mode + memory_recall; multi-turn | `synthetic/targeted_fix_pipeline.py`, job 599031 | ✅ normalized |
+| `synthetic_train_friend_1.jsonl` | 7,380 | Casual friend-style support | `synthetic/pipeline.py` | ✅ normalized |
+| `synthetic_train_transition.jsonl` | 6,184 | Casual→emotional pivot (fix for joke-mode-lock) | `synthetic/transition_pipeline.py` | ✅ normalized |
+| `synthetic_train.jsonl` | 5,565 | Grief/loss | `synthetic/pipeline.py` | ✅ normalized |
+| `synthetic_train_casual.jsonl` | 5,000 | Non-distress casual chat | `synthetic/casual_pipeline.py` | ✅ normalized |
+| `synthetic_train_therapist_.jsonl` | 2,637 | Therapeutic dialogue | `synthetic/pipeline.py` | ✅ normalized |
+| `synthetic_train_biometric.jsonl` | **2,348** | Biometric health context (sleep, HRV, mood) | `synthetic/biometric_sft_pipeline.py`, job 599030 | ✅ normalized |
+| `synthetic_train_targeted_fixes.jsonl` | **181** | Hand-crafted gold examples | Manual + targeted scripts | ✅ normalized |
+| `synthetic_train_conv_memory.jsonl` | **~7k–10k (generating)** | Multi-turn + memory context, teacher-as-Anchor v2 | `synthetic/conversation_memory_pipeline.py`, jobs 609110–609111 | 🟢 RUNNING (72h A100-80, ~64h remaining as of 2026-05-09) |
+
+**Total normalized: 42,038 examples** (not counting conv_memory, which generates in correct format already)
 
 ---
 
-## Gold Examples (181 total)
+## Gold Examples — `synthetic_train_targeted_fixes.jsonl` (181 total)
 
-Built into `synthetic_train_targeted_fixes.jsonl`. Always included at 100% weight in every data mix.
+Always included at **100% weight** in every data mix (never sampled down). Hand-crafted to target specific benchmark failures.
 
 | Category | Count | What it teaches |
 |---|---|---|
-| name_resolution | 30 | "my friend/brother" → looks up profile name |
-| crisis_safety | 20 | "better off without me" → includes safe/here/matter/alone/care + ends `?` |
-| session_history_recall | 18 | Wedding/walking/mood-trend explicitly referenced |
-| profile_coping | 15 | Uses marked-★-helpful strategy by name (not generic breathing) |
-| biometric_profile | 12 | Avoids marked-✗-unhelpful strategy |
-| help_cold_open | 12 | "help me calm down" → technique in FIRST sentence (not probe) |
-| anti_hallucination | 8 | Cold "hey" → clean opener, no invented prior context |
-| original (misc) | 65 | Mixed coverage from early sessions |
+| `name_resolution` | 30 | "my friend/brother/partner" → looks up actual name from profile (Zoya, Kabir, etc.) |
+| `crisis_safety` | 20 | "better off without me" type → response must include safe/here/matter/alone/care + end with `?` |
+| `session_history_recall` | 18 | Wedding, walking, mood-trend specifically referenced from `[Recent sessions]` |
+| `profile_coping` | 15 | Uses the ★-helpful strategy from profile by name (not generic breathing or box breathing) |
+| `biometric_profile` | 12 | Avoids ✗-marked unhelpful strategy; connects sleep/HRV/mood trend naturally |
+| `help_cold_open` | 12 | "help me calm down" → technique in FIRST sentence (not a probe question first) |
+| `anti_hallucination` | 8 | Cold open ("hey") → clean response, no invented prior context ("you went quiet on me") |
+| `original` | 65 | Earlier mixed examples from before the benchmark-targeted expansion |
+
+Gold expanded from 65 → 181 on 2026-05-01 (commit on that date).
 
 ---
 
-## DPO Files (abandoned)
+## DPO Files (abandoned — kept for reference)
 
-DPO was abandoned — all 3 runs flat or worse than SFT. Files kept for reference.
+DPO was tried 3 times, all flat or worse than SFT. Files kept but not used in any active training.
 
-| File | Pairs | Notes |
-|---|---|---|
-| `dpo_train.jsonl` | 5,750 | Active/last-used — biometric + help_mode + memory_recall |
-| `dpo_val.jsonl` | 1,014 | Active/last-used |
-| `dpo_train_v2.jsonl` | 6,120 | Superseded |
-| `dpo_val_v2.jsonl` | 1,080 | Superseded |
+| File | Pairs | Date | Notes |
+|---|---|---|---|
+| `dpo_train.jsonl` | 5,750 | 2026-05-01 | Last-used; biometric + help_mode + memory_recall |
+| `dpo_val.jsonl` | 1,014 | 2026-05-01 | Last-used |
+| `dpo_train_v2.jsonl` | 6,120 | 2026-04-18 | Superseded |
+| `dpo_val_v2.jsonl` | 1,080 | 2026-04-18 | Superseded |
+| `dpo_biometric_partial.jsonl` | 1,971 | 2026-04-29 | Biometric-only pairs (subset of dpo_train.jsonl) |
+| `dpo_pairs_partial.jsonl` | varies | earlier | Legacy partial output |
 
 ---
 
-## Excluded Data
+## Excluded Data (intentional — user decision 2026-04-14)
 
-By user decision (2026-04-14) — never used in any training run:
-- `data/new_raw_data/mindmate_train.jsonl` — 20,662 examples
-- `data/cleaned_data/mindmate_train_clean.jsonl` — 20,662 examples
+Never included in any training run:
+- `data/new_raw_data/mindmate_train.jsonl` — 20,662 examples (public datasets: ESConv, EmpatheticDialogues, CounselChat)
+- `data/cleaned_data/mindmate_train_clean.jsonl` — 20,662 cleaned version of above
 
 ---
 
 ## Data Schema
 
-All active SFT data:
+All active SFT data uses `conversations` format (normalized by c3acdc9):
+
 ```json
-{"conversations": [
-  {"role": "system", "content": "<production anchor prompt + [User] + [Recent sessions]>"},
-  {"role": "user", "content": "..."},
-  {"role": "assistant", "content": "..."}
-]}
+{
+  "conversations": [
+    {
+      "role": "system",
+      "content": "You are Anchor, a warm and caring AI companion...\n\nABOUT THIS USER\n[User]\nName: ...\nAge: ...\n...\n[Recent sessions]\nSession 1: ..."
+    },
+    {"role": "user", "content": "..."},
+    {"role": "assistant", "content": "..."},
+    {"role": "user", "content": "..."},
+    {"role": "assistant", "content": "..."}
+  ]
+}
 ```
 
-Key: since c3acdc9, all 42,038 examples include the full production system prompt preamble. The model now sees the same format during training as it does at inference.
+**Before c3acdc9 (the format bug):**
+- `targeted_fix` + `biometric`: had `[User]\n...\n[Recent sessions]\n...` only — missing "You are Anchor..." preamble and "ABOUT THIS USER" header
+- All other files: had **no system message at all**
+- This caused the model to never see the production format during training
+
+**The normalization done in c3acdc9:**
+- `targeted_fix` + `biometric`: prepended `_APP_BASE_PROMPT + "\n\nABOUT THIS USER\n"` before existing `[User]`/`[Recent sessions]` blocks
+- `biometric`: 179 examples had raw session notes without `[Recent sessions]` label — wrapped with full format
+- `friend_1`, `therapist_`, `transition`, `casual`, `grief`: injected `_APP_BASE_PROMPT` as system message
+- `targeted_fixes` (gold): had abbreviated old format — prepended `_APP_BASE_PROMPT`
+- All files normalized from `messages` key to `conversations` key where needed
 
 ---
 
-## Data Pipelines (`synthetic/`)
+## Build Pipeline — How Raw JSONL Becomes Training Data
 
-| Pipeline | Output | Status |
-|---|---|---|
-| `pipeline.py` | therapist/friend/grief | ✅ Done |
-| `casual_pipeline.py` | casual non-distress | ✅ Done |
-| `transition_pipeline.py` | casual→emotional pivots | ✅ Done |
-| `targeted_fix_pipeline.py` | help_mode + memory_recall SFT | ✅ Done — 13,524 ex |
-| `biometric_sft_pipeline.py` | Biometric SFT, 4 modes | ✅ Done — 2,348 ex |
-| `biometric_dpo_pipeline.py` | Biometric DPO pairs | ✅ Done (DPO abandoned) |
-| `dpo_targeted_fix_pipeline.py` | DPO pairs for help_mode | ✅ Done (DPO abandoned) |
-| `conversation_memory_pipeline.py` | Multi-turn + memory (teacher-as-Anchor v2) | 🟢 RUNNING — jobs 609110–609111 |
+```
+data/synthetic_train_*.jsonl
+        ↓  finetuning/build_dataset.py --model v4
+data/conversations_raw_v4/mindmate_train.jsonl   (sampled per DATA_MIX_PRESETS["v4"])
+data/conversations_raw_v4/mindmate_val.jsonl     (15% val split per source, min 300)
+        ↓  finetuning/clean_dataset.py --drop-min-turns 4 --dedup
+data/conversations_cleaned_v4/mindmate_train.jsonl   (deduped, min 4 turns, format-validated)
+data/conversations_cleaned_v4/mindmate_val.jsonl
+        ↓  finetuning/CUDA_train_qlora.py --data-dir data/conversations_cleaned_v4
+(training)
+```
 
-### Teacher model
-- `google/gemma-4-26B-A4B-it` bfloat16 (~52GB VRAM) — requires A100-80
-- Gated model — `HF_TOKEN` must be set on cluster
-- ~20-30 min first download; subsequent runs use HF cache
+Intermediate dirs for v4 already exist locally. For v5, new `conversations_raw_v5/` and `conversations_cleaned_v5/` dirs will be created by the scripts.
 
-### conv_memory pipeline v2 design
-Two-phase generation — training/inference distribution aligned by construction:
-- **Phase 1:** Gemma4 as user simulator → generates all N user turns as JSON
-- **Phase 2:** Gemma4 given **production anchor prompt** as its actual system message → generates assistant turns constrained exactly as at inference
-- 6 conversation modes, 10 profile seeds, 20 new-fact seeds
-- Output: 4–6 turn conversations, user introduces new fact mid-conversation
+---
+
+## Synthetic Data Pipelines (`synthetic/`)
+
+| File | Purpose | Status | Output |
+|---|---|---|---|
+| `pipeline.py` | therapist/friend/grief SFT | ✅ Done | `synthetic_train_therapist_.jsonl`, `synthetic_train_friend_1.jsonl`, `synthetic_train.jsonl` |
+| `casual_pipeline.py` | casual non-distress SFT | ✅ Done | `synthetic_train_casual.jsonl` |
+| `transition_pipeline.py` | casual→emotional pivot SFT | ✅ Done | `synthetic_train_transition.jsonl` |
+| `targeted_fix_pipeline.py` | help_mode + memory_recall SFT | ✅ Done (job 599031) | `synthetic_train_targeted_fix.jsonl` |
+| `biometric_sft_pipeline.py` | Biometric SFT, 4 modes × 24 profiles | ✅ Done (job 599030) | `synthetic_train_biometric.jsonl` |
+| `biometric_dpo_pipeline.py` | Biometric DPO pairs (4 pair types) | ✅ Done (DPO abandoned) | part of `dpo_train.jsonl` |
+| `dpo_targeted_fix_pipeline.py` | help_mode + memory_recall DPO pairs | ✅ Done (DPO abandoned) | part of `dpo_train.jsonl` |
+| `dpo_pipeline.py` | General DPO pairs v1 + v2 | ✅ Done (DPO abandoned) | `dpo_train_v2.jsonl` |
+| `conversation_memory_pipeline.py` | Multi-turn + memory (teacher-as-Anchor v2) | 🟢 RUNNING — jobs 609110–609111 | `synthetic_train_conv_memory.jsonl` |
+
+### Teacher Model
+
+- `google/gemma-4-26B-A4B-it` in bfloat16 (~52GB VRAM) — requires A100-80
+- MoE: 26B total params, ~4B active per token — fast inference despite size
+- Gated HuggingFace model — `HF_TOKEN` env var must be set before first use
+- First download: ~52GB (~20–30 min); subsequent runs use `~/.cache/huggingface/`
+- Set via env var: `export TEACHER_MODEL=gemma4` (now the default in `synthetic/utils.py`)
+
+### conv_memory pipeline v2 — teacher-as-Anchor design
+
+Two-phase generation (training/inference distribution aligned by construction):
+
+**Phase 1 — User simulator:**
+- Gemma4 given a "simulate a realistic user" system prompt
+- Generates all N user turns upfront as a JSON array
+- Encodes `mode` + `new_fact` from user's perspective (6 modes, 20 new-fact seeds, 10 profile seeds)
+
+**Phase 2 — Anchor responder:**
+- Gemma4 given the **production Anchor system prompt + `[User]` + `[Recent sessions]`** as its actual system message
+- Generates one assistant turn at a time against growing history
+- Teacher is constrained by the same format the student model sees at inference
+
+This ensures: (1) multi-turn structure, (2) user introduces a new fact mid-conversation, (3) later turns require referencing both injected memory and within-conversation facts, (4) format is byte-for-byte production format.
+
+**Run command:**
+```bash
+# On cluster — submitted as jobs 609110–609111
+sbatch synthetic/run_conv_memory.slurm
+
+# Manual
+source mindmatenv/bin/activate
+export TEACHER_MODEL=gemma4
+export HF_TOKEN=<your_token>
+python synthetic/conversation_memory_pipeline.py
+```
 
 ---
 
 ## See also
 
-- [[Training]] — how data mixes are built and used
-- [[Models]] — which checkpoints came from which data mix
-- [[Benchmarks]] — per-category scores reveal data gaps
+- [[Training]] — how data mixes are configured and submitted
+- [[Models]] — what each training run produced
+- [[Benchmarks]] — per-category scores that reveal data gaps

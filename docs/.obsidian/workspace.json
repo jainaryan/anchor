@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "79ef6b4dd6ac2685",
+        "id": "4fbf95e7cc6a376b",
         "type": "tabs",
         "children": [
           {
-            "id": "c6622b771248ae00",
+            "id": "0403a485470c9650",
             "type": "leaf",
             "state": {
               "type": "empty",
@@ -176,18 +176,18 @@
       "bases:Create new base": false
     }
   },
-  "active": "c6622b771248ae00",
+  "active": "0403a485470c9650",
   "lastOpenFiles": [
-    "Bug Log.md",
-    "Next Steps.md",
-    "System Prompt.md",
     "Production.md",
-    "Cluster.md",
-    "Data.md",
+    "Bug Log.md",
+    "System Prompt.md",
     "Training.md",
-    "Benchmarks.md",
+    "Next Steps.md",
     "Models.md",
     "Home.md",
+    "Benchmarks.md",
+    "Cluster.md",
+    "Data.md",
     "Welcome.md"
   ]
 }
