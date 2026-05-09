@@ -266,19 +266,21 @@ Anchor: It's understandable to feel that way, but it's important to remember tha
 
 ---
 
-## Llama 3.2 3B — genzv2 DPO attempt 2 (`adapters/genz_dpo_ck1600/`) — **RUNNING** 🟢
+## Llama 3.2 3B — genzv2 DPO attempt 2 (`adapters/genz_dpo_ck1600/`) — **DONE** ✅
 **Date:** 2026-05-01 (job 601548, gpu-long, A100-80)
 **Base:** genzv2 SFT checkpoint-1600
 **DPO data:** `dpo_train.jsonl` / `dpo_val.jsonl` (5,750 train + 1,014 val)
 **Data coverage:** biometric, help_mode, memory_recall, hallucination_guard, transition, panic_mode, casual_sad, mixed_mode
-**Steps:** 1,200 (saves every 200 → ck200, 400, 600, 800, 1000, 1200 + final)
-**Status:** RUNNING — format mismatch fixed, full data coverage for all failing categories
+**Steps:** 1,200
+**Result:** `adapters/genz_dpo_ck1600/` — benchmarked 2026-05-03 (job 603293–603295). **65%** — same as genzv2 SFT ck1600 (no improvement). HELP_MODE did not collapse (unlike genzv2_dpo_ck1200).
+
+**DPO verdict (all 3 runs complete, 2026-05-03):** DPO never improves over SFT. genzv2_ck1200 SFT at 71% (v1 benchmark) and 44% (v3) remains best. **DPO is abandoned — focus on SFT data quality.**
 
 ---
 
 ---
 
-## Llama 3.2 3B — genzv3 SFT (`adapters/genzv3/`) — **BENCHMARKING (checkpoint sweep)**
+## Llama 3.2 3B — genzv3 SFT (`adapters/genzv3/`) — **DONE** ✅
 **Date:** 2026-04-30 (job 600329, gpu-long, A100-40, 1h 23min)
 **Base:** `meta-llama/Llama-3.2-3B-Instruct` (fresh training)
 **Steps:** 1,600
@@ -296,14 +298,12 @@ Anchor: It's understandable to feel that way, but it's important to remember tha
 **System prompt:** Simplified 13-line prompt (temperature 0.75)
 **Job:** 600329 (A100-40, gpu-long, 1h 23min)
 **Status:** COMPLETED ✅ — all checkpoints ck200–1600 + final saved to `adapters/genzv3/`
-**Benchmark:** checkpoint sweep jobs 601526–601533 (A100-40, new LLM-judge runner) — RUNNING/PENDING
-- ck1600 early result: **53%** overall (old runner, job 600383 — superseded by sweep)
-- Full curve (ck200–1600) pending; new runner uses LLM judge for MEMORY_USE + BIOMETRIC categories
-- Hypothesis: HELP_MODE improved vs genzv2 baseline; CRISIS may regress at higher checkpoints
+**Benchmark (v1 runner):** Full curve sweep done (jobs 602531–602546). **Best: ck200 = 76%** (BIO 4/5, CRISIS 4/5, FORMAT 4/4, HELP 4/6, MEM 4/8, NOH 6/6). Degrades rapidly after ck200.
+**Benchmark (v3, 3-run avg):** 45% ±2.1 — base still beats SFT (51%). Root cause: training format mismatch (fixed in c3acdc9). See MINDMATE_DETAILED_INTERNAL_NOTES.md.
 
 ---
 
-## Llama 3.2 3B — genzv2_continued SFT (`adapters/genzv2_continued/`) — **BENCHMARKING (checkpoint sweep)**
+## Llama 3.2 3B — genzv2_continued SFT (`adapters/genzv2_continued/`) — **DONE** ✅ (DO NOT USE)
 **Date:** 2026-04-30 (job 600330, gpu-long, A100-40, 26 min)
 **Base:** `adapters/genz/checkpoint-1600` (continued training, PeftModel.from_pretrained)
 **Steps:** 500
@@ -321,11 +321,8 @@ Anchor: It's understandable to feel that way, but it's important to remember tha
 **System prompt:** Simplified 13-line prompt (temperature 0.75)
 **Job:** 600330 (A100-40, gpu-long, 26 min)
 **Status:** COMPLETED ✅ — checkpoints: 200, 400, 500 + final saved to `adapters/genzv2_continued/`
-**Benchmark:** checkpoint sweep jobs 601545–601547 (A100-40, new LLM-judge runner) — RUNNING/PENDING
-- ck1600 early result (old runner): **50%** overall — regression vs genzv2 59% baseline
-- Possible cause: MEMORY_USE collapsed (0/8) with old keyword checks; LLM judge may score differently
-- Full curve (ck200–500) pending
-**Goal:** Same fixes as v3 but faster — builds on genzv2's existing good behaviors. A/B vs genzv3.
+**Benchmark:** ck200–500 curve complete. **Best checkpoint failed to beat genzv2_ck1200 (71%).** MEMORY_USE catastrophically collapsed (0/8) — confirmed that continued training (PeftModel.from_pretrained) breaks memory context usage.
+**Conclusion:** Never use continued-training approach again. Always train fresh from base. genzv2_continued is archived and not benchmarked further.
 
 ---
 
@@ -373,20 +370,21 @@ Names used in name_resolution: Zoya, Kabir, Rohan, Tanvi, Layla (held-out eval n
 - [x] Qwen2.5-3B SFT checkpoint-200 — inferior to Llama
 - [x] Llama DPO ck200 (job 560339) — **inferior to genzv2 SFT ck1600**
 - [x] Qwen2.5-3B DPO ck200 (job 560338) — **inferior to genzv2 SFT ck1600**
-- [x] **genzv2 SFT ck1600 — current production model** (benchmark: 59% on 34-scenario suite, old runner)
+- [x] **genzv2 SFT ck1200 — current best model** (71% v1 benchmark, 44% v3 averaged)
+- [x] **genzv2 SFT ck1600** — 65% v1, 45% v3 averaged
 - [x] genzv2 DPO ck1600 attempt 1 (job 595679) — **FAILED** (format mismatch)
-- [x] genzv3 SFT ck1600 early benchmark (job 600383, old runner) — **53%** (below 59% baseline)
-- [x] genzv2_continued SFT early benchmark (job 600384, old runner) — **50%** (below 59% baseline)
-- [x] genzv3 ck200 (new LLM-judge runner, job May 1) — **76%** best checkpoint, MEMORY_USE still 4/8
-- [x] genzv2 ck200–1600 checkpoint sweep (jobs 601534–601544, new LLM-judge runner) — PENDING results
-- [x] genzv3 ck200–1600 checkpoint sweep (jobs 601526–601533, new LLM-judge runner) — PENDING full results
-- [x] genzv2_continued ck200–500 checkpoint sweep (jobs 601545–601547, new LLM-judge runner) — PENDING results
+- [x] genzv2 DPO ck1600 attempt 2 (job 601548) — **65% — flat vs SFT base. DPO ABANDONED.**
+- [x] genzv3 SFT full checkpoint sweep — **ck200 = 76% (v1), 45% (v3 avg)** — degrades rapidly after ck200
+- [x] genzv2_continued SFT — **MEMORY_USE collapsed (0/8)** — continued training approach abandoned
+- [x] genzv4 SFT full checkpoint sweep — **ck200 = 65% (v1), 42% (v3 avg)** — does not beat genzv2_ck1200
+- [x] All 3 DPO runs benchmarked (2026-05-03) — none improve over SFT; **DPO abandoned**
 - [x] Gold examples expanded 65 → 181 (2026-05-01) — see section above
+- [x] **v3 benchmark complete (58 scenarios, 3-run averaged)** — llama_base 51%, SFT all ~42–45%
+- [x] Root cause identified: training format mismatch (commit c3acdc9, 2026-05-09)
+- [x] conv-memory pipeline v2 (teacher-as-Anchor) started — jobs 609110–609111
 
 ## Pending Tests
 
-- [ ] **genzv3 + genzv2 + genzv2_continued checkpoint sweep results** — compare full curves under new LLM-judge runner; find best checkpoint per family
-- [ ] **genzv2 DPO attempt 2** (job 601548, A100-80) — RUNNING; benchmark each ck200–1200 after completion
-- [ ] **genzv4 SFT** — use proposed v4 mix (targeted_fix 30%, biometric 15%, transition 20%, therapist 12%, casual 10%, friend 8%, +181 gold); target ck200–400
-- [ ] **DPO on best new adapter** — pending benchmark outcome from above sweeps
-- [ ] Gemma 4 E2B IT — GGUF uploaded to HF, not yet evaluated on eval harness
+- [ ] **conv-memory pipeline v2 completion** (jobs 609110–609111, ~72h from 2026-05-09) → pull `data/synthetic_train_conv_memory.jsonl`
+- [ ] **genzv5 SFT** — first run with correct training format (c3acdc9 fix) + conv_memory data (~20% mix)
+- [ ] **genzv5 benchmark** — expect memory categories (CROSS_SESSION_MEMORY, CONTEXT_MEMORY, BIOMETRIC) to recover vs base

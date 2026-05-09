@@ -1,4 +1,11 @@
-# MindMate — Project Memory
+# Anchor — Project Memory (ARCHIVED — see root MINDMATE_DETAILED_INTERNAL_NOTES.md)
+
+> **This file is from session 2026-04-18 and is kept for historical reference only.**
+> Current project state: **`../MINDMATE_DETAILED_INTERNAL_NOTES.md`** (updated 2026-05-09, session 4).
+
+---
+
+# Anchor — Project Memory (2026-04-18 snapshot)
 
 ## Quick Context
 - Last session: 2026-04-18

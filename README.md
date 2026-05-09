@@ -71,7 +71,7 @@ python scripts/export_gguf_cuda.py --model genzv2_ck1200
 |---|---|---|
 | `data/synthetic_train_targeted_fix.jsonl` | 13,524 | help_mode + memory_recall |
 | `data/synthetic_train_friend_1.jsonl` | 7,380 | Casual friend-style support |
-| `data/synthetic_train_therapist_.jsonl` | 6,347 | Therapeutic dialogue |
+| `data/synthetic_train_therapist_.jsonl` | 2,637 | Therapeutic dialogue |
 | `data/synthetic_train_transition.jsonl` | 6,184 | Casual→emotional pivot |
 | `data/synthetic_train.jsonl` | 5,565 | Grief/loss |
 | `data/synthetic_train_casual.jsonl` | 5,000 | Non-distress casual |
@@ -93,15 +93,19 @@ sbatch --gres=gpu:a100-80:1 --export=ALL,MODEL=genzv2_ck1200 benchmarks/run_benc
 python benchmarks/average_results.py --since 20260509
 ```
 
-**v3 averaged results (partial, /61 weighted):**
+**v3 averaged results (3-run averaged, /61 weighted) — COMPLETE:**
 
-| Model | Avg % | n |
-|---|---|---|
-| llama_base | 51% | 3 |
-| genzv3_ck200 | 45% | 4 |
-| genzv4_ck200 | 42% | 3 |
-| genzv2_ck1200 | ⏳ rerunning | — |
-| genzv2_ck1600 | ⏳ rerunning | — |
+| Model | Avg % | ± | n |
+|---|---|---|---|
+| llama_base | **51%** | 1.9 | 3 |
+| genzv3_ck200 | 45% | 2.1 | 4 |
+| genzv2_ck1600 | 45% | 1.5 | 2 |
+| genzv2_ck1200 | 44% | 0.8 | 4 |
+| genzv4_ck200 | 42% | 1.2 | 3 |
+
+⚠️ Base still beats all SFT — root cause identified (training data format mismatch) and fixed in commit c3acdc9. genzv5 will be the first run with correct format.
+
+**Next step:** Wait for conv-memory pipeline (jobs 609110–609111) → design genzv5 mix → benchmark.
 
 ---
 
@@ -140,6 +144,7 @@ cd android && ./gradlew assembleDebug
 
 ```
 mindmate/
+├── CUDA_*.py / run_*.slurm # ⚠️ ROOT-LEVEL LEGACY — canonical versions are in finetuning/ and synthetic/
 ├── adapters/               # LoRA checkpoints
 │   ├── genz/checkpoint-1200/   ← BEST MODEL (genzv2_ck1200)
 │   ├── genzv3/checkpoint-200/  ← best genzv3

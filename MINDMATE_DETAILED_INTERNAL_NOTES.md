@@ -38,24 +38,22 @@ Synthetic Data (Gemma 4 26B A4B IT teacher)
 ### Top-level flow
 
 ```
-Synthetic Data Generation (Gemma 4 26B A4B IT)
+Synthetic Data Generation (Gemma 4 26B A4B IT — teacher-as-Anchor mode)
         ↓
-  Raw JSONL Data (data/*.jsonl)
+  Raw JSONL Data (data/*.jsonl) — all normalized to production format (c3acdc9)
         ↓
-  build_dataset.py + clean_dataset.py
+  finetuning/build_dataset.py + clean_dataset.py
         ↓
-  CUDA_train_qlora.py (SFT, QLoRA 4-bit NF4)
+  finetuning/CUDA_train_qlora.py (SFT, QLoRA 4-bit NF4)
         ↓
-  adapters/genz/checkpoint-1600  ← best SFT
+  adapters/genz/checkpoint-1200  ← BEST SFT (genzv2_ck1200, 71% v1 / 44% v3)
         ↓
-  CUDA_train_dpo.py (DPO, two-model)
-        ↓
-  adapters/genz_dpo_ck1600/  ← pending
-        ↓
-  export_gguf_cuda.py → Q4_K_M GGUF
+  scripts/export_gguf_cuda.py → Q4_K_M GGUF
         ↓
   anchor-app (Android JNI) / deploy/server.py (web)
 ```
+
+**DPO: ABANDONED** — all 3 DPO runs (genzv2_dpo_ck1200, genzv3_dpo_ck200, genzv2_dpo_ck1600) flat or worse than SFT base. Focus is on SFT data quality and format correctness.
 
 ### Module map
 - `finetuning/`: training orchestration and trainers
@@ -88,39 +86,40 @@ Synthetic Data Generation (Gemma 4 26B A4B IT)
 - Architecture: base (4-bit) + SFT adapter (trainable DPO LoRA) + ref_model (frozen SFT)
 - Data: `dpo_train.jsonl` / `dpo_val.jsonl` (5,750 train + 1,014 val — includes help_mode + memory_recall pairs)
 - **Previous DPO (ck200, 800 steps, v1 data) did NOT improve over SFT — genzv2 ck1600 remained best**
-- **genzv2 DPO re-run (job 601548): genzv2 ck1600 base, 1200 steps, dpo_train.jsonl → RUNNING**
+- **genzv2 DPO re-run (job 601548): genzv2 ck1600 base, 1200 steps, dpo_train.jsonl → DONE (65%, flat vs SFT — DPO abandoned)**
 
 ---
 
 ## Saved Adapters
 
-### `adapters/genzv3/` — **BENCHMARKING** 🔬 (job 600329)
+### `adapters/genzv3/` — **DONE** ✅ (job 600329)
 - Llama 3.2 3B, v3 data mix, 1600 steps, fresh from base, ~1h 23min on A100-40
 - v3 mix: transition 25%, targeted_fix 20%, therapist 15%, biometric 15%, friend 15%, casual 10%, +65 gold (gold now expanded to 181 — see genzv4 plan)
 - Checkpoints: ck200, ck400, ck600, ck800, ck1000, ck1200, ck1400, ck1600 + final
-- **Checkpoint sweep:** jobs 601526–601533 (A100-40, LLM judge runner) — RUNNING/PENDING
+- **Checkpoint sweep:** jobs 601526–601533 + 602531–602546 — **COMPLETE**. ck200 = 76% (v1 benchmark), best checkpoint. Degrades rapidly after ck200. v3 averaged: 45% ±2.1.
 - First result (old runner, ck1600): 53% overall — HELP_MODE improved (50%→76%), CRISIS regressed (100%→73%)
 
-### `adapters/genzv2_continued/` — **BENCHMARKING** 🔬 (job 600330)
+### `adapters/genzv2_continued/` — **DONE** ✅ ⚠️ APPROACH ABANDONED (job 600330)
 - Llama 3.2 3B, continued from genzv2 ck1600, 500 steps, ~26min on A100-40
 - v2_continued mix: targeted_fix 30%, biometric 25%, transition 15%, therapist 12%, casual 10%, friend 5%, +65 gold (gold now expanded to 181)
 - Checkpoints: ck200, ck400, ck500 + final
-- **Checkpoint sweep:** jobs 601545–601547 (A100-40, LLM judge runner) — PENDING
+- **Checkpoint sweep:** jobs 601545–601547 — **COMPLETE**. MEMORY_USE catastrophically collapsed (0/8) on all checkpoints. Continued training approach confirmed broken.
 - First result (old runner, final): 50% overall — MEMORY_USE catastrophically worse (0/8)
 
-### `adapters/genz/checkpoint-1600` — **PRODUCTION MODEL** ✅
+### `adapters/genz/checkpoint-1600` — **DEPLOYED ON SERVER** (not best model)
 - Llama 3.2 3B, v2 data mix, 1600 steps
 - **Current best — beats all DPO models and all other SFT checkpoints**
 - GGUF: `exports/mindmate_llama_sft_ck1600/llama(genz)v2_q4_k_m.gguf`
 - Pixel 8a: ~5.5 TPS, TTFT 60–66s cold / 6s cached, heap 3.12–3.17 GB
 - Benchmark baseline (old runner): 59% — CRISIS/FORMAT/NO_HALLUCINATION 100%, HELP_MODE 50%, BIOMETRIC 20%, MEMORY_USE 12%
-- **Checkpoint sweep:** jobs 601534–601544 (A100-40, LLM judge runner) — RUNNING/PENDING
-- **DPO re-run:** job 601548 (A100-80, RUNNING) — genzv2 ck1600 base, 1200 steps, 5,750 pairs
+- **Checkpoint sweep:** jobs 601534–601544 — **COMPLETE**. genzv2_ck1200 wins at 71%.
+- **DPO re-run:** job 601548 — **COMPLETE**. 65% — flat vs SFT. DPO abandoned.
+- ⚠️ Server still serves ck1600 GGUF — **should upgrade to genzv2_ck1200 GGUF** (`exports/mindmate_genzv2_ck1200_q4_k_m.gguf`)
 
-### `exports/mindmate_genzv3_ck200/`, `exports/mindmate_genzv2_ck1200/`, `exports/mindmate_genzv4_ck200/` — **EXPORTING** 🔄 (job 603632)
+### `exports/mindmate_genzv3_ck200/`, `exports/mindmate_genzv2_ck1200/`, `exports/mindmate_genzv4_ck200/` — **DONE** ✅ (job 603632)
 - GGUF Q4_K_M export of top 3 SFT checkpoints, A100-80, ~4h
-- Outputs: `mindmate_genzv3_ck200_q4_k_m.gguf`, `mindmate_genzv2_ck1200_q4_k_m.gguf`, `mindmate_genzv4_ck200_q4_k_m.gguf`
-- Purpose: on-device testing + production deployment candidates
+- Outputs in `exports/`: `mindmate_genzv3_ck200_q4_k_m.gguf`, `mindmate_genzv2_ck1200_q4_k_m.gguf`, `mindmate_genzv4_ck200_q4_k_m.gguf` ✅
+- **`mindmate_genzv2_ck1200_q4_k_m.gguf` is the best GGUF available** — deploy to replace ck1600 on server
 
 ### `adapters/genzv4/` — **DONE** ✅ (job 602945)
 - Llama 3.2 3B, v4 data mix (21,529 total), 2400 steps, fresh from base, A100-80, 1h 2min
@@ -839,7 +838,7 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 - `synthetic/biometric_dpo_pipeline.py` — biometric DPO (4 pair types)
 - `synthetic/dpo_targeted_fix_pipeline.py` — help_mode + memory_recall DPO
 - `synthetic/targeted_fix_pipeline.py` — help_mode + memory_recall SFT
-- `synthetic/conversation_memory_pipeline.py` — **multi-turn + memory SFT** (10 profiles, 6 modes, 20 new-fact seeds); fixes root cause of base-beats-SFT; 🟢 running jobs 608968–608969
+- `synthetic/conversation_memory_pipeline.py` — **multi-turn + memory SFT** (10 profiles, 6 modes, 20 new-fact seeds); fixes root cause of base-beats-SFT; 🟢 running jobs 609110–609111 (72h from 2026-05-09)
 - `synthetic/run_conv_memory.slurm` — 72h, A100-80, Gemma4 teacher
 - `synthetic/utils.py` — TeacherModel, parse_json_robust, randomize_health_context
 - `synthetic/prompts/dpo_targeted_fix_preference.txt` — DPO targeted fix prompt

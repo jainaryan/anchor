@@ -1,21 +1,28 @@
-# MindMate GGUF Exports
+# Anchor GGUF Exports
 
-GGUF models for on-device inference (Android, macOS, Windows).
+GGUF models for on-device inference (Android, webapp, macOS, Windows).
 
-## Available Models
+## Available GGUFs
 
-| Folder | Base | Adapter | Quant | Notes |
+| File | Base | Adapter | Quant | Notes |
 |---|---|---|---|---|
-| `mindmate_llama_sft_ck1600/` | Llama 3.2 3B | genzv2 SFT ck1600 | Q4_K_M | **PRODUCTION — use this** |
-| `mindmate_llama_sft_ck200/` | Llama 3.2 3B | SFT ck200 | Q4_K_M | Older baseline |
-| `mindmate_llama_dpo_ck200/` | Llama 3.2 3B | SFT ck200 + DPO | Q4_K_M | Inferior to genzv2 SFT |
-| `mindmate_qwen25_dpo_ck200/` | Qwen2.5-3B | SFT ck200 + DPO | Q4_K_M | Inferior to Llama |
+| `mindmate_genzv2_ck1200_q4_k_m.gguf` | Llama 3.2 3B | genzv2 SFT ck1200 | Q4_K_M | **BEST MODEL — use this** |
+| `mindmate_genzv3_ck200_q4_k_m.gguf` | Llama 3.2 3B | genzv3 SFT ck200 | Q4_K_M | 76% v1 / 45% v3 avg |
+| `mindmate_genzv4_ck200_q4_k_m.gguf` | Llama 3.2 3B | genzv4 SFT ck200 | Q4_K_M | 65% v1 / 42% v3 avg |
+| `mindmate_genz_llama32_3b_q4_k_m.gguf` | Llama 3.2 3B | genzv2 SFT ck1600 | Q4_K_M | Old production (ck1600) |
+| `mindmate_llama32_3b_q4_k_m.gguf` | Llama 3.2 3B | none | Q4_K_M | Base model (no adapter) |
+| `mindmate_llama32_3b_f16.gguf` | Llama 3.2 3B | none | F16 | Base model full precision |
+| `mindmate_qwen3_1p7b_q4_k_m.gguf` | Qwen3 1.7B | — | Q4_K_M | Inferior — do not use |
 
-**Current production model:** `mindmate_llama_sft_ck1600/llama(genz)v2_q4_k_m.gguf`
-- On Pixel 8a: ~5.5 TPS, ~2.0 GB on disk, ~3.12 GB heap at runtime
-- Running at https://tryanchor.me
+**Benchmark summary (v1 /34, v3 /61 weighted):**
+- genzv2_ck1200: 71% v1 / 44% v3 (most stable: ±0.8)
+- genzv3_ck200: 76% v1 / 45% v3
+- genzv4_ck200: 65% v1 / 42% v3
+- llama_base (no adapter): 51% v3 — still beats all SFT on v3 (root cause fixed in c3acdc9, genzv5 pending)
 
-**Pending:** `mindmate_genz_dpo_ck1600/` — DPO on top of genzv2, job 595679 running
+**Current webapp server** (`tryanchor.me`) still serves the old ck1600 GGUF — should upgrade to `mindmate_genzv2_ck1200_q4_k_m.gguf`.
+
+**DPO models: ABANDONED** — all DPO runs were flat or worse than SFT base. No DPO GGUFs exported.
 
 ---
 
@@ -23,11 +30,11 @@ GGUF models for on-device inference (Android, macOS, Windows).
 
 The anchor-app loads GGUF from device storage.
 
-1. Transfer `llama(genz)v2_q4_k_m.gguf` to `/sdcard/Download/mindmate.gguf`
+1. Transfer `mindmate_genzv2_ck1200_q4_k_m.gguf` to `/sdcard/Download/mindmate.gguf`
 2. In the app: Add Model → pick from storage → app copies to internal storage with progress overlay
 3. Load model → chat
 
-**Required:** ~2.5 GB free RAM for Q4_K_M on Llama 3.2 3B
+**Performance (Pixel 8a, Q4_K_M):** ~5.4–6.0 TPS, TTFT 6s cached / 60–66s cold, heap ~3.12–3.17 GB.
 
 ---
 
@@ -40,9 +47,9 @@ The anchor-app loads GGUF from device storage.
 
 ### macOS / Linux — Ollama
 ```bash
-echo 'FROM ./llama_genzv2_q4_k_m.gguf' > Modelfile
-ollama create mindmate -f Modelfile
-ollama run mindmate
+echo 'FROM ./mindmate_genzv2_ck1200_q4_k_m.gguf' > Modelfile
+ollama create anchor -f Modelfile
+ollama run anchor
 ```
 
 ---
@@ -52,10 +59,10 @@ ollama run mindmate
 ```bash
 # On the cluster
 cd ~/projects/mindmate
-python scripts/export_gguf_cuda.py --model llama_ck1600
+python scripts/export_gguf_cuda.py --model genzv2_ck1200
 
 # Or via SLURM
-sbatch run_export.slurm
+sbatch scripts/run_export_top3.slurm
 ```
 
 Export logs: `~/logs/export_<jobid>.log`

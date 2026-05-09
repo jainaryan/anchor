@@ -1,7 +1,41 @@
-# Anchor — Azure Deployment Guide
+# Anchor — Deployment Guide
+
+---
+
+## Current Production (DigitalOcean) ✅
+
+**URL:** https://tryanchor.me  
+**Server:** DigitalOcean c-4 dedicated CPU droplet, IP: 209.38.122.228  
+**Model:** `exports/mindmate_llama_sft_ck1600/` (ck1600 GGUF — ⚠️ should upgrade to `mindmate_genzv2_ck1200_q4_k_m.gguf`)  
+**Stack:** FastAPI + llama-cpp-python (CPU, N_GPU_LAYERS=0), nginx reverse proxy, systemd service  
+
+```bash
+# SSH
+ssh -i ~/.ssh/id_ed25519 root@209.38.122.228
+
+# Restart service
+systemctl restart mindmate
+
+# Tail logs
+journalctl -u mindmate -f
+
+# Deploy static file changes
+rsync -az -e "ssh -i ~/.ssh/id_ed25519" deploy/static/ root@209.38.122.228:~/mindmate/deploy/static/
+
+# ⚠️ Upgrade model to genzv2_ck1200 (better benchmark scores)
+rsync -az exports/mindmate_genzv2_ck1200_q4_k_m.gguf root@209.38.122.228:~/mindmate/exports/
+# Then update deploy/config.py MODEL_PATH and restart
+```
+
+**Billing guard:** `/root/billing_guard.sh` — hourly cron, destroys droplet at $175/month spend.
+
+---
+
+## New Deployment Guide (Azure)
 
 Target: Azure Standard_D4as_v5 (4 vCPU, 16 GB RAM), Central India, 32 GB Standard SSD.  
-Cost: ~$0.19/hr on-demand. Use **Azure for Students** ($100/yr free with NUS `.edu.sg` email — no credit card).
+Cost: ~$0.19/hr on-demand. Use **Azure for Students** ($100/yr free with NUS `.edu.sg` email — no credit card).  
+*(The existing production server is DigitalOcean — use this section if provisioning a new/replacement server.)*
 
 ---
 
