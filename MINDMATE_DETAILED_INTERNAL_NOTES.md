@@ -2,7 +2,7 @@
 
 ## Metadata
 - Project: `mindmate`
-- Last updated: `2026-05-09` (session 3)
+- Last updated: `2026-05-09` (session 4)
 - Android app: `anchor-app/` (NOT `mindmate_app/` — that is a stale scratch fork)
 - Production: https://tryanchor.me
 
@@ -20,11 +20,12 @@ Synthetic Data (Gemma 4 26B A4B IT teacher)
 → Android (anchor-app, JNI → llama.cpp)
 ```
 
-**v3 benchmark (3-run averaged, partial):** llama_base 51%, genzv3_ck200 45%, genzv4_ck200 42%. genzv2_ck1200 + genzv2_ck1600 reruns in progress (jobs 609112–609114, 609118–609120, A100-80).
-**⚠️ Base model still beats SFT (v3 averaged):** llama_base 51% > genzv3_ck200 45%. Root cause fix running — see below.
+**v3 benchmark (3-run averaged, COMPLETE):** llama_base 51%, genzv3_ck200 45%, genzv2_ck1600 45%, genzv2_ck1200 44%, genzv4_ck200 42%. Base still beats all SFT.
+**⚠️ Base model still beats SFT (v3 averaged):** Root cause identified and fixed — see below.
 **⚠️ Benchmark variance (2026-05-09):** `temperature=0.7` on eval → 17/49 scenarios flip PASS↔FAIL across runs. **3-run averaged methodology adopted.** Use `benchmarks/average_results.py --since 20260509`.
 **v3 benchmark suite:** 58 scenarios, 9 categories, total weight 61. Added COMPANION with genziness sub-tests (cp_07–09: voice matching, therapy-speak avoidance, high-energy calibration).
-**Root cause fix running:** `conversation_memory_pipeline.py` **v2 (teacher-as-Anchor)** — Gemma4 constrained by production anchor prompt when generating assistant turns. Two jobs (609110, 609111) on A100-80, 72h. Target ~7k–10k examples for genzv5.
+**Root cause identified (session 4):** All 42,038 training examples were missing the production system prompt preamble. targeted_fix + biometric had truncated `[User]`/`[Recent sessions]`-only system prompts; all other files had no system message. Model never saw the "You are Anchor..." + "ABOUT THIS USER" header during training. **Fixed and pushed (commit c3acdc9).**
+**Conv-memory pipeline (teacher-as-Anchor) running:** Jobs 609110–609111, A100-80, 72h. Uses full production format (fix above was inspired by this finding).
 **`llama_ck1600` renamed `genzv2_ck1600`** in MODEL_SHORTCUTS — same adapter (`adapters/genz/checkpoint-1600`), clearer name.
 **Previous best (old 34-scenario v1 benchmark):** genzv3_ck200 76%, genzv2_ck1200 71%, genzv4_ck200 65%.
 **Production deploy:** https://tryanchor.me (FastAPI, DigitalOcean c-4)
@@ -324,19 +325,17 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ---
 
-## Active Cluster Jobs (2026-05-09, session 3)
+## Active Cluster Jobs (2026-05-09, session 4)
 
 | Job | Name | GPU | Status | Notes |
 |---|---|---|---|---|
 | 609110, 609111 | mindmate-conv-memory | A100-80 (xgph7, xgph8) | 🟢 RUNNING | 72h; teacher-as-Anchor v2 pipeline → `synthetic_train_conv_memory.jsonl` |
-| 609112–609114 | mindmate-bench | A100-80 | 🟢 RUNNING | genzv2_ck1200 × 3 reruns (prev OOMed on ~46GB node) |
-| 609118–609120 | mindmate-bench | A100-80 | ⏳ PENDING | genzv2_ck1600 × 3 (renamed from llama_ck1600) |
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
-| 609118–609120 | v3 benchmark genzv2_ck1600 × 3 (A100-80) | ⏳ PENDING May 9 |
-| 609112–609114 | v3 benchmark genzv2_ck1200 × 3 rerun (A100-80) | ⏳ RUNNING May 9 — prev runs OOMed on 46GB node |
+| 609118–609120 | v3 benchmark genzv2_ck1600 × 3 (A100-80) | ✅ DONE May 9 — 45% avg (27.5/61, ±1.5, n=2; 3rd job may have timestamp-collided) |
+| 609112–609114 | v3 benchmark genzv2_ck1200 × 3 rerun (A100-80) | ✅ DONE May 9 — 44% avg (26.8/61, ±0.8, n=4 total) |
 | 609115–609117 | v3 benchmark llama_ck1600 × 3 (A100-80) | CANCELLED May 9 — renamed to genzv2_ck1600, resubmitted as 609118–609120 |
 | 609069–609083 | v3 benchmark 3-run sweep (5 models × 3 runs, A100-80 + H100-96) | **DONE** May 9 — partial averaged results (3/5 models); see Benchmarks section |
 | 609110–609111 | conv-memory pipeline v2 (teacher-as-Anchor) | 🟢 RUNNING May 9 — 72h A100-80 |
@@ -481,19 +480,35 @@ Key: BIO=BIOMETRIC, COMP=COMPANION, CM=CONTEXT_MEMORY, CoM=CONVERSATION_MEMORY, 
 - `llama_base` COMPANION: 5/9 (56%) — base model is clinical/formal, struggles with genziness
 - `genzv3_ck200` NO_HALLUCINATION: **7/7 (100%)** — best clean-opener behavior of any model
 
-### Results — v3 benchmark (58 scen, 3-run averaged) — PARTIAL ✅ / reruns ⏳
+### Results — v3 benchmark (58 scen, 3-run averaged) — ✅ COMPLETE
 
-Jobs 609069–609083 all completed. genzv2_ck1200 and genzv2_ck1600 OOMed on ~46GB nodes (H100-96 GRES fell back to smaller GPU; Gemma4 needs ~52GB). Reruns submitted: 609112–609114 (genzv2_ck1200), 609118–609120 (genzv2_ck1600) — explicit A100-80.
+All 5 models complete. `python benchmarks/average_results.py --since 20260509`
 
 | Model | Avg /61 | % | ± | n |
 |---|---|---|---|---|
 | llama_base | 31.3 | **51%** | 1.9 | 3 |
 | genzv3_ck200 | 27.5 | **45%** | 2.1 | 4 |
+| genzv2_ck1600 | 27.5 | **45%** | 1.5 | 2 |
+| genzv2_ck1200 | 26.8 | **44%** | 0.8 | 4 |
 | genzv4_ck200 | 25.7 | **42%** | 1.2 | 3 |
-| genzv2_ck1200 | — | — | — | ⏳ rerunning |
-| genzv2_ck1600 | — | — | — | ⏳ rerunning |
 
-**Key:** Base model (51%) still beats all SFT models. genzv4 timestamp collision: two jobs wrote to same file (`_0348.json`) — effectively 2 clean new runs + 1 earlier run. Run when reruns done: `python benchmarks/average_results.py --since 20260509`
+**Key:** Base model (51%) still beats all SFT models. genzv2_ck1200 most stable (±0.8). genzv2_ck1600 only n=2 (3rd may have timestamp-collided).
+
+**Per-category breakdown (averaged, session 4):**
+
+| Category | BASE | v3_ck200 | v2_ck1600 | v2_ck1200 | v4_ck200 | Winner |
+|---|---|---|---|---|---|---|
+| COMPANION | 44% | 47% | **94%** | **92%** | 44% | SFT (v2 models) |
+| FORMAT | 33% | 62% | **75%** | 56% | 50% | SFT |
+| CONV_MEMORY | 13% | 35% | 30% | 30% | 33% | SFT |
+| NO_HALLUCINATION | 67% | **89%** | 50% | 54% | 71% | SFT (v3 only) |
+| **CRISIS** | **67%** | 59% | 56% | 53% | 58% | **BASE** |
+| **HELP_MODE** | **58%** | 34% | 38% | 44% | 25% | **BASE** |
+| **BIOMETRIC** | **60%** | 25% | 20% | 30% | 40% | **BASE** |
+| **CONTEXT_MEMORY** | **38%** | 16% | 12% | 9% | 21% | **BASE** |
+| **CROSS_SESSION_MEMORY** | **83%** | 44% | 12% | **0%** | 42% | **BASE** |
+
+**CROSS_SESSION_MEMORY is the smoking gun:** genzv2_ck1200 scores 0% on all 4 xs_* scenarios — completely fails to use the `[Recent sessions]` memory block. Base scores 83%.
 
 Most variable scenarios across runs: bio_02, cm_08, cp_03, cp_05, cp_09 (67% pass rate), cp_07, cv_01, hm_02, nh_04 (50% pass rate).
 
@@ -623,15 +638,36 @@ DPO trained on `dpo_train.jsonl` (5,750 pairs), 800 steps, from three SFT bases.
 - **Conclusion: DPO with current data + beta=0.1 + 800 steps does not work for this task. Abandon DPO, focus on SFT data quality.**
 - **Current production-best: `adapters/genz/checkpoint-1200`** (genzv2 SFT, 71%) — note this is ck1200 not ck1600.
 
-### Root cause: why fine-tuning degrades context use (2026-05-08)
+### Root cause: why fine-tuning degrades context use (2026-05-08, confirmed + fixed 2026-05-09)
 
-Analysis of failure transcripts (genzv2_ck1200 vs llama_base on v2 benchmark) reveals three structural problems in the training data:
+Analysis of failure transcripts (genzv2_ck1200 vs llama_base on v2 benchmark) reveals structural problems in the training data:
 
 | Problem | Evidence |
 |---|---|
 | 60% of training has zero memory context | friend_1 (7,380), casual (5,000), therapist (2,637), transition (6,184) = 0% `[Recent sessions]` |
 | 100% of memory examples are single-turn | targeted_fix (13,524): has memory but 0% multi-turn. Model never sees memory + multi-turn together |
 | Multi-turn training teaches "ignore context" | All 21k+ multi-turn examples have no system prompt context — model learns: multi-turn = chat freely |
+| **System prompt format mismatch (root cause #2, found session 4)** | **All training data was missing the production preamble. See below.** |
+
+**System prompt format mismatch — the deeper root cause (2026-05-09, session 4):**
+
+Comparing training data format vs benchmark/production format:
+
+| | System prompt during training | System prompt at inference/benchmark |
+|---|---|---|
+| `targeted_fix.jsonl` (13,524) | `[User]\n...\n[Recent sessions]\n...` only | Full preamble + ABOUT THIS USER header + [User] + [Recent sessions] |
+| `biometric.jsonl` (2,348) | `[User]\n...\n[Recent sessions]\n...` only | Same full format |
+| `friend_1`, `therapist_`, `transition`, `casual`, `grief`, `targeted_fixes` | **No system message at all** | Full preamble |
+
+The model was trained on 42,038 examples where it either saw truncated memory blocks (no "You are Anchor..." preamble, no "ABOUT THIS USER" instruction header) or no system prompt at all. At inference/benchmark it sees the full production format — a totally different context. The base model handles it correctly because instruction-following is intact; SFT overwrote this with patterns learned from the wrong format.
+
+**Fix (commit c3acdc9, 2026-05-09):** One-time normalization script updated all 42,038 examples:
+- `targeted_fix.jsonl` + `biometric.jsonl`: prepended `_APP_BASE_PROMPT + MEMORY_HEADER` before existing `[User]`/`[Recent sessions]` blocks
+- `biometric.jsonl` had 179 examples with raw session notes (no `[Recent sessions]` label) — wrapped with full format
+- `friend_1`, `therapist_`, `transition`, `casual`, `grief`: injected `_APP_BASE_PROMPT` as system message
+- `targeted_fixes.jsonl` (gold): had old `ABOUT THIS USER\nTriggers:...` abbreviated format — prepended `_APP_BASE_PROMPT`
+- All files normalized to `conversations` key (from `messages`)
+- conv_memory pipeline (jobs 609110–609111) already generates correct format — no fix needed
 
 **What the failing models do:**
 - `cv_03` (reconnect to dad argument after topic switch): genzv2 pivots to "otters hold hands while they sleep" — pure friend banter, zero context tracking
@@ -858,3 +894,4 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genz_dpo_
 | May 9 | `average_results.py` KeyError: `'weighted_pass'` — result JSON uses nested `overall.weighted_pass` not top-level | Fixed: access `d['overall']['weighted_pass']` with fallback for both flat and nested formats. |
 | May 9 | `llama_ck1600` shortcut name misleading — it is the genzv2 SFT adapter | Renamed to `genzv2_ck1600` in MODEL_SHORTCUTS and all docs. Adapter path unchanged: `adapters/genz/checkpoint-1600`. |
 | May 9 | `conversation_memory_pipeline.py` v1 used meta-prompt: teacher generated full conversation JSON but was never constrained by anchor prompt. Training signal was generic Gemma4 style, not anchor-aligned. | Refactored to teacher-as-Anchor two-phase: Phase 1 (user simulator) + Phase 2 (Gemma4 with production anchor prompt as system message). |
+| May 9 | All 42,038 training examples were missing production system prompt preamble. `targeted_fix` + `biometric`: had truncated `[User]`/`[Recent sessions]`-only system prompts (no "You are Anchor..." or "ABOUT THIS USER" instructions). All other files: no system message at all. Model learned to respond to a totally different format than inference. This is the deepest root cause of base-beats-SFT on memory categories (CROSS_SESSION_MEMORY 0%, CTX_MEM 9%, BIO 30%). | Normalization script updated all files to production format (commit c3acdc9). genzv5 will be the first training run with correct format. |
