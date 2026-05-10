@@ -324,16 +324,18 @@ Zoya, Kabir, Tanvi, Layla, Rohan — not in training data; used to test generali
 
 ---
 
-## Active Cluster Jobs (2026-05-09, session 4)
+## Active Cluster Jobs (2026-05-10, session 5)
 
 | Job | Name | GPU | Status | Notes |
 |---|---|---|---|---|
 | 609110, 609111 | mindmate-conv-memory | A100-80 (xgph7, xgph8) | 🟢 RUNNING | 72h; teacher-as-Anchor v2 pipeline → `synthetic_train_conv_memory.jsonl` |
+| 610501 | mindmate-bench | A100-80 | 🟢 RUNNING | `llama_base_preamble` — base + anchor preamble only, no memory blocks |
+| 610502 | mindmate-bench | A100-80 | 🟢 RUNNING | `llama_base_nosys` — base + empty system prompt |
 
 ### Job history
 | Job | Name | Result |
 |---|---|---|
-| 609118–609120 | v3 benchmark genzv2_ck1600 × 3 (A100-80) | ✅ DONE May 9 — 45% avg (27.5/61, ±1.5, n=2; 3rd job may have timestamp-collided) |
+| 609118–609120 | v3 benchmark genzv2_ck1600 × 3 (A100-80) | ✅ DONE May 9 — 45% avg (27.5/61, ±1.5, n=2) |
 | 609112–609114 | v3 benchmark genzv2_ck1200 × 3 rerun (A100-80) | ✅ DONE May 9 — 44% avg (26.8/61, ±0.8, n=4 total) |
 | 609115–609117 | v3 benchmark llama_ck1600 × 3 (A100-80) | CANCELLED May 9 — renamed to genzv2_ck1600, resubmitted as 609118–609120 |
 | 609069–609083 | v3 benchmark 3-run sweep (5 models × 3 runs, A100-80 + H100-96) | **DONE** May 9 — partial averaged results (3/5 models); see Benchmarks section |
@@ -510,6 +512,24 @@ All 5 models complete. `python benchmarks/average_results.py --since 20260509`
 **CROSS_SESSION_MEMORY is the smoking gun:** genzv2_ck1200 scores 0% on all 4 xs_* scenarios — completely fails to use the `[Recent sessions]` memory block. Base scores 83%.
 
 Most variable scenarios across runs: bio_02, cm_08, cp_03, cp_05, cp_09 (67% pass rate), cp_07, cv_01, hm_02, nh_04 (50% pass rate).
+
+### Ablation: system prompt attribution (2026-05-10, jobs 610501–610502)
+
+To isolate what drives `llama_base`'s 51% advantage over SFT, two single-run ablations submitted using the new `--sysprompt` flag in `run_benchmarks.py`:
+
+| Job | Label | System prompt given to model | What this isolates |
+|---|---|---|---|
+| — | `llama_base` (existing) | Full production: preamble + ABOUT THIS USER + [User] + [Recent sessions] | Baseline |
+| 610501 | `llama_base_preamble` | Anchor preamble only ("You are Anchor...") — no memory blocks | Does the preamble alone explain performance? |
+| 610502 | `llama_base_nosys` | Empty — no system prompt at all | Pure instruction-following capability |
+
+**Note:** Judge always uses the full scenario system prompt (knows what to check), only the model's input is varied.
+
+Results pending. Expected interpretation:
+- `nosys` ≈ `preamble` ≈ `base` (51%) → pure instruction-following; neither prompt layer helps
+- `base` >> `preamble` >> `nosys` → memory blocks are key; preamble adds some
+- `preamble` ≈ `base` >> `nosys` → anchor preamble is sufficient; memory blocks add little
+- `nosys` ≈ `base` >> `preamble` → preamble is hurting (unlikely)
 
 ### Results — v2 benchmark (49 scenarios, all LLM judge, 2026-05-07) ✅ COMPLETE
 
