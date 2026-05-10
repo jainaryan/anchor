@@ -30,6 +30,7 @@ set -euo pipefail
 MODEL="${MODEL:-llama_ck1600}"
 ADAPTER="${ADAPTER:-}"
 LABEL="${LABEL:-}"
+SYSPROMPT="${SYSPROMPT:-full}"
 CATEGORY_ARG=""
 if [ -n "${CATEGORY:-}" ]; then
     CATEGORY_ARG="--category $CATEGORY"
@@ -54,16 +55,20 @@ echo "========================================"
 
 source mindmatenv/bin/activate
 
+LABEL_ARG=""
+if [ -n "$LABEL" ]; then LABEL_ARG="--label $LABEL"; fi
+
 if [ -n "$ADAPTER" ]; then
-    LABEL_ARG=""
-    if [ -n "$LABEL" ]; then LABEL_ARG="--label $LABEL"; fi
     python -u benchmarks/run_benchmarks.py \
         --adapter "$ADAPTER" \
         $LABEL_ARG \
+        --sysprompt "$SYSPROMPT" \
         $CATEGORY_ARG
 else
     python -u benchmarks/run_benchmarks.py \
         --model "$MODEL" \
+        $LABEL_ARG \
+        --sysprompt "$SYSPROMPT" \
         $CATEGORY_ARG
 fi
 
