@@ -31,8 +31,10 @@ Supported --model shortcuts:
 
 import argparse
 import json
+import os
 import sys
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -399,8 +401,9 @@ print()
 if not args.no_save:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     ts      = datetime.now().strftime("%Y%m%d_%H%M")
-    out_json = RESULTS_DIR / f"{label}_{ts}.json"
-    out_md   = RESULTS_DIR / f"{label}_{ts}.md"
+    job_id  = os.environ.get("SLURM_JOB_ID") or uuid.uuid4().hex[:6]
+    out_json = RESULTS_DIR / f"{label}_{ts}_{job_id}.json"
+    out_md   = RESULTS_DIR / f"{label}_{ts}_{job_id}.md"
 
     payload = {
         "model":     label,

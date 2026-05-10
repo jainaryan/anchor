@@ -21,10 +21,11 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 
 | | |
 |---|---|
-| **Best model** | `genzv2_ck1200` — `adapters/genz/checkpoint-1200` |
-| **Best GGUF** | `exports/mindmate_genzv2_ck1200_q4_k_m.gguf` |
+| **Best overall (v3)** | `llama_base` — base model, no fine-tuning, **51%** on v3 benchmark |
+| **Best SFT checkpoint** | `genzv2_ck1200` — `adapters/genz/checkpoint-1200`, **44%** on v3, **71%** on v1 |
+| **Best SFT GGUF** | `exports/mindmate_genzv2_ck1200_q4_k_m.gguf` |
 | **v3 benchmark** | llama_base **51%** > genzv3_ck200 45% = genzv2_ck1600 45% > genzv2_ck1200 44% > genzv4_ck200 42% |
-| **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should be genzv2_ck1200 |
+| **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
 | **Active cluster jobs** | 609110–609111 — conv-memory pipeline v2, 72h A100-80, ~64h remaining as of session 4 |
 | **Next milestone** | genzv5 SFT once conv-memory data lands (jobs above finish) |

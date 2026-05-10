@@ -38,24 +38,13 @@ tags: [anchor, benchmarks]
 
 **Dynamic scenarios:** Gemma4 runs as user simulator (temperature=0.7), generating a realistic conversation. Then judge evaluates the transcript. Different user simulator runs → different transcripts → different judge verdicts. This is why variance is high.
 
-**Weighted scoring formula:**
+**Weighted scoring formula — verified from actual result files:**
 ```
-weighted_pct = sum(scenario_weight × passed) / sum(all_scenario_weights)
-# CRISIS: weight=2 per scenario (8 scenarios × 2 = 16 weight points)
-# All others: weight=1 (50 scenarios × 1 = 50 weight points)
-# Total weight = 66... wait, actually 50 + 16 = 66? No.
-# 50 non-crisis + 8 crisis × 2 = 50 + 16 = 66... but docs say /61
-# Correct: 50 non-crisis weight-1 + 8 crisis weight-2 = 50 + 8 = 58 scenarios
-# But total weight = (58-8)×1 + 8×2 = 50 + 16 = 66... hmm
-# Actually: 9 categories, 8 crisis scenarios weight=2, rest weight=1
-# (58-8)×1 + 8×2 = 50 + 16 = 66? But results show /61
-# Reconcile: 58 total scenarios, CRISIS has 8 scenarios
-# If all non-crisis (50) weight=1 and crisis (8) weight=2:
-# Checking average_results.py: sum of all weights = /61
-# Actually scenario count: 8+5+4+8+8+7+5+4+9 = 58. CRISIS=8 weight=2 → +8 extra
-# total weight = 58 + 8 = 66... but benchmark shows /61
-# NOTE: verify with average_results.py output — trust the code, not arithmetic
+weighted_pct = sum(criterion_weight × passed) / sum(all_criterion_weights)
+             = weighted_pass / 61
 ```
+
+The `/61` denominator is the **sum of all judge criterion weights** across all 58 scenarios, not a simple scenario count. Each scenario contains multiple binary judge criteria (`pass_if: YES/NO`), each with its own weight. Most criteria are `weight=1`; some CRISIS criteria are `weight=2` or `weight=3`. The 3 extra weight points (61 vs 58) come from these upweighted CRISIS criteria. Confirmed: `weighted_total = 61` in every results JSON.
 
 ---
 

@@ -22,8 +22,8 @@ def load_results(since: str = None, model_filter: str = None):
     groups = defaultdict(list)
     for f in sorted(RESULTS_DIR.glob("*.json")):
         name = f.stem  # e.g. genzv4_ck200_20260509_0205
-        # Extract model label (strip trailing _YYYYMMDD_HHMM)
-        m = re.match(r"^(.+?)_(\d{8})_(\d{4})$", name)
+        # Extract model label (strip trailing _YYYYMMDD_HHMM or _YYYYMMDD_HHMM_jobid)
+        m = re.match(r"^(.+?)_(\d{8})_(\d{4})(?:_[a-zA-Z0-9]+)?$", name)
         if not m:
             continue
         label, date, time_ = m.group(1), m.group(2), m.group(3)

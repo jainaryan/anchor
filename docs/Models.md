@@ -8,6 +8,19 @@ tags: [anchor, models]
 
 ---
 
+## "Best model" — disambiguation
+
+| Term | Model | Why |
+|---|---|---|
+| **Best overall (v3)** | `llama_base` | 51% on v3 — base instruction model, no fine-tuning |
+| **Best SFT checkpoint** | `genzv2_ck1200` | 44% v3, 71% v1 — best fine-tuned model so far |
+| **Currently deployed** | `genzv2_ck1600` | ⚠️ outdated — should upgrade to genzv2_ck1200 |
+| **Android app default** | `genzv2_ck1200` | `ModelStore.ts` `lastUsedModelId` points here |
+
+Base beats all SFT on v3 because training data used wrong system prompt format (fixed c3acdc9). genzv5 is the first run with correct format — expect memory categories to recover.
+
+---
+
 ## Leaderboard (v3 benchmark, 3-run averaged, /61 weighted, COMPLETE)
 
 | Model | Avg /61 | % | ± | n | GGUF |
