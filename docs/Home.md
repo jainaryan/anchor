@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-09 (session 4)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-11 (session 5)
 
 ---
 
@@ -17,7 +17,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 
 ---
 
-## Quick Status (2026-05-09)
+## Quick Status (2026-05-10)
 
 | | |
 |---|---|
@@ -57,6 +57,8 @@ These are the non-obvious invariants that burn time if unknown:
 
 10. **`deploy/config.py` still points to ck1600 GGUF.** It needs to be updated to `mindmate_genzv2_ck1200_q4_k_m.gguf` when upgrading production.
 
+11. **Update these docs every time you change code.** See the "Doc update rule" section at the bottom of this file. This is not optional — stale docs are the primary source of wasted context across sessions.
+
 ---
 
 ## Repos
@@ -85,7 +87,38 @@ These are the non-obvious invariants that burn time if unknown:
 
 ## Notes
 
-- [[Models]] — leaderboard, per-category breakdown, adapter + GGUF inventory, all checkpoint results
+---
+
+## Doc Update Rule — Mandatory for All Agents
+
+**Every time you make a code change in this project, update the docs before ending your turn.** This rule exists because stale docs are the #1 source of wasted context across sessions.
+
+| What changed | Which docs to update |
+|---|---|
+| Training scripts, data pipeline, dataset | `Training.md`, `Data.md` |
+| Benchmark logic or results | `Benchmarks.md`, `Models.md` |
+| Cluster scripts, SLURM, ssh | `Cluster.md` |
+| anchor-app memory system, prompts, chat lifecycle | `Anchor App.md`, `System Prompt.md` |
+| anchor-app eval harness | `Anchor App.md` (eval section) |
+| Any bug found + fixed | `Bug Log.md` — new entry under today's date |
+| New work items or removed blockers | `Next Steps.md` |
+| Anything at all | Bump `Home.md` last-updated date |
+
+When in doubt: add a dated note to `Bug Log.md` and update this file's date.
+
+**Where this rule is enforced** (one file per agent entry point):
+
+| Agent | File |
+|---|---|
+| Claude Code | `CLAUDE.md` |
+| Codex / any OpenAI agent | `AGENTS.md` |
+| Cursor | `.cursorrules` |
+| GitHub Copilot | `.github/copilot-instructions.md` |
+| Any agent that reads the docs | This section |
+
+---
+
+## Notes
 - [[Benchmarks]] — full methodology, all results tables, variance analysis, running commands
 - [[Training]] — SFT pipeline, exact hyperparams, data mixes, SLURM scripts with exact args
 - [[Data]] — all training JSONL files with counts, status, normalization, pipelines

@@ -142,6 +142,27 @@ DigitalOcean c-4 does CPU inference only. If tryanchor.me traffic grows, conside
 
 ---
 
+---
+
+## anchor-app Code Quality (session 5 — partially done)
+
+### Done (2026-05-10)
+
+- ✅ **Panic detection tiered** — `'urgent'` blocks, `'watch'` notifies only
+- ✅ **Session-extraction race condition** — snapshot at schedule time
+- ✅ **Person-name casing bug** — intro regex now matches regardless of case
+- ✅ **Memory retrieval** — summary text included in search, recency bonus
+- ✅ **Prompt token budgeting** — per-tier char caps in contextBuilder
+- ✅ **Eval prompt drift** — EvalRunner defaults to production prompt
+
+### Still to do
+
+- ⬜ **Unify profile storage** — `profileStorage.ts` (AsyncStorage) and `MemoryRepository.ts` (WatermelonDB) are separate stores. Profile UI writes to AsyncStorage; inference memory reads from WatermelonDB. These can diverge. Migrate to one canonical store.
+- ⬜ **Unit tests for critical memory path** — `contextBuilder`, `sessionExtractor`, `panicDetection`, `profileExtractor` have no focused tests. Add unit tests + regression fixtures. These directly affect user safety.
+- ⬜ **Privacy hardening** — Profile and diary stored in plaintext local storage. Consider encrypted at-rest option or keychain-backed "privacy lock" mode.
+
+---
+
 ## See also
 
 - [[Training]] — how to run SFT

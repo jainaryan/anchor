@@ -1,0 +1,22 @@
+# Anchor — mindmate repo
+
+Read `docs/Home.md` first. All project knowledge is in `docs/`.
+
+## DOC UPDATE RULE (required on every code change)
+Update the relevant doc before ending your turn:
+- Training / data changes → `docs/Training.md`, `docs/Data.md`
+- Benchmark changes or results → `docs/Benchmarks.md`, `docs/Models.md`
+- Cluster / SLURM changes → `docs/Cluster.md`
+- anchor-app changes → `docs/Anchor App.md`, `docs/System Prompt.md`
+- Any bug fixed → `docs/Bug Log.md` (new dated entry)
+- New work items → `docs/Next Steps.md`
+- Any change at all → bump "Last updated" date in `docs/Home.md`
+
+## Key invariants
+- `finetuning/` scripts are current. Root-level scripts are legacy.
+- Never continue-train (--adapter-path). MEMORY_USE collapses. Start fresh.
+- Always `--gres=gpu:a100-80:1` in sbatch. H100-96 can fall back to 46 GB nodes.
+- `--export` must go BEFORE the script path in sbatch.
+- GitHub SSH blocked on cluster. Use rsync.
+- Always 3-run averaged benchmark scores. Never rank on single-run.
+- Base model beats all SFT on v3 (51% vs 44%). Root cause fixed in c3acdc9.

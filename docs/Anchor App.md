@@ -38,13 +38,19 @@ ChatScreen mounts
   → fullPrompt stored in useChatSession ref (fixed for entire session)
         ↓
 User sends message
+  → detectPanic() → PanicRiskLevel ('none' | 'watch' | 'urgent')
+       'urgent' → onPanicDetected() + return (message blocked)
+       'watch'  → onPanicDetected() called, message still sends
+       'none'   → normal flow
   → prepareCompletion() builds OpenAI-compatible messages array
   → truncateHistory() caps at MAX_HISTORY_TURNS (8 turns = 16 messages)
   → modelStore.activeModel.completion(params) → token stream
-  → detectPanic() checks response for crisis signals
         ↓
-Session ends (5-min inactivity debounce or user navigates away)
-  → runExtraction(sessionId, messages, moodStart, moodEnd)
+Completion finishes
+  → scheduleSessionExtraction()
+       ⚠️ sessionId + messages snapshot captured NOW (not at timer fire)
+       Debounce: 5-min timer
+  → runExtraction(sessionId, messagesSnapshot, moodStart, moodEnd)
     → extractTopics / extractPeople / extractUserFacts / extractCopingWithOutcomes / detectMilestone
     → memoryRepository.saveMemory(EpisodicMemoryData)
     → memoryRepository.addKnownName / addUserFact
@@ -73,6 +79,17 @@ const matchedMemories = await memoryRepository.searchByKeywords(keywords);
 ```
 
 **Eval mode** (`overrideContext` provided): uses inline data, no DB access. Used by EvalRunner.
+
+**Per-tier character budgets** (enforced before assembly, ~4 chars/token):
+
+| Tier | Budget | ≈ tokens |
+|---|---|---|
+| Tier 1 (`[User]`) | 2,400 chars | ~600 |
+| Tier 2 (`[Recent sessions]`) | 3,200 chars | ~800 |
+| Tier 3 (`[Relevant past]`) | 1,600 chars | ~400 |
+| Biometric | 1,600 chars | ~400 |
+
+Each tier is truncated at the nearest line boundary within its budget (`[…]` appended). Chat history is truncated separately via `truncateHistory()`.
 
 ### Memory Tiers
 
@@ -125,6 +142,8 @@ Extracts from message text:
 - **User facts** — `"my [noun] [Name]"` pattern (e.g. "my dog Mochi", "my therapist Priya")
 - **Coping used + outcome** — matched against `COPING_STEMS` (breathing, walking, journaling, etc.), outcome inferred from sentiment words in next 3 messages
 - **Milestones** — keyword matching (death, breakup, engaged, new job, etc.) with exclusion list ("killing it", "dying of boredom")
+
+**Casing invariant:** `getUserMessages()` preserves original message casing. `extractTopics()` and `detectMilestone()` lowercase internally. The intro regex for new-person detection (`"my [relationship] [Name]"`) matches `[A-Za-z]` and Title-cases the result — fixes a prior bug where the `[A-Z]` pattern never matched lowercased text.
 
 Saves to DB via `memoryRepository.saveMemory()`. Also updates `knownNames` and `userFacts` on the profile.
 
@@ -199,7 +218,7 @@ Stores the profile card (Tier 1). Key fields: `name`, `age`, `gender`, `location
 | `src/utils/anchorSystemPrompt.ts` | **Production system prompt.** `getAnchorSystemPrompt(mode)` returns 6-line BASE_PROMPT. `AnchorConversationMode = 'reflect' \| 'calm' \| 'focus'` (mode currently unused — all return same prompt). |
 | `src/memory/contextBuilder.ts` | Builds full system prompt with memory. `buildEnhancedSystemPrompt()`, `truncateHistory()`. |
 | `src/memory/sessionExtractor.ts` | Post-session extraction. `runExtraction()`. |
-| `src/repositories/MemoryRepository.ts` | DB access: `getOrCreateProfile()`, `getRecentMemories(n)`, `searchByKeywords(keywords)`, `saveMemory()`, `addKnownName()`, `addUserFact()`. |
+| `src/repositories/MemoryRepository.ts` | DB access: `getOrCreateProfile()`, `getRecentMemories(n)`, `searchByKeywords(keywords)`, `saveMemory()`, `addKnownName()`, `addUserFact()`. `searchByKeywords` scores against topics + peopleMentioned + summary text, with recency bonus (memories < 14 days old score +0–1.0 on top of keyword hits). |
 | `src/screens/ChatScreen/ChatScreen.tsx` | Chat orchestration. Imports `getAnchorSystemPrompt`, calls `buildEnhancedSystemPrompt` via `useChatSession`. |
 | `src/screens/PanicScreen.tsx` | Crisis screen. |
 | `src/screens/ProfileSetupScreen/` | Profile setup wizard. Uses `loadProfile`/`saveProfile` from `src/utils/profileStorage.ts`. |
@@ -219,7 +238,7 @@ Stores the profile card (Tier 1). Key fields: `name`, `age`, `gender`, `location
 |---|---|
 | `src/hooks/useChatSession.ts` | Core chat hook. Calls `buildEnhancedSystemPrompt`, `prepareCompletion`, `runExtraction`. |
 | `src/utils/systemPromptResolver.ts` | Resolves which system prompt to use (Anchor vs custom). |
-| `src/utils/panicDetection.ts` | Detects crisis signals in model response → redirects to PanicScreen. |
+| `src/utils/panicDetection.ts` | `detectPanic(msg)` → `PanicRiskLevel`. `'urgent'` = explicit self-harm intent (blocks message, hard redirect). `'watch'` = general distress phrasing (notifies caller, message still sends). `'none'` = safe. See tiered pattern lists in the file. |
 | `src/utils/chat.ts` | `convertToChatMessages`, `removeThinkingParts`, `getHFDefaultSettings`. |
 | `src/utils/profileStorage.ts` | `loadProfile()` / `saveProfile()` — AsyncStorage-backed profile persistence. |
 | `src/utils/profileExtractor.ts` | Extracts profile suggestions from conversation (e.g. if user mentions age). |
@@ -236,7 +255,11 @@ Stores the profile card (Tier 1). Key fields: `name`, `age`, `gender`, `location
 - 10 multi-turn
 - 5 biometric
 
-`EvalRunner.ts` runs single-turn scenarios. `MultiTurnRunner.ts` runs multi-turn. Both use `MINDMATE_SYSTEM_PROMPT` from `src/constants/mindmatePrompt.ts` (the long structured prompt) — **not** the production 6-line prompt.
+`EvalRunner.ts` runs single-turn scenarios. `MultiTurnRunner.ts` runs multi-turn.
+
+**As of 2026-05-10:** `EvalRunner.ts` now defaults to the **production prompt** (`getAnchorSystemPrompt('reflect')`). To use the legacy 150-line structured prompt for historical comparison, pass it as the third arg: `runScenario(scenario, onStatus, MINDMATE_SYSTEM_PROMPT)`.
+
+This means new eval runs are directly comparable to what users experience. Old runs (pre 2026-05-10) used `MINDMATE_SYSTEM_PROMPT` — note this when comparing historical scores.
 
 Results: `src/eval/EVAL_RESULTS.md` — includes last run (2026-04-23, Pixel 8a) plus a warning block documenting all post-run fixes.
 

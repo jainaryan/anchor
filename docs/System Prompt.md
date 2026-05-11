@@ -14,10 +14,10 @@ Two system prompt files exist in anchor-app. **They serve completely different p
 
 | File | Used by | Content | Notes |
 |---|---|---|---|
-| `src/utils/anchorSystemPrompt.ts` | **Production chat** (`ChatScreen.tsx`) | "You are Anchor..." 6-line prompt | What real users see |
-| `src/constants/mindmatePrompt.ts` | **Eval runner only** (`EvalRunner.ts`, `MultiTurnRunner.ts`) | ~150-line structured prompt with old "MindMate" name | In-app eval screen only |
+| `src/utils/anchorSystemPrompt.ts` | **Production chat** (`ChatScreen.tsx`) + **eval default** | "You are Anchor..." 6-line prompt | What real users see |
+| `src/constants/mindmatePrompt.ts` | **Legacy eval only** — must be passed explicitly | ~150-line structured prompt with old "MindMate" name | Historical comparison only |
 
-`anchorSystemPrompt.ts` is the source of truth for production behavior. `mindmatePrompt.ts` is kept for historical eval comparison; do not use it for any new development.
+`anchorSystemPrompt.ts` is the source of truth for production behavior. As of 2026-05-10, `EvalRunner.ts` also defaults to this prompt. `mindmatePrompt.ts` is kept for historical comparisons only — pass it as `runScenario(scenario, onStatus, MINDMATE_SYSTEM_PROMPT)` if needed. Do not use it in any new development.
 
 ---
 

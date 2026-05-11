@@ -10,7 +10,55 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ---
 
-## 2026-05-09 (Session 4)
+## 2026-05-10 (Session 5)
+
+### Panic detection false positives — "help me" blocked normal messages ❗
+
+**Bug:** `detectPanic()` returned a single boolean. The pattern `/\b(help me\b|i need help\b|please help\b)/i` fired on phrases like "help me understand this" or "i need help with my homework", routing those messages to the panic/crisis flow and blocking them from being sent at all.
+
+**Fix:** `detectPanic()` now returns `PanicRiskLevel = 'none' | 'watch' | 'urgent'`. Broad phrases moved to `WATCH_PATTERNS`; only patterns with explicit self-harm intent remain in `URGENT_PATTERNS`. `useChatSession` only hard-returns on `'urgent'`; `'watch'` calls the callback but lets the message through.
+
+---
+
+### Session-extraction race condition — memory written to wrong session ❗
+
+**Bug:** In `useChatSession.ts`, the extraction timer scheduled at completion time looked up `chatSessionStore.activeSessionId` and `currentSessionMessages` at **fire time** (5 minutes later). If the user switched sessions during that window, the extracted memory was saved to whichever session happened to be active at fire time, not the session where the conversation happened.
+
+**Fix:** `scheduleSessionExtraction()` now captures `sessionId` and a `toJS()` snapshot of `messages` immediately when called. The timer closure only uses those captured values.
+
+---
+
+### Person-name extraction never triggered — lowercase mismatch ❗
+
+**Bug:** `getUserMessages()` returned all message text `.toLowerCase()`. The intro regex in `extractPeople()` was `/\bmy (?:friend|...)\s+([A-Z][a-z]+)/g` — the `[A-Z]` pattern requires an uppercase first letter, which was never present after lowercasing. The "new person introduction" path (`"my friend John"` → save "John") silently produced zero results for every session.
+
+**Fix:** `getUserMessages()` now preserves original casing. `extractTopics()` and `detectMilestone()` lowercase internally. The intro regex changed to `[A-Za-z]` and Title-cases the captured name before storing.
+
+---
+
+### Memory retrieval missed narrative content — summary text not searched
+
+**Bug:** `searchByKeywords()` in `MemoryRepository.ts` matched only `topics` and `peopleMentioned` arrays. Session summaries (the actual free-text narrative, and the only thing shown to the LLM) were not part of the search. A user mentioning "breakup" in a new session would miss an older session whose summary said "user described going through a difficult breakup" but whose `topics` array only had `["relationship"]`.
+
+**Fix:** Summary text is now split into words and included in the haystack. Also added a recency bonus: memories within the last 14 days score up to +1.0 on top of keyword hits, so recent relevant memories rank above older ones with the same keyword count.
+
+---
+
+### Prompt token budget missing — memory block could silently grow unbounded
+
+**Bug:** `buildEnhancedSystemPrompt()` assembled all tiers without any size limit. A user with 3 years of episodic memories and detailed health data could generate a system prompt thousands of tokens over the model's context window, silently truncating the chat history instead.
+
+**Fix:** Added `TIER_BUDGET` character limits (tier1: 2400, tier2: 3200, tier3: 1600, biometric: 1600) and a `truncateToBudget()` helper that cuts at the nearest line boundary with a `[…]` marker. Applied to each tier before `assemblePrompt()`.
+
+---
+
+### Eval/production prompt drift — EvalRunner used legacy structured prompt by default
+
+**Bug:** `EvalRunner.ts` always used `MINDMATE_SYSTEM_PROMPT` (the ~150-line legacy prompt with old "MindMate" name) for all eval runs. Production chat uses the 6-line `getAnchorSystemPrompt()`. Eval scores were measuring behavior on a completely different prompt from what users experience, making them poor proxies for real-world quality.
+
+**Fix:** `runScenario()` now accepts an optional `systemPrompt` parameter that defaults to `getAnchorSystemPrompt('reflect')`. Historical runs can still use the old prompt by passing `MINDMATE_SYSTEM_PROMPT` explicitly. **Note:** all eval scores before 2026-05-10 were generated with the legacy prompt.
+
+---
 
 ### Training format mismatch — root cause of base-beats-SFT ❗
 
