@@ -29,6 +29,13 @@ cd $PROJECT_DIR
 export TEACHER_MODEL=30b
 export OUT_LABEL=qwen
 
+# Shard support — pass SHARD_IDX via --export=ALL,SHARD_IDX=N when submitting.
+# Without it, runs as a single unsharded job (writes to *_qwen.jsonl).
+# With SHARD_IDX=0,1,2 → three parallel jobs writing to *_qwen_s0.jsonl etc.
+if [ -n "${SHARD_IDX:-}" ]; then
+  echo "[Setup] Running as shard $SHARD_IDX"
+fi
+
 if [ -z "${HF_TOKEN:-}" ] && [ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
   export HF_TOKEN="${HUGGING_FACE_HUB_TOKEN}"
 fi

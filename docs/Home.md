@@ -28,7 +28,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
 | **Ablation complete** | 610501 (preamble_only): 41% · 610502 (nosys): 33% — preamble +8pp, memory blocks +10pp |
-| **Active cluster jobs** | 609110–609111 — conv-memory gemma4 (finishing soon) · 611377 — conv-memory qwen3-30B patched (companion profiles + pick_mode, → `synthetic_train_conv_memory_qwen.jsonl`) |
+| **Active cluster jobs** | 609110–609111 — conv-memory gemma4 (finishing) · 611377 — conv-memory qwen3-30B (pre-shard, 65/35 mix) · **611379–611381** — qwen3-30B 3-shard parallel (50/50 mix + overref routing → `synthetic_train_conv_memory_qwen_s{0,1,2}.jsonl`) |
 | **Next milestone** | genzv5 SFT once conv-memory data lands (jobs above finish) |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 

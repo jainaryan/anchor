@@ -41,8 +41,21 @@ BASE_DIR = Path(__file__).resolve().parent
 OUTPUTS_DIR = BASE_DIR / "outputs"
 _label = os.environ.get("OUT_LABEL", "")
 _suffix = f"_{_label}" if _label else ""
-OUT_RAW = OUTPUTS_DIR / f"conv_memory_raw{_suffix}.jsonl"
-OUT_TRAIN = BASE_DIR.parent / "data" / f"synthetic_train_conv_memory{_suffix}.jsonl"
+
+# Shard support — each parallel job gets a different SHARD_IDX so they write to
+# disjoint output files and use different RNG seeds (no overlap on profile/fact picks).
+_shard_idx_env = os.environ.get("SHARD_IDX")
+_shard_suffix = f"_s{_shard_idx_env}" if _shard_idx_env is not None else ""
+if _shard_idx_env is not None:
+    _seed = 1000 + int(_shard_idx_env) * 7919  # 7919 = prime → uncorrelated streams
+    random.seed(_seed)
+    print(f"[Pipeline] shard_idx={_shard_idx_env} → seeded RNG with {_seed}")
+
+OUT_RAW = OUTPUTS_DIR / f"conv_memory_raw{_suffix}{_shard_suffix}.jsonl"
+OUT_TRAIN = BASE_DIR.parent / "data" / f"synthetic_train_conv_memory{_suffix}{_shard_suffix}.jsonl"
+# Casual-mode conversations where Anchor over-referenced therapy/coping — kept
+# separately for inspection rather than dropped. Not used for training as-is.
+OUT_OVERREF = BASE_DIR.parent / "data" / f"synthetic_train_conv_memory_overref{_suffix}{_shard_suffix}.jsonl"
 
 shutdown_requested = False
 
@@ -538,7 +551,8 @@ USER_MODE_INSTRUCTIONS = {
     "casual_check_in": (
         "You're texting casually — bored, procrastinating, or just checking in. "
         "Nothing is wrong, you're just chatting. "
-        "Mention the new fact naturally around turn 2-3 as something that's just happening in your life."
+        "Mention the new fact naturally around turn 2-3 as something that's just happening in your life. "
+        "This is normal chat — DON'T bring up coping techniques, your therapist, your diagnosis, or past struggles."
     ),
     "venting": (
         "You're mildly frustrated or drained about something (unrelated to the new fact). "
@@ -566,26 +580,30 @@ USER_MODE_INSTRUCTIONS = {
     ),
     "sharing_win": (
         "You're sharing something small and good — a tiny win, a fun thing, just something nice. "
-        "Tone is light. The new fact is your main reason for messaging, not a heavy topic."
+        "Tone is light. The new fact is your main reason for messaging, not a heavy topic. "
+        "DON'T bring up coping techniques, therapy, or past struggles — this is just fun chat."
     ),
     "bored_chatter": (
         "You're procrastinating or just bored and want to chat. No big emotions. "
         "Talk about random everyday things — what you're watching, eating, doing. "
-        "Bring up the new fact as one casual topic among others. Keep it light."
+        "Bring up the new fact as one casual topic among others. Keep it light. "
+        "DON'T reference therapy, coping techniques, your diagnosis, or past struggles."
     ),
     "opinion_seek": (
         "You're asking Anchor for an opinion or recommendation about something light — "
         "what to watch tonight, what to cook, whether to do something fun. "
-        "The new fact is part of the context, but the conversation is mostly about deciding."
+        "The new fact is part of the context, but the conversation is mostly about deciding. "
+        "DON'T bring up therapy or coping strategies."
     ),
     "storytelling": (
         "You're telling Anchor about something that happened today or recently — a story, "
-        "an observation, an interaction. The new fact connects to the story but isn't the whole point."
+        "an observation, an interaction. The new fact connects to the story but isn't the whole point. "
+        "Keep it conversational — no therapy talk, no coping-strategy mentions."
     ),
     "small_complaint": (
         "You're mildly grumbling about something trivial — traffic, slow wifi, an annoying coworker, "
         "weather. Not actually upset, just venting in a lighthearted way. "
-        "Bring up the new fact as a side topic."
+        "Bring up the new fact as a side topic. DON'T escalate into therapy talk."
     ),
 }
 
@@ -711,27 +729,49 @@ def generate_anchor_turns(
 # profiles never require memory refs regardless of mode.
 MEMORY_REQUIRED_MODES = {"memory_callback", "asking_for_help"}
 
+# For casual modes, an over-eager teacher will shoehorn coping/therapy refs even when
+# the user just wants to chat. We reject those examples so the model learns
+# "memory in system prompt ≠ always weave it in".
+COPING_BLACKLIST = {
+    "box breathing", "5-4-3-2-1", "grounding", "diaphragmatic",
+    "progressive muscle relaxation", " pmr", " erp ", "dare method",
+    "dare technique", " tipp", " dbt", "ice water", "body doubling",
+    "pomodoro", "light therapy", "structured meal", "meal plan", "sleep log",
+    "your coping", "your strategies", "your toolkit", "your techniques",
+}
 
-def heuristic_check(conv: list[dict], profile: dict, new_fact: str, mode: str = "") -> bool:
-    """Basic sanity checks — filter obvious generation failures."""
+THERAPY_REFS = {
+    "your therapist", "your psychiatrist", "your sessions",
+    "last session", "previous session", "in therapy",
+    "your diagnosis", "your anxiety", "your depression",
+}
+
+
+def heuristic_check(conv: list[dict], profile: dict, new_fact: str, mode: str = "") -> str:
+    """Sanity checks. Returns:
+      "drop"     — generation failure, discard entirely
+      "overref"  — usable conversation but Anchor over-referenced therapy/coping
+                   in a casual mode (routed to OUT_OVERREF, not training data)
+      "keep"     — clean training example
+    """
     turns = [m for m in conv if m["role"] != "system"]
     if len(turns) < 4:
-        return False
+        return "drop"
 
     assistant_turns = [m["content"] for m in conv if m["role"] == "assistant"]
     if not assistant_turns:
-        return False
+        return "drop"
 
     # Assistant turn lengths
     lengths = [len(t.split()) for t in assistant_turns]
     if all(l < 3 for l in lengths):
-        return False
+        return "drop"
     if any(l > 150 for l in lengths):
-        return False
+        return "drop"
 
     # System message must be present
     if not any(m["role"] == "system" for m in conv):
-        return False
+        return "drop"
 
     # At least one assistant turn should reference something from profile or new_fact
     all_assistant = " ".join(assistant_turns).lower()
@@ -751,15 +791,28 @@ def heuristic_check(conv: list[dict], profile: dict, new_fact: str, mode: str = 
     # Companion profiles always pass without forced memory refs.
     is_companion = profile.get("profile_type") == "companion"
     if not has_context_ref and mode in MEMORY_REQUIRED_MODES and not is_companion:
-        return False
+        return "drop"
 
-    # Filter known hallucination phrases only
-    all_assistant_lower = " ".join(assistant_turns).lower()
+    # Filter known hallucination phrases — these are unambiguous failures.
     for phrase in ["you went quiet", "been a while since", "haven't heard from you"]:
-        if phrase in all_assistant_lower:
-            return False
+        if phrase in all_assistant:
+            return "drop"
 
-    return True
+    # Over-reference detection for casual modes — route these to a separate file
+    # for inspection rather than discarding. Useful for: (a) auditing how often the
+    # teacher over-references, (b) potential DPO negative examples down the line.
+    if mode in COMPANION_MODES:
+        hits = sum(1 for kw in COPING_BLACKLIST if kw in all_assistant)
+        hits += sum(1 for kw in THERAPY_REFS if kw in all_assistant)
+        if profile.get("diagnoses"):
+            for d in profile["diagnoses"].lower().split(","):
+                d = d.strip()
+                if d and len(d) > 2 and d in all_assistant:
+                    hits += 1
+        if hits >= 2:
+            return "overref"
+
+    return "keep"
 
 
 # ─── Main generation function ──────────────────────────────────────────────────
@@ -767,13 +820,18 @@ def heuristic_check(conv: list[dict], profile: dict, new_fact: str, mode: str = 
 def pick_mode(profile: dict) -> str:
     """Pick a mode appropriate for the profile type.
 
-    Companion profiles only get companion modes (everyday chatter, no clinical framing).
-    Clinical profiles get 65/35 skewed toward companion modes — this matches realistic
-    usage where most chat is casual, not therapy-oriented.
+    Goal: ~50/50 casual/clinical conversations overall. With 8 companion + 25 clinical
+    profiles uniformly sampled, this balances out as:
+      companion profile (24% of pool) × 100% casual = 24% casual
+      clinical profile  (76% of pool) × 35% casual  = 27% casual
+      → total ~51% casual, ~49% clinical
+    The 50/50 mix teaches both:
+      - WHEN memory IS needed (clinical modes: venting, asking_for_help, memory_callback)
+      - WHEN memory is present but NOT needed (companion modes: casual chat, wins, opinions)
     """
     if profile.get("profile_type") == "companion":
         return random.choice(COMPANION_MODES)
-    if random.random() < 0.65:
+    if random.random() < 0.35:
         return random.choice(COMPANION_MODES)
     return random.choice(CLINICAL_MODES)
 
@@ -795,7 +853,8 @@ def generate_example(teacher, profile: dict) -> dict | None:
     # messages = [system, user, assistant, user, assistant, ...]
     conv = messages  # already in the right format
 
-    if not heuristic_check(conv, profile, new_fact, mode):
+    verdict = heuristic_check(conv, profile, new_fact, mode)
+    if verdict == "drop":
         return None
 
     return {
@@ -806,6 +865,7 @@ def generate_example(teacher, profile: dict) -> dict | None:
             "profile_name": profile["name"],
             "num_turns": num_turns,
             "source": "conv_memory_v2",
+            "verdict": verdict,  # "keep" or "overref"
         },
     }
 
@@ -817,11 +877,13 @@ def main():
     teacher = TeacherModel()
 
     count = 0
+    overref_count = 0
     attempts = 0
     skipped = 0
 
     print(f"[Pipeline] Target: {TARGET} examples (wall-time controlled)")
-    print(f"[Pipeline] Output: {OUT_TRAIN}")
+    print(f"[Pipeline] Train output:    {OUT_TRAIN}")
+    print(f"[Pipeline] Overref output:  {OUT_OVERREF}")
     print(f"[Pipeline] Mode: teacher-as-Anchor (two-phase generation)")
 
     while count < TARGET and not shutdown_requested:
@@ -833,18 +895,28 @@ def main():
             if result:
                 append_jsonl(result, OUT_RAW)
                 train_entry = {"conversations": result["conversations"]}
-                append_jsonl(train_entry, OUT_TRAIN)
-                count += 1
-                print(
-                    f"[{attempts}] ✓ {count} | "
-                    f"mode={result['meta']['mode']} | "
-                    f"profile={result['meta']['profile_name']} | "
-                    f"turns={result['meta']['num_turns']}"
-                )
+                verdict = result["meta"].get("verdict", "keep")
+                if verdict == "overref":
+                    append_jsonl(result, OUT_OVERREF)
+                    overref_count += 1
+                    print(
+                        f"[{attempts}] ⚠ overref ({overref_count}) | "
+                        f"mode={result['meta']['mode']} | "
+                        f"profile={result['meta']['profile_name']}"
+                    )
+                else:
+                    append_jsonl(train_entry, OUT_TRAIN)
+                    count += 1
+                    print(
+                        f"[{attempts}] ✓ {count} | "
+                        f"mode={result['meta']['mode']} | "
+                        f"profile={result['meta']['profile_name']} | "
+                        f"turns={result['meta']['num_turns']}"
+                    )
             else:
                 skipped += 1
                 if attempts % 10 == 0:
-                    print(f"[{attempts}] skip={skipped} pass={count}")
+                    print(f"[{attempts}] skip={skipped} pass={count} overref={overref_count}")
 
         except Exception as e:
             print(f"[{attempts}] Error: {e}")
@@ -853,11 +925,18 @@ def main():
 
         if attempts % 50 == 0:
             rate = count / attempts * 100
-            print(f"[{attempts}] Checkpoint: {count} saved, {skipped} skipped, pass_rate={rate:.1f}%")
+            print(
+                f"[{attempts}] Checkpoint: {count} kept, {overref_count} overref, "
+                f"{skipped} dropped, pass_rate={rate:.1f}%"
+            )
             time.sleep(2)
 
-    print(f"\n[Pipeline] Done. examples={count}, attempts={attempts}, skipped={skipped}")
+    print(
+        f"\n[Pipeline] Done. kept={count}, overref={overref_count}, "
+        f"dropped={skipped}, attempts={attempts}"
+    )
     print(f"[Pipeline] Training data: {OUT_TRAIN}")
+    print(f"[Pipeline] Overref data:  {OUT_OVERREF}")
 
 
 if __name__ == "__main__":

@@ -22,7 +22,9 @@ All files live in `~/projects/mindmate/data/` (local) and mirrored on cluster. A
 | `synthetic_train_therapist_.jsonl` | 2,637 | Therapeutic dialogue | `synthetic/pipeline.py` | ✅ normalized |
 | `synthetic_train_biometric.jsonl` | **2,348** | Biometric health context (sleep, HRV, mood) | `synthetic/biometric_sft_pipeline.py`, job 599030 | ✅ normalized |
 | `synthetic_train_targeted_fixes.jsonl` | **181** | Hand-crafted gold examples | Manual + targeted scripts | ✅ normalized |
-| `synthetic_train_conv_memory.jsonl` | **~7k–10k (generating)** | Multi-turn + memory context, teacher-as-Anchor v2 | `synthetic/conversation_memory_pipeline.py`, jobs 609110–609111 | 🟢 RUNNING (72h A100-80, ~64h remaining as of 2026-05-09) |
+| `synthetic_train_conv_memory.jsonl` | **~7k–10k (generating)** | Multi-turn + memory context, teacher-as-Anchor v2 | `synthetic/conversation_memory_pipeline.py`, jobs 609110–609111 | 🟢 RUNNING (72h A100-80, finishing) |
+| `synthetic_train_conv_memory_qwen.jsonl` | **(generating, pre-shard)** | Same pipeline, Qwen3-30B teacher, 65/35 casual/clinical | jobs 611377 | 🟢 RUNNING |
+| `synthetic_train_conv_memory_qwen_s{0,1,2}.jsonl` | **(3 parallel shards, generating)** | Qwen3-30B teacher, **50/50 casual/clinical mix**, over-reference filter routes therapy-shoehorned casual chats to `_overref_qwen_s*.jsonl` for inspection | `synthetic/conversation_memory_pipeline.py` + `finetuning/launch_conv_memory_shards.sh`, jobs 611379–611381 | 🟢 RUNNING (72h A100-80 each, 3 parallel) |
 
 **Total normalized: 42,038 examples** (not counting conv_memory, which generates in correct format already)
 
@@ -133,7 +135,8 @@ Intermediate dirs for v4 already exist locally. For v5, new `conversations_raw_v
 | `biometric_dpo_pipeline.py` | Biometric DPO pairs (4 pair types) | ✅ Done (DPO abandoned) | part of `dpo_train.jsonl` |
 | `dpo_targeted_fix_pipeline.py` | help_mode + memory_recall DPO pairs | ✅ Done (DPO abandoned) | part of `dpo_train.jsonl` |
 | `dpo_pipeline.py` | General DPO pairs v1 + v2 | ✅ Done (DPO abandoned) | `dpo_train_v2.jsonl` |
-| `conversation_memory_pipeline.py` | Multi-turn + memory (teacher-as-Anchor v2) | 🟢 RUNNING — jobs 609110–609111 | `synthetic_train_conv_memory.jsonl` |
+| `conversation_memory_pipeline.py` | Multi-turn + memory (teacher-as-Anchor v2). Supports `SHARD_IDX`/`OUT_LABEL` env vars; routes over-referencing casual examples to `_overref` file | 🟢 RUNNING — jobs 609110–609111 (gemma4), 611377 (qwen 65/35), 611379–611381 (qwen 50/50 sharded) | `synthetic_train_conv_memory{_qwen{_s0,_s1,_s2},}.jsonl` + `_overref_*` |
+| `launch_conv_memory_shards.sh` | Launches N parallel shards of the conv-memory pipeline (each disjoint RNG seed, separate output file) | ✅ Active | `synthetic_train_conv_memory_qwen_s{0..N-1}.jsonl` |
 
 ### Teacher Model
 
@@ -159,14 +162,30 @@ Two-phase generation (training/inference distribution aligned by construction):
 
 This ensures: (1) multi-turn structure, (2) user introduces a new fact mid-conversation, (3) later turns require referencing both injected memory and within-conversation facts, (4) format is byte-for-byte production format.
 
-**Run command:**
+**Session 7 enhancements** (for teaching *when to use memory*):
+- **33 profiles** (25 clinical, 8 companion with no diagnoses, just interests)
+- `pick_mode()` gives **~50/50 casual/clinical** overall — companion profiles always casual, clinical profiles 35% casual / 65% clinical
+- **`MEMORY_REQUIRED_MODES = {"memory_callback", "asking_for_help"}`** — only these enforce a context-ref check in `heuristic_check`; all other modes pass without memory references
+- **Casual `USER_MODE_INSTRUCTIONS` explicitly forbid** mentions of therapy/coping/diagnosis on the user side
+- **Over-reference filter** routes (not drops) casual conversations where Anchor shoehorned therapy/coping talk to `synthetic_train_conv_memory_overref_*.jsonl` — for inspection or potential DPO negatives, not training as-is
+- **Shard support** via `SHARD_IDX` env var — each shard gets a disjoint RNG seed and writes to `_s{N}.jsonl`. Launch parallel shards with `finetuning/launch_conv_memory_shards.sh N`
+
+**Run commands:**
 ```bash
-# On cluster — submitted as jobs 609110–609111
+# Single job (gemma4, default)
 sbatch synthetic/run_conv_memory.slurm
+
+# Single job (qwen3-30B)
+sbatch --gres=gpu:a100-80:1 finetuning/conv_memory_pipeline_qwen.slurm
+
+# N parallel shards (qwen3-30B) — recommended for high throughput
+./finetuning/launch_conv_memory_shards.sh 3   # spawns shard 0,1,2
 
 # Manual
 source mindmatenv/bin/activate
-export TEACHER_MODEL=gemma4
+export TEACHER_MODEL=gemma4         # or 30b for qwen
+export OUT_LABEL=qwen               # optional output suffix
+export SHARD_IDX=0                  # optional shard index (seeds RNG)
 export HF_TOKEN=<your_token>
 python synthetic/conversation_memory_pipeline.py
 ```
