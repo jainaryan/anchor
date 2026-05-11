@@ -161,6 +161,12 @@ DigitalOcean c-4 does CPU inference only. If tryanchor.me traffic grows, conside
 - ⬜ **Unit tests for critical memory path** — `contextBuilder`, `sessionExtractor`, `panicDetection`, `profileExtractor` have no focused tests. Add unit tests + regression fixtures. These directly affect user safety.
 - ⬜ **Privacy hardening** — Profile and diary stored in plaintext local storage. Consider encrypted at-rest option or keychain-backed "privacy lock" mode.
 
+### UX revamps to implement
+
+- ⬜ **Calmer chat home** — move secondary controls (mode pills, thinking toggle, profile suggestion actions) behind a collapsed `Session tools` drawer. First-use/default view should show only mood check-in, input, and safe empty-state.
+- ⬜ **Passive diary auto-capture** — replace persistent "Save to diary" button flow with session-end auto-generated reflection draft + lightweight `Review & Save` entry point into `DiaryEditor`.
+- ⬜ **Progressive profile onboarding** — split `ProfileSetupScreen` into `2-minute essentials` and `optional deep profile` so first-run completion is faster and lower friction.
+
 ---
 
 ## See also

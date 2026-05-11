@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-11 (session 6)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-12 (session 7)
 
 ---
 
@@ -28,7 +28,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
 | **Ablation complete** | 610501 (preamble_only): 41% · 610502 (nosys): 33% — preamble +8pp, memory blocks +10pp |
-| **Active cluster jobs** | 609110–609111 — conv-memory pipeline v2, 72h A100-80, ~31h remaining as of session 6 |
+| **Active cluster jobs** | 609110–609111 — conv-memory gemma4 (finishing soon) · 611377 — conv-memory qwen3-30B patched (companion profiles + pick_mode, → `synthetic_train_conv_memory_qwen.jsonl`) |
 | **Next milestone** | genzv5 SFT once conv-memory data lands (jobs above finish) |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 

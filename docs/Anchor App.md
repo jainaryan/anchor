@@ -279,6 +279,73 @@ Defined in `src/utils/anchorSystemPrompt.ts`. All three currently return the sam
 
 ---
 
+## UX Revamp Plan (session 6)
+
+Three UX updates are now part of the near-term app roadmap.
+
+### 1) Calmer, simpler chat home
+
+**Goal:** First-time users should see only mood check-in, input, and safe empty-state.
+
+**Change:**
+- Move secondary controls behind a subtle `Session tools` drawer:
+  - conversation mode pills (`reflect/calm/focus`)
+  - thinking toggle
+  - profile suggestion banner/actions
+- Keep the default chat surface low-noise (no dense control strip above messages).
+
+**Primary files:**
+- `src/screens/ChatScreen/ChatScreen.tsx`
+- `src/components/ChatView/ChatView.tsx` (if drawer trigger/control lives there)
+
+**Acceptance criteria:**
+- On empty or first-use sessions, users see only core chat UI and safety copy.
+- Advanced controls are discoverable but collapsed by default.
+- No regression in mode switching, thinking toggle persistence, or profile suggestion save/dismiss.
+
+### 2) Passive diary auto-capture + editable draft
+
+**Goal:** Remove "save" friction mid-chat while preserving edit control.
+
+**Change:**
+- Replace manual mid-conversation "Save to diary" behavior with passive auto-capture:
+  - at session-end extraction window, auto-generate reflection draft
+  - show lightweight `Review & Save` card/snackbar
+  - tap opens `DiaryEditor` prefilled with draft for quick edits
+- Keep explicit save affordance only in the review card, not as persistent toolbar action.
+
+**Primary files:**
+- `src/screens/ChatScreen/ChatScreen.tsx`
+- `src/hooks/useChatSession.ts`
+- `src/utils/diarySummary.ts`
+- `src/screens/DiaryEditorScreen/DiaryEditorScreen.tsx`
+
+**Acceptance criteria:**
+- Users do not need to manually press save during live conversation.
+- Draft appears reliably after session-end debounce.
+- Users can edit before final save, with no duplicate draft entries.
+
+### 3) Progressive profile onboarding
+
+**Goal:** Increase completion by splitting setup into fast essentials + optional depth.
+
+**Change:**
+- Restructure `ProfileSetupScreen` into:
+  - `2-minute essentials` (age/gender/location, coping basics, one support person)
+  - `optional deep profile` (diagnoses detail, therapy metadata, boundaries, avoid topics)
+- Keep completion momentum with clear "Finish essentials" and "Add more later" paths.
+
+**Primary files:**
+- `src/screens/ProfileSetupScreen/ProfileSetupScreen.tsx`
+- `src/screens/MemoryViewScreen/MemoryViewScreen.tsx` (entry points to optional deep-edit)
+
+**Acceptance criteria:**
+- User can complete core onboarding quickly with fewer required interactions.
+- Optional deep profile remains accessible after onboarding.
+- No data loss across essentials/deep sections.
+
+---
+
 ## Building & Running
 
 ```bash
