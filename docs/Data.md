@@ -8,6 +8,78 @@ tags: [anchor, data]
 
 ---
 
+## File Index — What Each `.jsonl` Is For
+
+**At-a-glance map of every `.jsonl` in `data/`.** Detailed tables further down.
+
+### Active SFT training data (used by `build_dataset.py`)
+
+| File | Role | Origin |
+|---|---|---|
+| `synthetic_train_targeted_fix.jsonl` | help_mode + memory_recall SFT (largest source) | `synthetic/targeted_fix_pipeline.py` |
+| `synthetic_train_friend_1.jsonl` | Casual friend-style support | `synthetic/pipeline.py` |
+| `synthetic_train_transition.jsonl` | Casual → emotional pivot (fixes joke-mode-lock) | `synthetic/transition_pipeline.py` |
+| `synthetic_train.jsonl` | Grief / loss | `synthetic/pipeline.py` |
+| `synthetic_train_casual.jsonl` | Non-distress casual chat | `synthetic/casual_pipeline.py` |
+| `synthetic_train_therapist_.jsonl` | Therapeutic dialogue | `synthetic/pipeline.py` |
+| `synthetic_train_biometric.jsonl` | Sleep / HRV / mood biometric context | `synthetic/biometric_sft_pipeline.py` |
+| `synthetic_train_targeted_fixes.jsonl` | **Gold** — hand-crafted, always 100% weight | manual + targeted scripts |
+
+### Conv-memory data (multi-turn + memory injection, in progress)
+
+| File | Role | Origin |
+|---|---|---|
+| `synthetic_train_conv_memory.jsonl` | Gemma4 teacher, 65/35 mix (original — finishing) | jobs 609110, 609111 |
+| `synthetic_train_conv_memory_qwen.jsonl` | Qwen3-30B teacher, 65/35 mix (pre-shard) | job 611377 |
+| `synthetic_train_conv_memory_qwen_s0.jsonl` | Qwen shard 0 — 50/50 mix + overref routing | job 611379 |
+| `synthetic_train_conv_memory_qwen_s1.jsonl` | Qwen shard 1 — same config, disjoint RNG | job 611380 |
+| `synthetic_train_conv_memory_qwen_s2.jsonl` | Qwen shard 2 — same config, disjoint RNG | job 611381 |
+| `synthetic_train_conv_memory_overref_qwen_s{0,1,2}.jsonl` | **Inspection only** — casual chats where Anchor shoehorned therapy/coping. NOT for training as-is; potential DPO negatives later | same jobs (filter side-channel) |
+
+### DPO data (all abandoned — kept for reference, none in active training)
+
+| File | Role | Status |
+|---|---|---|
+| `dpo_train.jsonl` | Last-used DPO train: biometric + help_mode + memory_recall, 5,750 pairs | ❌ Abandoned |
+| `dpo_val.jsonl` | Last-used DPO val, 1,014 pairs | ❌ Abandoned |
+| `dpo_train_v2.jsonl` | Earlier DPO train, 6,120 pairs | ❌ Superseded |
+| `dpo_val_v2.jsonl` | Earlier DPO val, 1,080 pairs | ❌ Superseded |
+| `dpo_biometric_partial.jsonl` | Biometric-only DPO pairs (subset of `dpo_train.jsonl`) | ❌ Partial, abandoned |
+| `dpo_pairs_partial.jsonl` | Legacy partial DPO output | ❌ Legacy |
+| `dpo_pairs_partial_v2.jsonl` (cluster only) | Legacy partial DPO output (v2 attempt) | ❌ Legacy |
+| `dpo_targeted_fix_partial.jsonl` (cluster only) | help_mode + memory_recall DPO partial | ❌ Partial, abandoned |
+| `dpo_onpolicy_train.jsonl` (cluster only) | On-policy DPO experiment train split | ❌ Abandoned |
+| `dpo_onpolicy_val.jsonl` (cluster only) | On-policy DPO experiment val split | ❌ Abandoned |
+| `dpo_onpolicy_raw.jsonl` (cluster only) | On-policy DPO raw generations | ❌ Abandoned |
+
+### Misc / legacy / debug (do not include in training)
+
+| File | Role |
+|---|---|
+| `additional_training_samples.jsonl` | Tiny hand-edited supplemental set (18KB). Not currently mixed in |
+| `synthetic_train_debug.jsonl` (cluster only) | Pipeline debug dump (tiny) — discard |
+| `compare_top3.jsonl` (cluster only) | One-off model output comparison artifact — not training data |
+
+### Excluded by user decision (never trained on)
+
+| File | Reason |
+|---|---|
+| `data/new_raw_data/mindmate_train.jsonl` | 20,662 public examples (ESConv, EmpatheticDialogues, CounselChat) — user opted out 2026-04-14 |
+| `data/cleaned_data/mindmate_train_clean.jsonl` | Cleaned version of the above — same exclusion |
+
+### Auto-generated intermediates (not edited directly)
+
+These are *output* of `build_dataset.py` / `clean_dataset.py` and live in `data/conversations_raw_v4/` and `data/conversations_cleaned_v4/`. They are what `CUDA_train_qlora.py` actually reads. Regenerate from sources above whenever the mix changes.
+
+| Dir | File | Role |
+|---|---|---|
+| `conversations_raw_v4/` | `mindmate_train.jsonl` | Sampled per `DATA_MIX_PRESETS["v4"]` |
+| `conversations_raw_v4/` | `mindmate_val.jsonl` | 15% per-source val split (min 300) |
+| `conversations_cleaned_v4/` | `mindmate_train.jsonl` | Deduped, min 4 turns, format-validated |
+| `conversations_cleaned_v4/` | `mindmate_val.jsonl` | Cleaned val split |
+
+---
+
 ## SFT Training Files
 
 All files live in `~/projects/mindmate/data/` (local) and mirrored on cluster. All 42,038 examples were normalized to production system prompt format in commit c3acdc9 (2026-05-09).

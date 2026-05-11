@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-12 (session 7)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-12 (session 7 — data file index added)
 
 ---
 
