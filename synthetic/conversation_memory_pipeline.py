@@ -380,8 +380,13 @@ PROFILES = [
         ],
     },
 
-    # ── New profiles added session 8 ──────────────────────────────────────────
+]
 
+# ─── New clinical profiles — session 8 expansion ──────────────────────────────
+# Used ONLY when PROFILE_SET=new (shards 3-5+). Keep separate so shards 0-2
+# and shards 3-5 generate from non-overlapping character pools.
+
+NEW_CLINICAL_PROFILES = [
     {
         "name": "Rania",
         "age": "34 F",
@@ -592,8 +597,11 @@ COMPANION_PROFILES = [
         ],
     },
 
-    # ── New companion profiles added session 8 ────────────────────────────────
+]
 
+# ─── New companion profiles — session 8 expansion ────────────────────────────
+
+NEW_COMPANION_PROFILES = [
     {
         "name": "Marco",
         "age": "31 M",
@@ -648,7 +656,18 @@ COMPANION_PROFILES = [
     },
 ]
 
-PROFILES.extend(COMPANION_PROFILES)
+# ─── Profile pools ────────────────────────────────────────────────────────────
+# PROFILE_SET env var controls which pool this shard draws from:
+#   "all"  (default) — original 25 clinical + 8 companion (shards 0-2)
+#   "new"            — 8 new clinical + 4 new companion only (shards 3-5+)
+# Keeping pools disjoint means shards 0-2 and 3-5 never generate examples
+# for the same character, so the merged dataset has full coverage with no overlap.
+
+ALL_PROFILES     = PROFILES + COMPANION_PROFILES   # original 33 (shards 0-2)
+NEW_ONLY_PROFILES = NEW_CLINICAL_PROFILES + NEW_COMPANION_PROFILES  # new 12 (shards 3-5)
+
+_profile_set = os.environ.get("PROFILE_SET", "all")
+ACTIVE_PROFILES = NEW_ONLY_PROFILES if _profile_set == "new" else ALL_PROFILES
 
 
 # ─── New-fact seeds ────────────────────────────────────────────────────────────
@@ -1072,11 +1091,12 @@ def main():
     print(f"[Pipeline] Target: {TARGET} examples (wall-time controlled)")
     print(f"[Pipeline] Train output:    {OUT_TRAIN}")
     print(f"[Pipeline] Overref output:  {OUT_OVERREF}")
+    print(f"[Pipeline] Profile set:     {_profile_set} ({len(ACTIVE_PROFILES)} profiles)")
     print(f"[Pipeline] Mode: teacher-as-Anchor (two-phase generation)")
 
     while count < TARGET and not shutdown_requested:
         attempts += 1
-        profile = random.choice(PROFILES)
+        profile = random.choice(ACTIVE_PROFILES)
 
         try:
             result = generate_example(teacher, profile)
