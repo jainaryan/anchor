@@ -29,6 +29,7 @@ mixed (multiple health signals present at once).
 """
 
 import json
+import os
 import time
 import random
 import signal
@@ -40,8 +41,26 @@ SIMILARITY_THRESHOLD = 0.45
 
 BASE_DIR    = Path(__file__).resolve().parent
 OUTPUTS_DIR = BASE_DIR / "outputs"
-OUT_RAW     = OUTPUTS_DIR / "biometric_sft_raw.jsonl"
-OUT_TRAIN   = BASE_DIR.parent / "data" / "synthetic_train_biometric.jsonl"
+
+# ── Shard support ──────────────────────────────────────────────────────────────
+# Set SHARD_IDX=0,1,2,... via --export=ALL,SHARD_IDX=N in sbatch to run
+# multiple parallel jobs, each writing to its own file with no overlap.
+# Each shard gets a distinct RNG seed derived from a large prime offset.
+_shard_idx_env = os.environ.get("SHARD_IDX")
+_shard_suffix  = f"_s{_shard_idx_env}" if _shard_idx_env is not None else ""
+if _shard_idx_env is not None:
+    _seed = 1000 + int(_shard_idx_env) * 7919
+    random.seed(_seed)
+
+# OUT_LABEL (e.g. "qwen") is set by the SLURM file so output names are
+# self-describing: synthetic_train_biometric_qwen_s0.jsonl, etc.
+_label        = os.environ.get("OUT_LABEL", "")
+_label_suffix = f"_{_label}" if _label else ""
+
+# data/synthetic_train_biometric_qwen_s0.jsonl  ← what gets used for training
+# synthetic/outputs/biometric_sft_qwen_raw_s0.jsonl  ← raw with meta fields
+OUT_TRAIN = BASE_DIR.parent / "data"    / f"synthetic_train_biometric{_label_suffix}{_shard_suffix}.jsonl"
+OUT_RAW   = OUTPUTS_DIR                 / f"biometric_sft{_label_suffix}_raw{_shard_suffix}.jsonl"
 
 shutdown_requested = False
 
@@ -1460,6 +1479,10 @@ def main():
     print("  MindMate Biometric SFT Pipeline — v2")
     print("  Modes: relevant · irrelevant · adjacent · trend")
     print(f"  Profiles: {len(BIOMETRIC_PROFILES)}")
+    if _shard_idx_env is not None:
+        print(f"  Shard: {_shard_idx_env}  (RNG seed: {1000 + int(_shard_idx_env) * 7919})")
+    print(f"  OUT_TRAIN: {OUT_TRAIN}")
+    print(f"  OUT_RAW:   {OUT_RAW}")
     print("=" * 60)
 
     teacher = TeacherModel()

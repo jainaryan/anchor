@@ -36,6 +36,20 @@ tags: [anchor, data]
 | `synthetic_train_conv_memory_qwen_s2.jsonl` | Qwen shard 2 — same config, disjoint RNG | job 611381 |
 | `synthetic_train_conv_memory_overref_qwen_s{0,1,2}.jsonl` | **Inspection only** — casual chats where Anchor shoehorned therapy/coping. NOT for training as-is; potential DPO negatives later | same jobs (filter side-channel) |
 
+### Biometric SFT data (biometric context handling, in progress)
+
+Teaches Anchor when to reference vs. ignore health/biometric data in [Recent sessions].
+Four modes per example: `relevant` (reference it once), `irrelevant` (don't inject it), `adjacent` (ambiguous — don't assume), `trend` (name the multi-session pattern).
+
+| File | Role | Origin |
+|---|---|---|
+| `synthetic_train_biometric_qwen_s0.jsonl` | Biometric shard 0 — 4-mode mix, disjoint RNG | job 612894 |
+| `synthetic_train_biometric_qwen_s1.jsonl` | Biometric shard 1 — same config, disjoint RNG | job 612895 |
+| `synthetic_train_biometric_qwen_s2.jsonl` | Biometric shard 2 — same config, disjoint RNG | job 612896 |
+| `synthetic_train_biometric_qwen.jsonl` | **Merge target** — `cat s{0,1,2}` after jobs finish | (post-merge) |
+
+Raw outputs with meta fields (profile name, mode, health_type) live in `synthetic/outputs/biometric_sft_qwen_raw_s{0,1,2}.jsonl` for debugging.
+
 ### DPO data (all abandoned — kept for reference, none in active training)
 
 | File | Role | Status |
