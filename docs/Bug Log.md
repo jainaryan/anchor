@@ -10,6 +10,40 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ---
 
+## 2026-05-14 (Sessions 7–8)
+
+### Conv-memory pipeline: 65/35 mix was companion-biased — fixed to 50/50
+
+**Bug:** `pick_mode()` used `random.random() < 0.65` for clinical profiles, giving ~65% casual outputs overall. The intent was to teach Anchor when memory is *and* isn't needed, but 65% casual skewed training toward the "not needed" case.
+
+**Fix:** Flipped to `random.random() < 0.35`, achieving ~51.5%/48.5% casual/clinical (validated over 10k trials). Clinical USER_MODE_INSTRUCTIONS also tightened to explicitly forbid user simulator from mentioning therapy/coping unprompted in casual mode.
+
+---
+
+### Over-reference filter: initially dropped flagged examples — changed to route
+
+**Bug:** First implementation of the over-reference heuristic returned `False` to drop examples where Anchor shoehorned therapy/coping keywords (≥2 hits) into casual-mode turns. Dropping loses signal — those examples are potentially useful as DPO negatives.
+
+**Fix:** Changed `heuristic_check` return type from `bool` → `str` (`"keep"` / `"overref"` / `"drop"`). Overref examples now routed to `synthetic_train_conv_memory_overref_qwen_s{N}.jsonl` for inspection. 22 examples caught across 3 shards (~8% of output) as of 2026-05-14.
+
+---
+
+### Job 611376: ran pre-patch code — pipeline had loaded old module at startup
+
+**Bug:** Job 611376 was submitted, then the pipeline script was patched (50/50 fix, overref filter, shard support). The running job had already imported the old module in memory — patches to the file on disk had no effect on the live process.
+
+**Fix:** `scancel 611376`. Resubmitted as 611377, which loaded the patched file at startup.
+
+---
+
+### Biometric pipeline: output paths were hardcoded and undescriptive
+
+**Bug:** `biometric_sft_pipeline.py` wrote to `synthetic_train_biometric.jsonl` regardless of teacher model or shard. If multiple jobs ran in parallel they would stomp each other. No way to tell from filename which teacher or run config produced the file.
+
+**Fix:** Added `SHARD_IDX` + `OUT_LABEL` env var support (same pattern as conv-memory pipeline). Output is now `synthetic_train_biometric_qwen_s{N}.jsonl` — teacher and shard index both encoded in filename. Launcher `finetuning/launch_biometric_shards.sh` submits N parallel shards.
+
+---
+
 ## 2026-05-10 (Session 5)
 
 ### Panic detection false positives — "help me" blocked normal messages ❗

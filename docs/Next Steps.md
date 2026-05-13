@@ -10,23 +10,43 @@ tags: [anchor, next-steps]
 
 ## Immediate — Waiting on Cluster
 
-### 1. Wait for conv-memory pipeline to finish
+### 1. Wait for conv-memory + biometric pipelines to finish
 
-Jobs 609110–609111 are running A100-80, 72h from 2026-05-09. Expected completion: ~2026-05-12 ~12:00.
+| Jobs | Expected finish | Output |
+|---|---|---|
+| 611377, 611379–611381 | ~2026-05-15 | `synthetic_train_conv_memory_qwen*.jsonl` (4 files, ~1,400 examples total) |
+| 612894–612896 | ~2026-05-17 | `synthetic_train_biometric_qwen_s{0,1,2}.jsonl` |
 
 ```bash
 # Check status
 ssh nus-student-cluster "squeue -u aryanj"
-ssh nus-student-cluster "sacct -u aryanj -j 609110,609111 --format=JobID,State,Start,End,Elapsed"
 
-# Watch logs
-ssh nus-student-cluster "tail -f ~/logs/mindmate-conv-memory_609110.out"
+# Pull conv-memory results once done (all shards + pre-shard run)
+rsync -az -e "ssh -o LogLevel=QUIET" \
+  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_qwen.jsonl" \
+  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_qwen_s0.jsonl" \
+  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_qwen_s1.jsonl" \
+  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_qwen_s2.jsonl" \
+  data/
 
-# Pull results once done
-rsync -avz --progress nus-student-cluster:~/projects/mindmate/data/synthetic_train_conv_memory.jsonl data/
+# Merge shards locally (or on cluster)
+cat data/synthetic_train_conv_memory_qwen_s*.jsonl > data/synthetic_train_conv_memory_qwen_merged.jsonl
+
+# Pull biometric results once done
+rsync -az -e "ssh -o LogLevel=QUIET" \
+  "nus-student-cluster:projects/mindmate/data/synthetic_train_biometric_qwen_s0.jsonl" \
+  "nus-student-cluster:projects/mindmate/data/synthetic_train_biometric_qwen_s1.jsonl" \
+  "nus-student-cluster:projects/mindmate/data/synthetic_train_biometric_qwen_s2.jsonl" \
+  data/
+cat data/synthetic_train_biometric_qwen_s*.jsonl > data/synthetic_train_biometric_qwen.jsonl
+
+# Also pull overref files for inspection (potential DPO negatives)
+rsync -az -e "ssh -o LogLevel=QUIET" \
+  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_overref_qwen_s0.jsonl" \
+  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_overref_qwen_s1.jsonl" \
+  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_overref_qwen_s2.jsonl" \
+  data/
 ```
-
-Expected output: `data/synthetic_train_conv_memory.jsonl`, ~7k–10k examples.
 
 ---
 
@@ -36,25 +56,32 @@ genzv5 will be the **first training run with correct system prompt format** (c3a
 
 ### Step 1: Add v5 preset to `finetuning/build_dataset.py`
 
+Wait for both pipelines to finish + merge, then set counts based on actual file sizes. Rough plan:
+
 ```python
 # Add to DATA_MIX_PRESETS dict:
 "v5": {
-    # conv_memory first — this is the primary fix
-    "synthetic_train_conv_memory.jsonl":    2000,   # ~20% — exact count depends on file size
-    "synthetic_train_targeted_fix.jsonl":   5000,   # ~25%
-    "synthetic_train_friend_1.jsonl":       3000,   # ~15%
-    "synthetic_train_transition.jsonl":     2500,   # ~12%
-    "synthetic_train_casual.jsonl":         2000,   # ~10%
-    "synthetic_train_therapist_.jsonl":     1600,   # ~8%
-    "synthetic_train_biometric.jsonl":      1600,   # ~8%
-    "synthetic_train.jsonl":                500,    # ~2%  (grief)
+    # New Qwen-generated data — primary fix targets
+    "synthetic_train_conv_memory_qwen_merged.jsonl": 2000,  # ~15% — cross-session memory
+    "synthetic_train_biometric_qwen.jsonl":          2000,  # ~15% — biometric context handling
+
+    # Existing sources
+    "synthetic_train_targeted_fix.jsonl":   4000,   # ~30%
+    "synthetic_train_friend_1.jsonl":       2000,   # ~15%
+    "synthetic_train_transition.jsonl":     1500,   # ~11%
+    "synthetic_train_casual.jsonl":         1000,   # ~7%
+    "synthetic_train_therapist_.jsonl":      800,   # ~6%
+    "synthetic_train.jsonl":                 300,   # ~2%  (grief)
     "synthetic_train_targeted_fixes.jsonl":  181,   # gold — always 100%
 }
-# Total: ~18,381 (adjust conv_memory count when actual file size is known)
-# Steps: TBD — aim for ~1 epoch. At batch=8: 18k/8 ≈ 2250 steps → use 2400
+# Total: ~13,781 (adjust conv_memory + biometric counts once file sizes known)
+# Steps: TBD — aim for ~1 epoch. At batch=8: 14k/8 ≈ 1750 steps → use 2000
 ```
 
-Adjust `conv_memory` count to be ~20% of total once the file is downloaded and size is known.
+Key decisions before finalising:
+- **conv_memory weight**: target ~15% of mix. If merged file has >2k examples, cap at 2k. If <2k, use 100%.
+- **biometric_qwen weight**: same — use 100% if <2k final examples, cap at 2k if more.
+- **Drop old `synthetic_train_biometric.jsonl`** from v5 — replaced by `biometric_qwen.jsonl` (Qwen teacher, correct format, richer mode coverage). The old file used Gemma4 with an older pipeline version.
 
 ### Step 2: Create v5 SLURM script
 

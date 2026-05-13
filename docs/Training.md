@@ -105,7 +105,12 @@ Defined in `finetuning/build_dataset.py` → `DATA_MIX_PRESETS`. Each key maps t
 
 ### v5 — planned (not yet in DATA_MIX_PRESETS)
 
-See [[Next Steps]] for exact proposed mix. Key additions: `synthetic_train_conv_memory.jsonl` at ~20%. Must add v5 preset to `build_dataset.py` before running.
+See [[Next Steps]] for exact proposed mix. Key additions:
+- `synthetic_train_conv_memory_qwen_merged.jsonl` (~15%) — cross-session memory, Qwen3-30B teacher
+- `synthetic_train_biometric_qwen.jsonl` (~15%) — biometric context handling, 4-mode (relevant/irrelevant/adjacent/trend), Qwen3-30B teacher
+- Drop `synthetic_train_biometric.jsonl` — replaced by the Qwen version above
+
+Must add v5 preset to `build_dataset.py` before running. Wait for jobs 611377/611379–611381 (conv-memory) and 612894–612896 (biometric) to finish first.
 
 ### Older presets (kept for reference, do not reuse)
 
@@ -177,10 +182,11 @@ cp finetuning/run_sft_v4.slurm finetuning/run_sft_v5.slurm
 
 ### SLURM submission checklist
 
-- [ ] `v5` preset added to `finetuning/build_dataset.py DATA_MIX_PRESETS`
-- [ ] Conv-memory data pulled from cluster (`data/synthetic_train_conv_memory.jsonl` exists locally)
-- [ ] Conv-memory data synced to cluster
-- [ ] SLURM script updated (version, paths, `--iters`)
+- [ ] Jobs 611377/611379–611381 (conv-memory) finished and merged → `data/synthetic_train_conv_memory_qwen_merged.jsonl`
+- [ ] Jobs 612894–612896 (biometric) finished and merged → `data/synthetic_train_biometric_qwen.jsonl`
+- [ ] Both merged files rsync'd to cluster
+- [ ] `v5` preset added to `finetuning/build_dataset.py DATA_MIX_PRESETS` (see [[Next Steps]])
+- [ ] SLURM script `run_sft_v5.slurm` created (copy v4, update version, paths, `--iters`)
 - [ ] Partition: `gpu-long`
 - [ ] GPU: `--gres=gpu:a100-80:1` in `#SBATCH` header (not just `--export`)
 - [ ] Log path: `/home/a/aryanj/logs/` (note the `/a/` subdirectory)

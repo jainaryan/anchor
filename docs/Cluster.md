@@ -169,7 +169,7 @@ rsync -avz --progress nus-student-cluster:~/projects/mindmate/adapters/genzv5/ a
 |---|---|---|
 | `meta-llama/Llama-3.2-3B-Instruct` | ~6GB | Training base + inference |
 | `google/gemma-4-26B-A4B-it` | ~52GB | Teacher (datagen) + benchmark judge |
-| `Qwen/Qwen3-30B-A3B-Instruct-2507` | ~60GB | Old benchmark judge (historical, may be evicted) |
+| `Qwen/Qwen3-30B-A3B-Instruct-2507` | ~60GB | **Active datagen teacher** for conv-memory + biometric pipelines |
 | `Qwen/Qwen3-1.7B` | ~3GB | Historical |
 | `Qwen/Qwen2.5-3B-Instruct` | ~6GB | Historical (inferior base, not used) |
 
@@ -220,14 +220,42 @@ squeue -u aryanj -o "%.7i %.8j %.8u %.2t %R %N"
 
 ---
 
-## Active Jobs (2026-05-09, session 4)
+## Active Jobs (2026-05-14, session 8)
 
-| Job | Name | GPU | Status | Notes |
+| Job | Name | GPU | Status | Output |
 |---|---|---|---|---|
-| 609110 | mindmate-conv-memory | A100-80 (xgph7) | 🟢 RUNNING | 72h; teacher-as-Anchor v2 |
-| 609111 | mindmate-conv-memory | A100-80 (xgph8) | 🟢 RUNNING | 72h; parallel instance |
+| 611377 | mindmate-conv-memory-qwen | A100-80 (xgph2) | 🟢 RUNNING (~45h in) | `synthetic_train_conv_memory_qwen.jsonl` |
+| 611379 | mindmate-conv-memory-qwen | A100-80 (xgph4) | 🟢 RUNNING (shard 0) | `synthetic_train_conv_memory_qwen_s0.jsonl` |
+| 611380 | mindmate-conv-memory-qwen | A100-80 (xgph8) | 🟢 RUNNING (shard 1) | `synthetic_train_conv_memory_qwen_s1.jsonl` |
+| 611381 | mindmate-conv-memory-qwen | A100-80 (xgph7) | 🟢 RUNNING (shard 2) | `synthetic_train_conv_memory_qwen_s2.jsonl` |
+| 612894 | mindmate-biometric-qwen | A100-80 | 🟢 RUNNING (shard 0) | `synthetic_train_biometric_qwen_s0.jsonl` |
+| 612895 | mindmate-biometric-qwen | A100-80 | 🟢 RUNNING (shard 1) | `synthetic_train_biometric_qwen_s1.jsonl` |
+| 612896 | mindmate-biometric-qwen | A100-80 | 🟢 RUNNING (shard 2) | `synthetic_train_biometric_qwen_s2.jsonl` |
 
-Both write to `data/synthetic_train_conv_memory.jsonl` when done. Expected completion: ~2026-05-12 ~12:00.
+All 72h jobs on `gpu-long`. Conv-memory jobs finishing ~2026-05-15. Biometric jobs finishing ~2026-05-17.
+
+### Launching sharded pipelines
+
+```bash
+# Conv-memory (already running, for reference):
+bash finetuning/launch_conv_memory_shards.sh 3
+
+# Biometric SFT (already running, for reference):
+bash finetuning/launch_biometric_shards.sh 3
+
+# To add more shards (indices must not overlap existing):
+sbatch --gres=gpu:a100-80:1 --export=ALL,SHARD_IDX=3 finetuning/biometric_pipeline_qwen.slurm
+```
+
+### Merge commands (run after jobs finish)
+
+```bash
+# Conv-memory: merge all qwen shards
+cat data/synthetic_train_conv_memory_qwen_s*.jsonl > data/synthetic_train_conv_memory_qwen_merged.jsonl
+
+# Biometric: merge all qwen shards
+cat data/synthetic_train_biometric_qwen_s*.jsonl > data/synthetic_train_biometric_qwen.jsonl
+```
 
 ---
 
