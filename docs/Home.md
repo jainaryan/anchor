@@ -28,8 +28,8 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
 | **Ablation complete** | 610501 (preamble_only): 41% · 610502 (nosys): 33% — preamble +8pp, memory blocks +10pp |
-| **Active cluster jobs** | 611377 — conv-memory qwen (pre-shard, 65/35) · **611379–611381** — conv-memory qwen 3-shard (50/50 + overref) · **612894–612896** — biometric SFT qwen 3-shard (`synthetic_train_biometric_qwen_s{0,1,2}.jsonl`) |
-| **Next milestone** | genzv5 SFT once conv-memory + biometric data lands |
+| **Active cluster jobs** | 611377/611379–611381 — conv-memory qwen (original shards 0–2, finishing) · **612894–612896** — biometric SFT qwen shards 0–2 · **612897–612899** — conv-memory qwen shards 3–5 (new profiles + facts + modes) |
+| **Next milestone** | genzv5 SFT once conv-memory (all shards) + biometric data lands and merges |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
 ---

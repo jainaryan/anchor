@@ -35,6 +35,9 @@ tags: [anchor, data]
 | `synthetic_train_conv_memory_qwen_s1.jsonl` | Qwen shard 1 — same config, disjoint RNG | job 611380 |
 | `synthetic_train_conv_memory_qwen_s2.jsonl` | Qwen shard 2 — same config, disjoint RNG | job 611381 |
 | `synthetic_train_conv_memory_overref_qwen_s{0,1,2}.jsonl` | **Inspection only** — casual chats where Anchor shoehorned therapy/coping. NOT for training as-is; potential DPO negatives later | same jobs (filter side-channel) |
+| `synthetic_train_conv_memory_qwen_s3.jsonl` | Qwen shard 3 — expanded profiles (8 new clinical, 4 new companion), 15 new facts, 2 new modes (`relationship_shift`, `decision_stuck`) | job 612897 |
+| `synthetic_train_conv_memory_qwen_s4.jsonl` | Qwen shard 4 — same config as shard 3, disjoint RNG | job 612898 |
+| `synthetic_train_conv_memory_qwen_s5.jsonl` | Qwen shard 5 — same config as shard 3, disjoint RNG | job 612899 |
 
 ### Biometric SFT data (biometric context handling, in progress)
 

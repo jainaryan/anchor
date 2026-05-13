@@ -379,6 +379,105 @@ PROFILES = [
             ("Apr 14", "Book club dinner. Laughed properly for the first time in weeks."),
         ],
     },
+
+    # ── New profiles added session 8 ──────────────────────────────────────────
+
+    {
+        "name": "Rania",
+        "age": "34 F",
+        "diagnoses": "postpartum anxiety",
+        "triggers": "intrusive thoughts about baby, sleep deprivation, fear of not being a good enough mom",
+        "coping": ["calling her sister Fatima", "5-4-3-2-1 grounding", "getting outside with the stroller"],
+        "support": "Fatima (sister), husband Khalid, health visitor nurse",
+        "sessions": [
+            ("Apr 21", "Intrusive thought about dropping the baby while going downstairs. Knew it was anxiety but still shaken. Called Fatima."),
+            ("Apr 15", "First time leaving baby with Khalid for an hour. Panicked the whole time but came back to everything being fine."),
+        ],
+    },
+    {
+        "name": "Sam",
+        "age": "19 M",
+        "diagnoses": "adjustment disorder, homesickness",
+        "triggers": "Sunday evenings, calling home and hearing normal life going on without him, crowded dining halls",
+        "coping": ["calling his mom", "running at the uni track", "chess club on Thursdays"],
+        "support": "mom, chess club friend Parveen",
+        "sessions": [
+            ("Apr 22", "Bad Sunday evening — called mom, cried a bit. She said it's normal. Helped hearing that."),
+            ("Apr 15", "Chess club was actually fun. First time feeling like himself since arriving."),
+        ],
+    },
+    {
+        "name": "Pita",
+        "age": "43 M",
+        "diagnoses": "alcohol use disorder (14 months sober)",
+        "triggers": "work stress, old friends who still drink, celebrations and parties",
+        "coping": ["calling sponsor Dave", "the 10-minute rule (wait before any stress decision)", "the gym"],
+        "support": "Dave (AA sponsor), sister Sione, home group meetings",
+        "sessions": [
+            ("Apr 20", "Work colleague's farewell drinks. Went, had soda water. Hard but did it. Called Dave after."),
+            ("Apr 14", "14-month sobriety anniversary. Quiet but proud. Sione made him a cake."),
+        ],
+    },
+    {
+        "name": "Jess",
+        "age": "32 F",
+        "diagnoses": "fibromyalgia, depression",
+        "triggers": "overdoing it on a good day and crashing, feeling misunderstood, comparing herself to who she was before",
+        "coping": ["pacing with an activity diary", "warm bath", "calling her mum"],
+        "support": "mum, pain psychologist Dr Abbas, online fibro community",
+        "sessions": [
+            ("Apr 21", "Had a decent day, went for a short walk. Didn't over-push. Called this a win."),
+            ("Apr 14", "Flare day. In bed most of it. Spiral about 'this being her life now'. Mum came over."),
+        ],
+    },
+    {
+        "name": "Omar",
+        "age": "27 M",
+        "diagnoses": "health anxiety",
+        "triggers": "reading health news, any unexplained physical sensation, watching someone else be ill",
+        "coping": ["2-hour no-googling rule", "texting his friend Zaid", "playing guitar"],
+        "support": "Zaid (best friend)",
+        "sessions": [
+            ("Apr 19", "Noticed a mole and spent 3 hours googling. Zaid talked him down. Doctor's appointment booked — turns out fine."),
+            ("Apr 12", "Went four days without googling symptoms. Record for the year. Proud."),
+        ],
+    },
+    {
+        "name": "Nia",
+        "age": "39 F",
+        "diagnoses": "adjustment disorder, anxiety",
+        "triggers": "handovers with ex-husband, kids asking difficult questions, feeling like she failed",
+        "coping": ["journaling", "yoga on Monday mornings", "calling her friend Bea"],
+        "support": "Bea (close friend), therapist Dr Marsh",
+        "sessions": [
+            ("Apr 22", "Handover with ex was tense. Kids picked up on it. Felt guilty all evening."),
+            ("Apr 16", "Good week. Kids were settled. Remembered what it feels like to breathe."),
+        ],
+    },
+    {
+        "name": "Tobias",
+        "age": "28 M",
+        "diagnoses": "GAD, reassurance-seeking",
+        "triggers": "unanswered messages, ambiguous situations, silence from people he cares about",
+        "coping": ["sitting with discomfort for 10 min before texting", "journaling", "calling therapist Dr Klein"],
+        "support": "Dr Klein (therapist), sister Anna",
+        "sessions": [
+            ("Apr 21", "Friend took 6 hours to reply. Spiralled. Managed not to send a follow-up text. Progress."),
+            ("Apr 15", "Good DBT session with Dr Klein — practiced tolerating uncertainty. Felt doable for once."),
+        ],
+    },
+    {
+        "name": "Keiko",
+        "age": "56 F",
+        "diagnoses": "depression, identity crisis post-retirement",
+        "triggers": "being asked 'what do you do now', empty weekday mornings, feeling invisible",
+        "coping": ["pottery class on Wednesdays", "calling her friend Michiko", "short morning walks"],
+        "support": "Michiko (college friend), husband Hiroshi",
+        "sessions": [
+            ("Apr 20", "Dinner party where everyone talked about work. Sat quiet most of it. Hard."),
+            ("Apr 13", "Pottery class made something she was actually proud of. First time in a while."),
+        ],
+    },
 ]
 
 
@@ -492,6 +591,61 @@ COMPANION_PROFILES = [
             ("Apr 15", "Tried a new tamale recipe. Customers loved it."),
         ],
     },
+
+    # ── New companion profiles added session 8 ────────────────────────────────
+
+    {
+        "name": "Marco",
+        "age": "31 M",
+        "profile_type": "companion",
+        "interests": "amateur cycling, pasta obsession, terrible action movies",
+        "triggers": "rainy weekends ruining training plans, slow work weeks",
+        "coping": ["a long training ride", "calling his riding buddy Fede", "rewatching a favourite film"],
+        "support": "Fede (cycling friend), girlfriend Anya",
+        "sessions": [
+            ("Apr 22", "Finished a 90km training ride. Legs dead but happy. Gran Fondo in 6 weeks."),
+            ("Apr 15", "Made carbonara from scratch — came out perfect. Small wins."),
+        ],
+    },
+    {
+        "name": "Priyanka",
+        "age": "26 F",
+        "profile_type": "companion",
+        "interests": "ceramics side hustle, thrift stores, long playlists, her marketing day job",
+        "triggers": "juggling two schedules, custom order deadlines",
+        "coping": ["a pottery session after work", "texting her friend Dia", "a long playlist walk"],
+        "support": "Dia (best friend), partner Arjun",
+        "sessions": [
+            ("Apr 23", "First custom mug order from a stranger on Instagram. Excited and nervous."),
+            ("Apr 16", "Sold three mugs at the local market. Felt more real."),
+        ],
+    },
+    {
+        "name": "Jake",
+        "age": "38 M",
+        "profile_type": "companion",
+        "interests": "stay-at-home dad, restoring furniture, slow-pour coffee, old TV shows",
+        "triggers": "kids fighting after school, losing track of adult conversation",
+        "coping": ["the garage workshop after bedtime", "a proper coffee alone on the porch", "texting his friend Dan"],
+        "support": "wife Megan, Dan (old friend)",
+        "sessions": [
+            ("Apr 22", "Refinished a dresser. Actually looks great. Kids couldn't care less but he's proud."),
+            ("Apr 16", "Took both kids to the park solo. No disasters. Counts."),
+        ],
+    },
+    {
+        "name": "Layla",
+        "age": "23 F",
+        "profile_type": "companion",
+        "interests": "cooking new recipes, long FaceTimes home, exploring her new city on weekends",
+        "triggers": "feeling like an outsider, slow weeks when there's nothing to do",
+        "coping": ["cooking a meal from a recipe video", "FaceTime with family", "solo walks to explore a new neighbourhood"],
+        "support": "family (FaceTime), new work friend Preet",
+        "sessions": [
+            ("Apr 21", "Found a really good Sunday market nearby. Sent her mum photos."),
+            ("Apr 14", "Made her grandma's rice dish from memory. Came out decent enough."),
+        ],
+    },
 ]
 
 PROFILES.extend(COMPANION_PROFILES)
@@ -500,6 +654,7 @@ PROFILES.extend(COMPANION_PROFILES)
 # ─── New-fact seeds ────────────────────────────────────────────────────────────
 
 NEW_FACTS = [
+    # original 20
     "They just found out their roommate is moving out next month.",
     "They got a small raise at work today but don't feel as happy as they expected.",
     "They've been sleeping only 4-5 hours for the past week.",
@@ -520,6 +675,22 @@ NEW_FACTS = [
     "They cried on the commute home for no clear reason.",
     "They had a really good therapy session today.",
     "They texted their support person but haven't heard back yet.",
+    # new facts added session 8
+    "They found out their landlord is selling the building — they may have to move.",
+    "They ran into their ex completely unexpectedly yesterday.",
+    "A family member just got a serious medical diagnosis.",
+    "They got invited to be in a close friend's wedding party.",
+    "They've been journaling every day this week — completely new for them.",
+    "They got into a heated argument with a stranger online last night and can't stop thinking about it.",
+    "They're thinking about moving to a different city but haven't told anyone.",
+    "A mentor they really looked up to reached out after two years of silence.",
+    "They found out a coworker they liked is being let go at the end of the month.",
+    "Their best friend just shared some big exciting news about their own life.",
+    "They quietly stopped drinking alcohol this month and haven't told most people.",
+    "They've had the same dream about someone from their past three nights in a row.",
+    "They're considering going back to school and have been looking at programs late at night.",
+    "They donated a bag of old things and felt unexpectedly emotional about it.",
+    "Someone at work said something offhand two days ago and they can't stop replaying it.",
 ]
 
 # ─── Conversation modes ────────────────────────────────────────────────────────
@@ -541,6 +712,8 @@ CLINICAL_MODES = [
     "memory_callback",
     "mixed_news",
     "low_engagement",
+    "relationship_shift",  # new session 8: processing a change in a key relationship
+    "decision_stuck",      # new session 8: paralysed between two options, thinking aloud
 ]
 
 # Combined reference (used by some logging — order: casual first).
@@ -604,6 +777,20 @@ USER_MODE_INSTRUCTIONS = {
         "You're mildly grumbling about something trivial — traffic, slow wifi, an annoying coworker, "
         "weather. Not actually upset, just venting in a lighthearted way. "
         "Bring up the new fact as a side topic. DON'T escalate into therapy talk."
+    ),
+    "relationship_shift": (
+        "Something changed with someone important to you recently — they pulled away, got closer unexpectedly, "
+        "said something that landed strangely, or the dynamic just feels different. "
+        "You're processing it — not sure how you feel, or how to handle it. "
+        "The new fact is related to this or adds another layer. "
+        "You're not in crisis — you're just sitting with something."
+    ),
+    "decision_stuck": (
+        "You're stuck between two options and going around in circles. "
+        "Both have upsides and downsides. You're not looking for someone to decide for you — "
+        "you're thinking out loud and want to feel heard while you work through it. "
+        "The new fact is the thing you're deciding about, or adds to why the decision feels hard. "
+        "Don't ask Anchor to choose for you — ask for space to think."
     ),
 }
 
@@ -820,13 +1007,14 @@ def heuristic_check(conv: list[dict], profile: dict, new_fact: str, mode: str = 
 def pick_mode(profile: dict) -> str:
     """Pick a mode appropriate for the profile type.
 
-    Goal: ~50/50 casual/clinical conversations overall. With 8 companion + 25 clinical
-    profiles uniformly sampled, this balances out as:
-      companion profile (24% of pool) × 100% casual = 24% casual
-      clinical profile  (76% of pool) × 35% casual  = 27% casual
-      → total ~51% casual, ~49% clinical
+    Goal: ~50/50 casual/clinical conversations overall. With 12 companion + 33 clinical
+    profiles uniformly sampled (session 8 expansion), this balances out as:
+      companion profile (27% of pool) × 100% casual = 27% casual
+      clinical profile  (73% of pool) × 35% casual  = 26% casual
+      → total ~53% casual, ~47% clinical  (close enough to 50/50)
     The 50/50 mix teaches both:
-      - WHEN memory IS needed (clinical modes: venting, asking_for_help, memory_callback)
+      - WHEN memory IS needed (clinical modes: venting, asking_for_help, memory_callback,
+        relationship_shift, decision_stuck)
       - WHEN memory is present but NOT needed (companion modes: casual chat, wins, opinions)
     """
     if profile.get("profile_type") == "companion":
