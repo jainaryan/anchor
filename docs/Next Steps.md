@@ -124,11 +124,46 @@ Run a checkpoint sweep: genzv5_ck200, ck400, ck600, ck800, ck1000, ck1200 — fi
 
 ### Expected outcomes
 
-- **CROSS_SESSION_MEMORY** should recover from 0% (genzv2_ck1200) toward base's 83%
-- **CONTEXT_MEMORY** should recover from 9% toward base's 38%
-- **BIOMETRIC** should recover from 30% toward base's 60%
-- **COMPANION** should stay high — friend data still in mix
-- **CRISIS + HELP_MODE** — unclear; base still beats SFT here, may need more therapist data or longer training
+| Category | Current best SFT | Base | genzv5 target | Why |
+|---|---|---|---|---|
+| CROSS_SESSION_MEMORY | 0% (ck1200) | 83% | >60% | Conv-memory data trains explicit `[Recent sessions]` use |
+| CONTEXT_MEMORY | 9% (ck1200) | 38% | >25% | Conv-memory + format fix teach profile field reference |
+| BIOMETRIC | 30% (ck1200) | 60% | >45% | Biometric SFT data (generating now) |
+| COMPANION | 92% (ck1200) | 44% | >85% | Friend data still in mix |
+| FORMAT | 56% (ck1200) | 33% | >60% | Format data stays in mix |
+| CONVERSATION_MEMORY | 30% (ck1200) | 13% | >35% | Conv-memory data reinforces in-session recall |
+| **CRISIS** | **48% (ck1200)** | **67%** | **>55%** | ⚠️ Risk — see gap analysis below |
+| **HELP_MODE** | **44% (ck1200)** | **58%** | **>50%** | ⚠️ Gap — see below |
+| **NO_HALLUCINATION** | **54% (ck1200)** | **67%** | **>70%** | ⚠️ Need anti-hallucination data in mix |
+
+### Known gaps in the current genzv5 data plan
+
+These are **not addressed** by the conv-memory + biometric pipeline. Add before finalising the v5 data mix:
+
+**1. CRISIS — actively degraded by SFT (67% → 48%)**
+The friend-voice training overrides safety tone. Current genzv5 plan has no crisis-specific examples.
+- Add 20–30 crisis SFT examples to the mix: passive SI, active SI, humor deflection, escalation across turns
+- Format: must use production system prompt preamble + have the model respond as Anchor (not as a therapist)
+- Priority: `cr_03` ('Better off without me') and `cr_07` (humor deflection) are coin-flip at 50% — most dangerous
+
+**2. HELP_MODE — probe pattern entrenched (58% → 25–44%)**
+Model learned to probe ("what's the worst part?") from therapeutic data instead of giving immediate technique.
+- The 12 existing `help_cold_open` gold examples helped ck1200 to 44% but still 14pp below base
+- Add 20+ more HELP_MODE examples — specifically cases where user opens with explicit help request
+- Vary: "help me breathe", "i need to calm down", "what do i do", "i'm panicking"
+- Constraint: technique must be offered in the FIRST model turn, not after a probe question
+
+**3. NO_HALLUCINATION — data-mix-dependent (genzv3 89%, genzv2 54%)**
+The 8 anti-hallucination gold examples landed only in genzv3's mix. genzv2/genzv4 omit them → 54% (worse than base 67%).
+- Include `synthetic_train_targeted_fixes.jsonl` explicitly at 100% in v5 mix (it's only 181 examples)
+- Do not downsample the gold examples — they're already small and high-signal
+
+**4. Mobile eval re-run — stale since April 2026**
+The in-app eval (`EVAL_RESULTS.md`) was run on genzv2_ck1600 before c3acdc9 and before all targeted fix data. Results are not representative of genzv2_ck1200.
+- **Action**: re-run the in-app eval against genzv2_ck1200 Q4_K_M on Pixel 8a
+- Expect improvements on: memory_recall_wedding, hallucination scenarios, coping_from_profile
+- May still fail: cross_session_coping_outcome_followup (CROSS_SESSION 0% on cluster)
+- Critical: re-run crisis scenarios — cluster shows 48% for ck1200, need to verify on-device
 
 ---
 
@@ -155,6 +190,8 @@ v3 peaked at ck200 (10k examples). v4 peaked at ck200 (21k examples). More data 
 ### 3. DPO worth reconsidering?
 
 DPO was tried with corrected-format SFT data (pre-c3acdc9). If genzv5 SFT recovers base categories, DPO might be more useful. Would need: format-corrected DPO data, longer training (1200+ steps), possibly higher beta. Not a priority until genzv5 results are in.
+
+Specific DPO candidate: crisis scenarios. If genzv5 SFT still drops CRISIS below base (67%), a DPO pass with chosen=crisis-safe / rejected=probe-or-deflect responses could rebalance without hurting COMPANION. The overref filter files (`synthetic_train_conv_memory_overref_qwen_s*.jsonl`) may also be useful rejected examples for a memory-specific DPO pass.
 
 ### 4. Per-category targeted data
 

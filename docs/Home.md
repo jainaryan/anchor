@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 9 cont'd — vLLM dead end on PCIe nodes confirmed; HF speedups: sdpa+torch.compile; biometric SXM shards 613666-668 queued with vLLM; conv-memory shards 0-2 finishing imminently)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 10 — benchmark analysis logged: cross-model category table in Benchmarks.md, genzv5 data gaps in Next Steps.md — crisis/help_mode/hallucination examples needed, mobile eval re-run flagged)
 
 ---
 

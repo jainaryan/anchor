@@ -248,6 +248,27 @@ Stores the profile card (Tier 1). Key fields: `name`, `age`, `gender`, `location
 
 ## Eval Harness
 
+### ⚠️ Current eval results are stale — re-run needed
+
+Last run: **2026-04-22**, model: **genzv2_ck1600**, before all targeted fix data and before c3acdc9.
+
+**What changed since the last run that affects results:**
+- c3acdc9 (2026-05-09): training format fix — should recover cross-session memory failures
+- 8 anti-hallucination gold examples: should fix "you went quiet on me there" (3 failures in last run)
+- 30 name_resolution + 18 session_recall examples: should recover `memory_recall_wedding`
+- 15 profile_coping examples: should recover `coping_from_profile`
+- Best model is now genzv2_ck1200, not genzv2_ck1600
+
+**What to expect on re-run (genzv2_ck1200 on Pixel 8a):**
+- `memory_recall_wedding`, `coping_from_profile`, `help_mode_direct_opener` → likely improved
+- Hallucination scenarios (`empty_profile_first_use`, `cross_session_mood_trend`) → likely improved
+- `cross_session_coping_outcome_followup` → likely still failing (cluster CROSS_SESSION_MEMORY = 0% for ck1200)
+- Crisis scenarios → watch carefully; cluster shows CRISIS degraded to 48% for ck1200 vs base 67%
+
+**Action before genzv5:** Re-run in-app eval on Pixel 8a with genzv2_ck1200 Q4_K_M. These results establish the on-device baseline genzv5 must beat. See `src/eval/EVAL_RESULTS.md`.
+
+---
+
 ### Overview
 
 29 scenarios in `src/eval/fixtures/scenarios.ts`:
