@@ -29,14 +29,21 @@ cd $PROJECT_DIR
 export TEACHER_MODEL=30b
 export OUT_LABEL=qwen
 
-# Two-phase teacher-as-Anchor (v3) — USE_VLLM=1 enables PagedAttention + FlashAttention2
-# for ~1.5-2x faster inference vs HuggingFace. Requires vllm in the venv.
-# xgph[10-18] nodes: gpu:a100-40:2 GRES label but physically one A100-80 per node.
-# vLLM 0.20.2 requires CUDA driver ≥ 12.1; xgph[10-18] have 12.0.90 → too old.
-# Use HuggingFace backend instead (USE_VLLM=0). device_map="auto" on 80GB card.
-export USE_VLLM=0
+# Two-phase teacher-as-Anchor (v3) — backend depends on node type:
+#
+#   PCIe A100 nodes (xgph[10-18], gpu:a100-40:2 GRES):
+#     vLLM 0.20.2 incompatible (CUDA driver 12.0.90 < 12.1 minimum).
+#     → HF backend (USE_VLLM=0) + sdpa attention + torch.compile
+#
+#   SXM A100 nodes (xgph[2-9], gpu:a100-80:1 GRES):
+#     vLLM works fine (SXM nodes confirmed working via conv-memory jobs).
+#     → Submit with: sbatch --gres=gpu:a100-80:1 --export=ALL,SHARD_IDX=N,USE_VLLM=1
+#
+# Env vars respect external values passed via --export; defaults suit PCIe nodes.
+export USE_VLLM=${USE_VLLM:-0}
+export USE_TORCH_COMPILE=${USE_TORCH_COMPILE:-1}
 
-echo "[Setup] USE_VLLM=$USE_VLLM"
+echo "[Setup] USE_VLLM=$USE_VLLM  USE_TORCH_COMPILE=$USE_TORCH_COMPILE"
 
 # Shard support — pass SHARD_IDX via --export=ALL,SHARD_IDX=N when submitting.
 # Without it, runs as a single unsharded job (writes to *_qwen.jsonl).
@@ -52,7 +59,7 @@ if [ -z "${HF_TOKEN:-}" ]; then
   echo "ERROR: HF_TOKEN not set" && exit 1
 fi
 
-echo "Starting biometric SFT pipeline v3 (two-phase, Qwen3-30B-A3B, vLLM)..."
+echo "Starting biometric SFT pipeline v3 (two-phase, Qwen3-30B-A3B, HF+sdpa+compile)..."
 python synthetic/biometric_sft_pipeline.py
 
 echo "Pipeline finished at $(date)"

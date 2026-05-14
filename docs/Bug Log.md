@@ -102,6 +102,50 @@ Note: v3 rate ~10-15/hr per shard (was 180/hr for v2) — quality trade-off is w
 
 ---
 
+## 2026-05-14 (Session 9 — continued)
+
+### vLLM 0.20.2: `VLLM_USE_V1=0` removed — env var silently ignored
+
+**Bug:** Attempted to force vLLM V0 engine via `VLLM_USE_V1=0` env var to avoid the subprocess CUDA crash. vLLM 0.20.2 printed `"Unknown vLLM environment variable detected: VLLM_USE_V1"` and ignored it. V0 engine no longer exists in 0.20.2.
+
+**Conclusion:** No way to force V0 in 0.20.2. The CUDA driver incompatibility on xgph[10-18] is fundamental, not configurable.
+
+---
+
+### PyTorch+cu130 vs CUDA driver 575.57.08: Python-level patching insufficient
+
+**Bug:** PyTorch 2.11.0+cu130 (built for CUDA 13.0 runtime) was installed in mindmatenv but xgph[10-18] nodes have CUDA driver 575.57.08 (max CUDA ~12.x). vLLM spawn subprocess called `torch._C._cuda_init()`, which raised `RuntimeError: NVIDIA driver is too old`.
+
+**Attempted fix:** Patched `torch/cuda/__init__.py` on cluster to wrap `torch._C._cuda_init()` in try-except, downgrading the hard error to a warning. This fixed the immediate crash but exposed a cascade failure: `_check_capability()` calls `_get_device_properties` which is a C-extension only registered after successful CUDA init → `NameError: name '_get_device_properties' is not defined`.
+
+**Conclusion:** Python patching can't bridge a C-extension registration failure. PyTorch+cu130 and CUDA driver 12.0.90 are fundamentally incompatible. Using HF backend (`USE_VLLM=0`) is the only workable option on these nodes.
+
+---
+
+### flash-attn install: CUDA version mismatch with PyTorch+cu130
+
+**Bug:** Attempted `uv pip install flash-attn` on xgph[10-18] nodes. flash-attn wheel detects CUDA 12.0 on the node but PyTorch is built for CUDA 13.0 → version mismatch. Install failed or produced an unusable build. `import flash_attn` raised `ModuleNotFoundError`.
+
+**Conclusion:** flash-attn incompatible with this PyTorch/CUDA combination on PCIe nodes. Dropped.
+
+---
+
+### HF backend throughput improvement: sdpa + torch.compile
+
+**Context:** Biometric PCIe A100 jobs running at ~1.4 ex/hr (vs ~5.3 ex/hr on SXM A100 with vLLM). Since vLLM is unworkable on PCIe nodes, applied two HF backend speedups:
+
+1. **`attn_implementation="sdpa"`** (default, was `"eager"`): PyTorch's built-in fused scaled-dot-product attention. No extra packages. ~15% faster than eager.
+2. **`torch.compile(mode="reduce-overhead")`** (`USE_TORCH_COMPILE=1`): Captures CUDA computation graph after warmup. ~15-25% additional throughput. First call is slow (compilation), subsequent calls faster.
+
+**Fix:** Updated `synthetic/utils.py`:
+- Default attention changed from `"eager"` → `"sdpa"`
+- Added `USE_TORCH_COMPILE` env var; if `"1"`, calls `torch.compile(model, mode="reduce-overhead")` after `model.eval()`
+- Updated `finetuning/biometric_pipeline_qwen.slurm` to set `USE_TORCH_COMPILE=1`
+
+Note: these improvements don't apply to currently running jobs (613218-613220). Will take effect on new biometric shards launched after ~May 15 on SXM nodes (which can also use vLLM).
+
+---
+
 ## 2026-05-10 (Session 5)
 
 ### Panic detection false positives — "help me" blocked normal messages ❗

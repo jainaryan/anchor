@@ -24,7 +24,18 @@ else:
 # USE_VLLM=1 env var enables vLLM backend (PagedAttention + FlashAttention2).
 # ~1.5-2x faster inference vs HuggingFace for sequential generation.
 # Requires: pip install vllm  (already available on cluster mindmatenv)
+# Note: vLLM 0.20.2 V1 engine requires CUDA ≥12.1. Set VLLM_USE_V1=0 to force
+# V0 engine on nodes with older drivers (e.g. xgph[10-18] have CUDA 12.0.90).
 USE_VLLM = os.environ.get("USE_VLLM", "0") == "1"
+
+# USE_FLASH_ATTN=1 enables FlashAttention 2 in the HF backend (~2x attention speedup).
+# Requires flash-attn installed. Works on CUDA 12.0+. Falls back silently if unavailable.
+USE_FLASH_ATTN = os.environ.get("USE_FLASH_ATTN", "0") == "1"
+
+# USE_TORCH_COMPILE=1 wraps the HF model with torch.compile(mode="reduce-overhead").
+# Captures CUDA graphs after first call, giving ~15-25% throughput improvement.
+# Safe on any CUDA version — no new packages needed. Default off to avoid first-call delay.
+USE_TORCH_COMPILE = os.environ.get("USE_TORCH_COMPILE", "0") == "1"
 
 
 class TeacherModel:
@@ -43,10 +54,23 @@ class TeacherModel:
     # ── HuggingFace backend ────────────────────────────────────────────────────
 
     def _load_hf(self):
-        print(f"[Teacher] Backend: HuggingFace  model={MODEL_ID}")
         hf_token = os.environ.get("HF_TOKEN")
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, token=hf_token)
         self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        # Pick attention implementation (best available):
+        #   flash_attention_2 > sdpa > eager
+        # sdpa = PyTorch's built-in fused attention (no extra package, ~15% faster than eager).
+        # flash_attention_2 requires flash-attn package (USE_FLASH_ATTN=1).
+        attn_impl = "sdpa"
+        if USE_FLASH_ATTN:
+            try:
+                import flash_attn  # noqa: F401
+                attn_impl = "flash_attention_2"
+            except ImportError:
+                print("[Teacher] flash-attn not installed — using sdpa")
+
+        print(f"[Teacher] Backend: HuggingFace  model={MODEL_ID}  attn={attn_impl}")
         self.model = AutoModelForCausalLM.from_pretrained(
             MODEL_ID,
             device_map="auto",
@@ -54,8 +78,15 @@ class TeacherModel:
             low_cpu_mem_usage=True,
             trust_remote_code=True,
             token=hf_token,
+            attn_implementation=attn_impl,
         )
         self.model.eval()
+
+        if USE_TORCH_COMPILE:
+            print("[Teacher] Compiling model with torch.compile(reduce-overhead) …")
+            self.model = torch.compile(self.model, mode="reduce-overhead")
+            print("[Teacher] torch.compile done.")
+
         print("[Teacher] HF model loaded.")
 
     def _hf_call(self, messages: list, max_new_tokens: int, temperature: float) -> str:
@@ -105,13 +136,21 @@ class TeacherModel:
         vLLM offline engine — PagedAttention + FlashAttention2.
         Qwen3-30B-A3B-Instruct-2507 (MoE) is supported via Qwen3MoeForCausalLM.
         GPU memory: ~60GB model + ~10GB KV cache on A100-80 with util=0.90.
+
+        VLLM_USE_V1=0 forces V0 engine (no subprocess EngineCore), needed on
+        nodes with CUDA 12.0.x where V1's subprocess init crashes.
         """
+        # Must be set before vllm imports to take effect.
+        if os.environ.get("VLLM_USE_V1", "") == "0":
+            os.environ["VLLM_USE_V1"] = "0"
+            print("[Teacher] Forcing vLLM V0 engine (VLLM_USE_V1=0)")
+
         try:
             from vllm import LLM
         except ImportError:
             raise RuntimeError(
                 "[Teacher] USE_VLLM=1 but vllm is not installed. "
-                "Run: pip install vllm"
+                "Run: uv pip install vllm"
             )
         tp = int(os.environ.get("TENSOR_PARALLEL_SIZE", "1"))
         print(f"[Teacher] Backend: vLLM  model={MODEL_ID}  tensor_parallel_size={tp}")

@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-14 (session 9 — biometric jobs relaunched as 613210–613212; vLLM fixed: uv pip, no tokenizer_kwargs, VLLM_WORKER_MULTIPROC_METHOD=spawn, tp=1; gpu:a100-40:2 nodes are physically one A100-80 each)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 9 cont'd — vLLM dead end on PCIe nodes confirmed; HF speedups: sdpa+torch.compile; biometric SXM shards 613666-668 queued with vLLM; conv-memory shards 0-2 finishing imminently)
 
 ---
 
@@ -29,7 +29,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
 | **Ablation complete** | 610501 (preamble_only): 41% · 610502 (nosys): 33% — preamble +8pp, memory blocks +10pp |
-| **Active cluster jobs** | 611377/611379–611381 — conv-memory qwen (original pool, shards 0–2) · **613218–613220** — biometric v3 (two-phase, HF, PCIe A100 ~1.4/hr) · **612903–612905** — conv-memory new pool shards 3–5 · **613115–613117** — conv-memory new pool shards 6–8 |
+| **Active cluster jobs** | 611377/611379–611381 — conv-memory shards 0–2 (finishing imminently) · **613218–613220** — biometric PCIe HF (~0.7-0.9/hr) · **613666–613668** — biometric SXM vLLM PENDING (~5/hr when running) · **612903–612905** — conv-memory new pool shards 3–5 · **613115–613117** — conv-memory new pool shards 6–8 |
 | **Next milestone** | genzv5 SFT once conv-memory (all shards) + biometric data lands and merges |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
