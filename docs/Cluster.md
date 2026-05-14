@@ -234,10 +234,13 @@ squeue -u aryanj -o "%.7i %.8j %.8u %.2t %R %N"
 | 612903 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 3, 28 new profiles) | `synthetic_train_conv_memory_qwen_s3.jsonl` |
 | 612904 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 4, 28 new profiles) | `synthetic_train_conv_memory_qwen_s4.jsonl` |
 | 612905 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 5, 28 new profiles) | `synthetic_train_conv_memory_qwen_s5.jsonl` |
+| 613115 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 6, 28 new profiles) | `synthetic_train_conv_memory_qwen_s6.jsonl` |
+| 613116 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 7, 28 new profiles) | `synthetic_train_conv_memory_qwen_s7.jsonl` |
+| 613117 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 8, 28 new profiles) | `synthetic_train_conv_memory_qwen_s8.jsonl` |
 
 > ⚠️ **Jobs 612900–612902 cancelled** — relaunched as 612903–612905 after expanding `NEW_ONLY_PROFILES` from 12 → 28 (18 clinical + 10 companion) and `NEW_FACTS` from 35 → 47.
 
-All 72h jobs on `gpu-long`. Conv-memory shards 0–2 finishing ~2026-05-15. Biometric finishing ~2026-05-17. Conv-memory shards 3–5 finishing ~2026-05-17.
+All 72h jobs on `gpu-long`. Conv-memory shards 0–2 finishing ~2026-05-15. Biometric finishing ~2026-05-17. Conv-memory shards 3–8 finishing ~2026-05-17.
 
 ### Launching sharded pipelines
 
@@ -255,7 +258,7 @@ sbatch --gres=gpu:a100-80:1 --export=ALL,SHARD_IDX=3 finetuning/biometric_pipeli
 ### Merge commands (run after jobs finish)
 
 ```bash
-# Conv-memory: merge all qwen shards
+# Conv-memory: merge all qwen shards (0-2 original pool + 3-8 new pool)
 cat data/synthetic_train_conv_memory_qwen_s*.jsonl > data/synthetic_train_conv_memory_qwen_merged.jsonl
 
 # Biometric: merge all qwen shards

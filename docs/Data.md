@@ -38,6 +38,9 @@ tags: [anchor, data]
 | `synthetic_train_conv_memory_qwen_s3.jsonl` | Qwen shard 3 — **new profiles only** (`PROFILE_SET=new`): 18 new clinical + 10 new companion (28 total), 47 facts, 2 new modes | job 612903 |
 | `synthetic_train_conv_memory_qwen_s4.jsonl` | Qwen shard 4 — same config as shard 3, disjoint RNG | job 612904 |
 | `synthetic_train_conv_memory_qwen_s5.jsonl` | Qwen shard 5 — same config as shard 3, disjoint RNG | job 612905 |
+| `synthetic_train_conv_memory_qwen_s6.jsonl` | Qwen shard 6 — same config as shard 3, disjoint RNG | job 613115 |
+| `synthetic_train_conv_memory_qwen_s7.jsonl` | Qwen shard 7 — same config as shard 3, disjoint RNG | job 613116 |
+| `synthetic_train_conv_memory_qwen_s8.jsonl` | Qwen shard 8 — same config as shard 3, disjoint RNG | job 613117 |
 
 ### Biometric SFT data (biometric context handling, in progress)
 

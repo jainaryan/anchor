@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-14 (session 8 — expanded new profile pool to 28, relaunched shards 3-5 as 612903-612905)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-14 (session 8 — 13 active datagen jobs; 6 shards on new 28-profile pool, 3 biometric, 4 original pool)
 
 ---
 
@@ -28,7 +28,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
 | **Ablation complete** | 610501 (preamble_only): 41% · 610502 (nosys): 33% — preamble +8pp, memory blocks +10pp |
-| **Active cluster jobs** | 611377/611379–611381 — conv-memory qwen (original 33 profiles, shards 0–2) · **612894–612896** — biometric SFT qwen shards 0–2 · **612903–612905** — conv-memory qwen shards 3–5 (28 new profiles, `PROFILE_SET=new`, expanded from 12→28 in session 8) |
+| **Active cluster jobs** | 611377/611379–611381 — conv-memory qwen (original 33 profiles, shards 0–2) · **612894–612896** — biometric SFT qwen shards 0–2 · **612903–612905** — conv-memory qwen shards 3–5 (28 new profiles) · **613115–613117** — conv-memory qwen shards 6–8 (same new profile pool) |
 | **Next milestone** | genzv5 SFT once conv-memory (all shards) + biometric data lands and merges |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
