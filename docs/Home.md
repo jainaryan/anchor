@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 10 — benchmark analysis logged: cross-model category table in Benchmarks.md, genzv5 data gaps in Next Steps.md — crisis/help_mode/hallucination examples needed, mobile eval re-run flagged)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 11 — v4 benchmark phase 1.1 landed: `benchmarks/logging.py` structured logger, `benchmarks/scenarios.json` (58 ported, 0 round-trip failures), `scenarios_loader.py` shared between cluster + mobile. Logger smoke test passes; round-trip from JSON seed → rendered system prompt is byte-identical to v3.)
 
 ---
 

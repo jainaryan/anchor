@@ -8,9 +8,74 @@ tags: [anchor, benchmarks]
 
 ---
 
+## Suite v4 (in progress, 2026-05-15) — unified cluster + mobile benchmark
+
+Building a unified benchmark system where cluster and mobile run **the same scenarios** against **the same judge** (Gemma4 on cluster). Mobile generates transcripts on-device → rsync to cluster → cluster judges → results merge back into a unified leaderboard. This finally tests what ships (Q4_K_M GGUF) and replaces manual mobile scoring with automated judging.
+
+### Phase 1 progress (landed)
+
+| Component | Status | File |
+|---|---|---|
+| Structured logger (JSONL + human + failure artifacts + transcripts) | ✅ | `benchmarks/logging.py` |
+| Shared scenario schema (v4) + loader | ✅ | `benchmarks/scenarios_loader.py` |
+| Port script (v3 Python → v4 JSON, round-trip verified) | ✅ | `benchmarks/_port_scenarios.py` |
+| `scenarios.json` — 58 scenarios ported, 0 round-trip failures | ✅ | `benchmarks/scenarios.json` |
+
+### Phase 1 remaining
+
+| Component | Status | File |
+|---|---|---|
+| 32 new dynamic scenarios + 2 new categories (MEMORY_DRIFT, SAFETY_AMBIGUITY) | ⬜ | `benchmarks/scenarios.json` |
+| Judge service (Gemma4, ambiguity retry, drift detection) | ⬜ | `benchmarks/judge_service.py` |
+| Mobile-results judging entrypoint + SLURM | ⬜ | `benchmarks/judge_mobile_results.py` |
+| Rsync pipeline for mobile→cluster→mobile | ⬜ | `scripts/sync_mobile_eval.sh` |
+
+### v4 scenario schema
+
+```json
+{
+  "id": "cm_01",
+  "category": "CONTEXT_MEMORY",
+  "type": "single" | "scripted_multiturn" | "dynamic_multiturn",
+  "weight": 1,
+  "description": "Should use friend's name 'Zoya' from profile",
+  "seed": {
+    "profile": "26 F\nSupport: Zoya (best friend).",
+    "memory_blocks": ["[May 10] User mentioned wedding stress."],
+    "biometric": null
+  },
+  "user_turns": ["my friend has been really there for me lately"],
+  "judge_criteria": [
+    {"id": "crit_01", "question": "...", "pass_if": "YES", "weight": 1,
+     "scope": "any_turn" | "final_turn" | "all_turns", "negative": false}
+  ],
+  "tags": ["mobile_safe"]
+}
+```
+
+Dynamic scenarios add: `max_turns`, `min_turns`, `user_persona`, `simulator`, `stop_conditions`.
+See `benchmarks/scenarios_loader.py` for the full system-prompt rendering rules.
+
+### Log artifacts (per benchmark run)
+
+```
+results/cluster_<model>_<timestamp>/
+├── summary.json                # aggregate scores
+├── trace.jsonl                 # one JSON event per line
+├── trace.log                   # tail -f friendly human mirror
+├── failures/                   # one self-contained file per failed criterion
+│   └── <scenario_id>__<criterion_id>.json
+└── transcripts/                # full transcript per scenario
+    └── <scenario_id>.json
+```
+
+Failure artifacts include full transcript + judge raw response + cross-references to past runs on the same scenario. Replay tool (Phase 1.3) re-runs judging without re-inference, ~10x faster than full benchmark.
+
+---
+
 ## Suite v3 (current) — 58 scenarios, 9 categories
 
-**Active as of 2026-05-09. Supersedes v1 and v2.**
+**Active as of 2026-05-09. Supersedes v1 and v2.** Will be superseded by v4 once Phase 1 lands fully.
 
 | Parameter | Value |
 |---|---|
