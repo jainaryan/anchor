@@ -5,9 +5,9 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --partition=gpu-long
-#SBATCH --gres=gpu:a100-80:1
+#SBATCH --gres=gpu:a100-40:2
 #SBATCH --time=72:00:00
 
 PROJECT_DIR=~/projects/mindmate
@@ -31,10 +31,10 @@ export OUT_LABEL=qwen
 
 # Two-phase teacher-as-Anchor (v3) — USE_VLLM=1 enables PagedAttention + FlashAttention2
 # for ~1.5-2x faster inference vs HuggingFace. Requires vllm in the venv.
-export USE_VLLM=1
-
-# Ensure vLLM is installed (silent no-op if already present)
-pip install -q vllm 2>&1 | tail -1
+# xgph[10-18] nodes: gpu:a100-40:2 GRES label but physically one A100-80 per node.
+# vLLM 0.20.2 requires CUDA driver ≥ 12.1; xgph[10-18] have 12.0.90 → too old.
+# Use HuggingFace backend instead (USE_VLLM=0). device_map="auto" on 80GB card.
+export USE_VLLM=0
 
 echo "[Setup] USE_VLLM=$USE_VLLM"
 

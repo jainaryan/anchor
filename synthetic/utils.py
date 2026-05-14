@@ -113,8 +113,10 @@ class TeacherModel:
                 "[Teacher] USE_VLLM=1 but vllm is not installed. "
                 "Run: pip install vllm"
             )
-        print(f"[Teacher] Backend: vLLM  model={MODEL_ID}")
-        hf_token = os.environ.get("HF_TOKEN")
+        tp = int(os.environ.get("TENSOR_PARALLEL_SIZE", "1"))
+        print(f"[Teacher] Backend: vLLM  model={MODEL_ID}  tensor_parallel_size={tp}")
+        # HF_TOKEN is picked up from the environment by vllm automatically.
+        # tokenizer_kwargs is not supported in all vllm versions, so omit it.
         self.vllm_engine = LLM(
             model=MODEL_ID,
             dtype="bfloat16",
@@ -123,7 +125,7 @@ class TeacherModel:
             max_model_len=16384,          # sufficient for all our prompts
             enforce_eager=False,           # allow CUDA graphs for speed
             tokenizer_mode="auto",
-            **({"tokenizer_kwargs": {"token": hf_token}} if hf_token else {}),
+            tensor_parallel_size=tp,      # 1 = A100-80, 2 = 2×A100-40
         )
         self.tokenizer = self.vllm_engine.get_tokenizer()
         print("[Teacher] vLLM engine ready.")

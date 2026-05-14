@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-14 (session 8 — biometric pipeline rewritten as v3 two-phase teacher-as-Anchor; vLLM backend added; 613120-613122 running)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-14 (session 9 — biometric jobs relaunched as 613210–613212; vLLM fixed: uv pip, no tokenizer_kwargs, VLLM_WORKER_MULTIPROC_METHOD=spawn, tp=1; gpu:a100-40:2 nodes are physically one A100-80 each)
 
 ---
 
@@ -26,9 +26,10 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Best SFT GGUF** | `exports/mindmate_genzv2_ck1200_q4_k_m.gguf` |
 | **v3 benchmark** | llama_base **51%** > genzv3_ck200 45% = genzv2_ck1600 45% > genzv2_ck1200 44% > genzv4_ck200 42% |
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
+
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
 | **Ablation complete** | 610501 (preamble_only): 41% · 610502 (nosys): 33% — preamble +8pp, memory blocks +10pp |
-| **Active cluster jobs** | 611377/611379–611381 — conv-memory qwen (original pool, shards 0–2) · **613120–613122** — biometric v3 (two-phase, vLLM) · **612903–612905** — conv-memory new pool shards 3–5 · **613115–613117** — conv-memory new pool shards 6–8 |
+| **Active cluster jobs** | 611377/611379–611381 — conv-memory qwen (original pool, shards 0–2) · **613218–613220** — biometric v3 (two-phase, HF, PCIe A100 ~1.4/hr) · **612903–612905** — conv-memory new pool shards 3–5 · **613115–613117** — conv-memory new pool shards 6–8 |
 | **Next milestone** | genzv5 SFT once conv-memory (all shards) + biometric data lands and merges |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 

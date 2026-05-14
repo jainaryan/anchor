@@ -31,7 +31,7 @@ export OUT_LABEL=qwen
 
 # USE_VLLM=1 enables vLLM backend (PagedAttention + FlashAttention2, ~1.5-2x faster)
 export USE_VLLM=1
-pip install -q vllm 2>&1 | tail -1
+uv pip install vllm 2>&1 | tail -3
 echo "[Setup] USE_VLLM=$USE_VLLM"
 
 # Shard support — pass SHARD_IDX via --export=ALL,SHARD_IDX=N when submitting.

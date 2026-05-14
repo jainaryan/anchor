@@ -228,9 +228,9 @@ squeue -u aryanj -o "%.7i %.8j %.8u %.2t %R %N"
 | 611379 | mindmate-conv-memory-qwen | A100-80 (xgph4) | 🟢 RUNNING (shard 0) | `synthetic_train_conv_memory_qwen_s0.jsonl` |
 | 611380 | mindmate-conv-memory-qwen | A100-80 (xgph8) | 🟢 RUNNING (shard 1) | `synthetic_train_conv_memory_qwen_s1.jsonl` |
 | 611381 | mindmate-conv-memory-qwen | A100-80 (xgph7) | 🟢 RUNNING (shard 2) | `synthetic_train_conv_memory_qwen_s2.jsonl` |
-| 613120 | mindmate-biometric-qwen | A100-80 | 🟢 RUNNING (shard 0, v3 two-phase) | `synthetic_train_biometric_qwen_s0.jsonl` |
-| 613121 | mindmate-biometric-qwen | A100-80 | 🟢 RUNNING (shard 1, v3 two-phase) | `synthetic_train_biometric_qwen_s1.jsonl` |
-| 613122 | mindmate-biometric-qwen | A100-80 | 🟢 RUNNING (shard 2, v3 two-phase) | `synthetic_train_biometric_qwen_s2.jsonl` |
+| 613218 | mindmate-biometric-qwen | PCIe A100-80 (xgph14) | 🟢 RUNNING (shard 0, v3 two-phase, HF) | `synthetic_train_biometric_qwen_s0.jsonl` |
+| 613219 | mindmate-biometric-qwen | PCIe A100-80 (xgph15) | 🟢 RUNNING (shard 1, v3 two-phase, HF) | `synthetic_train_biometric_qwen_s1.jsonl` |
+| 613220 | mindmate-biometric-qwen | PCIe A100-80 (xgph16) | 🟢 RUNNING (shard 2, v3 two-phase, HF) | `synthetic_train_biometric_qwen_s2.jsonl` |
 | 612903 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 3, 28 new profiles) | `synthetic_train_conv_memory_qwen_s3.jsonl` |
 | 612904 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 4, 28 new profiles) | `synthetic_train_conv_memory_qwen_s4.jsonl` |
 | 612905 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 5, 28 new profiles) | `synthetic_train_conv_memory_qwen_s5.jsonl` |
@@ -240,6 +240,8 @@ squeue -u aryanj -o "%.7i %.8j %.8u %.2t %R %N"
 
 > ⚠️ **Jobs 612900–612902 cancelled** — relaunched as 612903–612905 after expanding `NEW_ONLY_PROFILES` from 12 → 28 (18 clinical + 10 companion) and `NEW_FACTS` from 35 → 47.
 
+> ⚠️ **Jobs 613120–613122, 613173–613220 (multiple relaunches) cancelled** — vLLM not compatible with xgph[10-18] PCIe A100 nodes (CUDA 12.0.90 too old for vLLM 0.20.2). Final fix: `USE_VLLM=0` HF backend. Throughput ~1.4/hr (vs ~5.3/hr on SXM nodes) — plan to add more shards on SXM nodes once conv-memory jobs free them (~May 15). See Bug Log 2026-05-14 for full details.
+>
 > ⚠️ **Jobs 612894–612896 cancelled** — biometric pipeline was single-call (teacher imagined both roles). Relaunched as 613120–613122 with v3 two-phase teacher-as-Anchor approach + vLLM backend.
 
 All 72h jobs on `gpu-long`. Conv-memory shards 0–2 finishing ~2026-05-15. Biometric (v3) finishing ~2026-05-17. Conv-memory shards 3–8 finishing ~2026-05-17.

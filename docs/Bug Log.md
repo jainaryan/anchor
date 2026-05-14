@@ -70,6 +70,38 @@ Note: v3 rate ~10-15/hr per shard (was 180/hr for v2) — quality trade-off is w
 
 ---
 
+### vLLM install on cluster: pip goes to miniconda3, not mindmatenv — fixed to use uv pip
+
+**Bug:** The SLURM scripts ran `pip install -q vllm 2>&1 | tail -1` after activating the uv-managed mindmatenv. Despite activation, `which pip` resolved to `/home/a/aryanj/miniconda3/bin/pip` (Python 3.13 global conda env), not mindmatenv's pip. So vllm was installed in miniconda3 but not importable from mindmatenv (Python 3.12). Job failed with `ModuleNotFoundError: No module named 'vllm'`.
+
+**Fix:** Changed all SLURM scripts to use `uv pip install vllm 2>&1 | tail -3`. `uv` correctly resolves the active venv and installs into it. After fix, `uv pip install` printed `"Using Python 3.12.3 environment at: mindmatenv"` and vllm became importable.
+
+---
+
+### vLLM: `tokenizer_kwargs` not valid in installed version — removed
+
+**Bug:** `utils.py _load_vllm()` passed `tokenizer_kwargs={"token": hf_token}` to `LLM()`. The installed vllm version (0.20.2) doesn't support this kwarg. Raised `TypeError: EngineArgs.__init__() got an unexpected keyword argument 'tokenizer_kwargs'`.
+
+**Fix:** Removed `tokenizer_kwargs` from `LLM()` constructor. vLLM reads `HF_TOKEN` from the environment automatically — no need to pass it explicitly.
+
+---
+
+### vLLM V1 engine: CUDA fork error — fixed with spawn start method
+
+**Bug:** vLLM 0.20.2 uses the V1 engine which spawns a subprocess for the EngineCore. With default `fork` multiprocessing, this raised `RuntimeError: Cannot re-initialize CUDA in forked subprocess`.
+
+**Fix:** Added `export VLLM_WORKER_MULTIPROC_METHOD=spawn` to biometric_pipeline_qwen.slurm. This tells Python to use `spawn` (clean subprocess) instead of `fork`, avoiding the CUDA re-init issue.
+
+---
+
+### xgph[10-18] GPU: GRES label `gpu:a100-40:2` is misleading — node has one A100-80
+
+**Discovery:** When requesting `--gres=gpu:a100-40:2` on xgph[10-18] nodes, nvidia-smi showed a single "NVIDIA A100 80GB PCIe, 81920 MiB". Only 1 GPU visible. Setting `tensor_parallel_size=2` failed with "World size (2) is larger than the number of available GPUs (1)".
+
+**Conclusion:** The GRES label name doesn't reflect physical hardware — these nodes have one A100-80 per node (not two A100-40s). Use `tensor_parallel_size=1` when targeting these nodes. The `gpu:a100-40:2` GRES is useful for getting exclusive access to the node.
+
+---
+
 ## 2026-05-10 (Session 5)
 
 ### Panic detection false positives — "help me" blocked normal messages ❗
