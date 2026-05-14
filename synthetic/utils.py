@@ -21,26 +21,32 @@ elif _TEACHER == "gemma4":
 else:
     MODEL_ID = "Qwen/Qwen3-30B-A3B-Instruct-2507"
 
-VLLM_URL = "http://localhost:8000/v1"
-USE_VLLM = False  # Set to True for vLLM deployment
+# USE_VLLM=1 env var enables vLLM backend (PagedAttention + FlashAttention2).
+# ~1.5-2x faster inference vs HuggingFace for sequential generation.
+# Requires: pip install vllm  (already available on cluster mindmatenv)
+USE_VLLM = os.environ.get("USE_VLLM", "0") == "1"
 
 
 class TeacherModel:
     def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.use_vllm = USE_VLLM
         self.tokenizer = None
-        self.model = None
+        self.model = None          # HF model (None when using vLLM)
+        self.vllm_engine = None    # vLLM LLM (None when using HF)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        if not USE_VLLM:
-            self._load_local_model()
+        if USE_VLLM:
+            self._load_vllm()
+        else:
+            self._load_hf()
 
-    def _load_local_model(self):
-        print(f"[Teacher] Loading model from HuggingFace: {MODEL_ID}...")
-        print(f"[Teacher] Precision: bfloat16")
-        hf_token = os.environ.get("HF_TOKEN", None)
+    # ── HuggingFace backend ────────────────────────────────────────────────────
+
+    def _load_hf(self):
+        print(f"[Teacher] Backend: HuggingFace  model={MODEL_ID}")
+        hf_token = os.environ.get("HF_TOKEN")
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, token=hf_token)
         self.tokenizer.pad_token = self.tokenizer.eos_token
-
         self.model = AutoModelForCausalLM.from_pretrained(
             MODEL_ID,
             device_map="auto",
@@ -49,72 +55,26 @@ class TeacherModel:
             trust_remote_code=True,
             token=hf_token,
         )
-
         self.model.eval()
-        print("[Teacher] Model loaded.")
+        print("[Teacher] HF model loaded.")
 
-    def generate(self, prompt: str, max_new_tokens: int = 1000, temperature: float = 0.7) -> str:
-        """
-        Structured data generation: wraps prompt in a JSON-assistant meta-system message.
-        Use this for generating JSON outputs (user turn lists, scenario data, etc.).
-        """
-        if USE_VLLM:
-            raise NotImplementedError("vLLM integration not yet enabled.")
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a data generation assistant. "
-                    "You must output strict, valid JSON only. "
-                    "Do not output markdown blocks or conversational text."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ]
-        return self._generate_from_messages(messages, max_new_tokens, temperature)
-
-    def chat(self, messages: list, max_new_tokens: int = 400, temperature: float = 0.82) -> str:
-        """
-        Generate the next assistant turn given a full messages list (system + history).
-
-        Teacher-as-Anchor mode: caller sets messages[0]["role"]="system" to the
-        production anchor prompt + injected memory. The teacher is constrained by
-        that prompt exactly as the student model will be at inference time, so
-        responses are anchor-aligned by construction.
-
-        Returns raw assistant text (not JSON).
-        """
-        if USE_VLLM:
-            raise NotImplementedError("vLLM integration not yet enabled.")
-        return self._generate_from_messages(messages, max_new_tokens, temperature)
-
-    def _generate_from_messages(self, messages: list, max_new_tokens: int, temperature: float) -> str:
-        """Shared generation logic — tokenise messages, run model, decode."""
-        # enable_thinking=False: Qwen3 is a thinking model — without this it prepends
-        # <think>...</think> blocks that break JSON extraction downstream.
+    def _hf_call(self, messages: list, max_new_tokens: int, temperature: float) -> str:
         template_kwargs = {"return_tensors": "pt", "add_generation_prompt": True}
         try:
             outputs = self.tokenizer.apply_chat_template(
                 messages, enable_thinking=False, **template_kwargs
             )
         except TypeError:
-            # Fallback for non-Qwen3 tokenizers that don't support enable_thinking
             outputs = self.tokenizer.apply_chat_template(messages, **template_kwargs)
 
-        # Handle BatchEncoding vs raw Tensor output
         input_ids = outputs
         if hasattr(outputs, "input_ids"):
             input_ids = outputs.input_ids
-
         if isinstance(input_ids, list):
             input_ids = torch.tensor([input_ids])
-
         if not isinstance(input_ids, torch.Tensor):
-            if not hasattr(input_ids, "to"):
-                input_ids = torch.tensor(input_ids)
-
+            input_ids = torch.tensor(input_ids)
         input_ids = input_ids.to(self.device)
-
         if input_ids.dim() == 1:
             input_ids = input_ids.unsqueeze(0)
 
@@ -122,7 +82,6 @@ class TeacherModel:
             self.tokenizer.eos_token_id,
             self.tokenizer.convert_tokens_to_ids("<|eot_id|>"),
         ]
-        # Filter out None values (e.g. <|eot_id|> doesn't exist in Gemma4 / Qwen3)
         terminators = [t for t in terminators if t is not None]
 
         with torch.no_grad():
@@ -138,6 +97,93 @@ class TeacherModel:
 
         generated_ids = output_ids[0][input_ids.shape[-1]:]
         return self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+
+    # ── vLLM backend ───────────────────────────────────────────────────────────
+
+    def _load_vllm(self):
+        """
+        vLLM offline engine — PagedAttention + FlashAttention2.
+        Qwen3-30B-A3B-Instruct-2507 (MoE) is supported via Qwen3MoeForCausalLM.
+        GPU memory: ~60GB model + ~10GB KV cache on A100-80 with util=0.90.
+        """
+        try:
+            from vllm import LLM
+        except ImportError:
+            raise RuntimeError(
+                "[Teacher] USE_VLLM=1 but vllm is not installed. "
+                "Run: pip install vllm"
+            )
+        print(f"[Teacher] Backend: vLLM  model={MODEL_ID}")
+        hf_token = os.environ.get("HF_TOKEN")
+        self.vllm_engine = LLM(
+            model=MODEL_ID,
+            dtype="bfloat16",
+            trust_remote_code=True,
+            gpu_memory_utilization=0.90,
+            max_model_len=16384,          # sufficient for all our prompts
+            enforce_eager=False,           # allow CUDA graphs for speed
+            tokenizer_mode="auto",
+            **({"tokenizer_kwargs": {"token": hf_token}} if hf_token else {}),
+        )
+        self.tokenizer = self.vllm_engine.get_tokenizer()
+        print("[Teacher] vLLM engine ready.")
+
+    def _vllm_call(self, messages: list, max_new_tokens: int, temperature: float) -> str:
+        from vllm import SamplingParams
+        try:
+            prompt = self.tokenizer.apply_chat_template(
+                messages, enable_thinking=False,
+                tokenize=False, add_generation_prompt=True,
+            )
+        except TypeError:
+            prompt = self.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+            )
+        params = SamplingParams(
+            temperature=temperature,
+            top_p=0.9,
+            max_tokens=max_new_tokens,
+        )
+        outputs = self.vllm_engine.generate([prompt], params)
+        return outputs[0].outputs[0].text
+
+    # ── Public API (same interface regardless of backend) ──────────────────────
+
+    def generate(self, prompt: str, max_new_tokens: int = 1000, temperature: float = 0.7) -> str:
+        """
+        Structured data generation: wraps prompt in a JSON-assistant meta-system message.
+        Use this for generating JSON outputs (user turn lists, scenario data, etc.).
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a data generation assistant. "
+                    "You must output strict, valid JSON only. "
+                    "Do not output markdown blocks or conversational text."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+        return self._call(messages, max_new_tokens, temperature)
+
+    def chat(self, messages: list, max_new_tokens: int = 400, temperature: float = 0.82) -> str:
+        """
+        Generate the next assistant turn given a full messages list (system + history).
+
+        Teacher-as-Anchor mode: caller sets messages[0]["role"]="system" to the
+        production anchor prompt + injected memory. The teacher is constrained by
+        that prompt exactly as the student model will be at inference time.
+
+        Returns raw assistant text (not JSON).
+        """
+        return self._call(messages, max_new_tokens, temperature)
+
+    def _call(self, messages: list, max_new_tokens: int, temperature: float) -> str:
+        """Route to vLLM or HF backend."""
+        if self.use_vllm:
+            return self._vllm_call(messages, max_new_tokens, temperature)
+        return self._hf_call(messages, max_new_tokens, temperature)
 
 
 def parse_json_robust(response: str, expected_keys: list = None):

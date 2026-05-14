@@ -45,13 +45,14 @@ tags: [anchor, data]
 ### Biometric SFT data (biometric context handling, in progress)
 
 Teaches Anchor when to reference vs. ignore health/biometric data in [Recent sessions].
-Four modes per example: `relevant` (reference it once), `irrelevant` (don't inject it), `adjacent` (ambiguous — don't assume), `trend` (name the multi-session pattern).
+Two-phase teacher-as-Anchor (v3): Phase 1 user simulator generates user turns per mode; Phase 2 Anchor responds under the production system prompt (same as conv-memory approach).
+Four weighted modes: `irrelevant` (40% — default is to NOT inject), `adjacent` (25% — don't assume connection), `relevant` (25% — connect once naturally), `trend` (10% — name multi-session pattern).
 
 | File | Role | Origin |
 |---|---|---|
-| `synthetic_train_biometric_qwen_s0.jsonl` | Biometric shard 0 — 4-mode mix, disjoint RNG | job 612894 |
-| `synthetic_train_biometric_qwen_s1.jsonl` | Biometric shard 1 — same config, disjoint RNG | job 612895 |
-| `synthetic_train_biometric_qwen_s2.jsonl` | Biometric shard 2 — same config, disjoint RNG | job 612896 |
+| `synthetic_train_biometric_qwen_s0.jsonl` | Biometric shard 0 — **v3 two-phase teacher-as-Anchor**, vLLM, weighted modes (irrel 40/adj 25/rel 25/trend 10) | job 613120 |
+| `synthetic_train_biometric_qwen_s1.jsonl` | Biometric shard 1 — same config, disjoint RNG | job 613121 |
+| `synthetic_train_biometric_qwen_s2.jsonl` | Biometric shard 2 — same config, disjoint RNG | job 613122 |
 | `synthetic_train_biometric_qwen.jsonl` | **Merge target** — `cat s{0,1,2}` after jobs finish | (post-merge) |
 
 Raw outputs with meta fields (profile name, mode, health_type) live in `synthetic/outputs/biometric_sft_qwen_raw_s{0,1,2}.jsonl` for debugging.

@@ -1210,7 +1210,273 @@ def heuristic_trend(conv: list, profile: dict) -> bool:
     return True
 
 
-# ── Prompt templates ───────────────────────────────────────────────────────────
+# ── Production system prompt (matches anchorSystemPrompt.ts + contextBuilder.ts) ─
+
+_APP_BASE_PROMPT = (
+    "You are Anchor, a warm and caring AI companion — like a close friend who genuinely listens.\n"
+    "Talk naturally. Be curious about the person. Ask follow-up questions. Use their actual words and details back to them.\n"
+    "If the conversation has been light and the person suddenly gets serious, drop the casual tone immediately. No jokes, no deflection. Just be present.\n"
+    "If someone seems to be in danger or crisis, gently encourage them to reach out to someone they trust or a crisis line.\n"
+    "You are an AI. If asked, say so warmly. Never pretend to have lived experiences.\n"
+    "Don't lecture."
+)
+
+_MEMORY_HEADER = "\n".join([
+    "============================================================",
+    "ABOUT THIS USER (you know this — use it naturally)",
+    "============================================================",
+    "If the user mentions someone by name, an event, or a coping strategy listed below — reference it.",
+    "If they ask for help, suggest ONE strategy from their Helps list by name.",
+    "If [Recent sessions] shows a declining mood trend, acknowledge it in your first response — do not open as if meeting them for the first time.",
+    'If [Recent sessions] records a health or sleep pattern (poor sleep, fatigue, physical symptoms), connect it when the user describes something similar — e.g. "given how rough your sleep has been, that fogginess tracks".',
+    "If [Recent sessions] marks a coping strategy as unhelpful or worsening, do NOT suggest it.",
+    "Do not recite this block back verbatim.",
+])
+
+
+def build_anchor_system(profile: dict) -> str:
+    """Build the full Anchor system prompt with biometric memory block injected."""
+    p_lines = [profile["diagnoses"]]
+    if profile.get("triggers"):
+        p_lines.append(f"Triggers: {profile['triggers']}.")
+    if profile.get("coping"):
+        p_lines.append(f"Helps: {', '.join(profile['coping'])}.")
+    if profile.get("support") and profile["support"]:
+        p_lines.append(f"Support: {profile['support']}.")
+    profile_block = "\n".join(p_lines)
+    return (
+        f"{_APP_BASE_PROMPT}\n\n{_MEMORY_HEADER}\n"
+        f"[User]\n{profile_block}\n\n"
+        f"[Recent sessions]\n{profile['health_context']}"
+    )
+
+
+# ── Phase 1: User simulator ────────────────────────────────────────────────────
+#
+# Mode determines what kind of opener the user sends.
+# This controls whether Anchor should or shouldn't reference the biometric data.
+# Anchor learns the judgment from the training examples — not from explicit rules.
+#
+# Mode weights (must sum to 1.0):
+#   irrelevant  40% — most conversations aren't about the health data
+#   adjacent    25% — ambiguous openers teach Anchor not to assume
+#   relevant    25% — direct/indirect connection, Anchor should connect once
+#   trend       10% — multi-session pattern should be named (multi-session profiles only)
+
+MODE_WEIGHTS = {"irrelevant": 0.40, "adjacent": 0.25, "relevant": 0.25, "trend": 0.10}
+
+BIO_USER_SIM_PROMPT = """\
+You are simulating a real person texting their AI companion Anchor.
+
+Their health context (visible to Anchor in its system prompt):
+{HEALTH_CONTEXT}
+
+CONVERSATION MODE: {MODE}
+{MODE_INSTRUCTION}
+
+Generate {NUM_TURNS} user messages for this conversation.
+Rules:
+- Casual texting tone: lowercase, contractions, short sentences, occasional filler words
+- Do NOT quote numbers, dates, or scores from the health summary — describe feelings, not stats
+- Each message 10-50 words. Make it feel real, not scripted.
+- Turn 1 opens the conversation. Subsequent turns respond naturally to what Anchor would say.
+- Do NOT explain the mode — just write the person's messages.
+
+Output JSON only:
+{{"user_turns": ["<turn 1>", "<turn 2>", "<turn 3>"]}}"""
+
+BIO_MODE_INSTRUCTIONS = {
+    "relevant": (
+        "The person opens with something that is directly or indirectly connected to their health data. "
+        "They do NOT quote numbers or dates — they just describe how they feel right now, "
+        "and it clearly relates to the documented pattern. "
+        "Examples: poor sleep → foggy, irritable, making mistakes at work; "
+        "low mood → cancelling plans, can't be bothered; chest tightness → anxiety building. "
+        "The ideal Anchor response connects to the health data naturally, once, in its first turn."
+    ),
+    "irrelevant": (
+        "The person is talking about something completely unrelated to their health data. "
+        "A work situation, a friend thing, a small win, a plan they're excited about, something annoying. "
+        "It should feel like a totally normal conversation where health is simply not the topic. "
+        "Anchor should NOT inject health data — it's not relevant here."
+    ),
+    "adjacent": (
+        "The person says something vague that COULD relate to their health data, but the connection isn't clear. "
+        "Example: 'i feel a bit off today' when sleep is documented — could be the sleep, could be something else entirely. "
+        "The ideal Anchor response asks or responds to what was said WITHOUT assuming the health link. "
+        "If the user confirms the connection in a later turn, Anchor may then reference it."
+    ),
+    "trend": (
+        "The person's sessions show a clear worsening trajectory across multiple dates. "
+        "They say something that reflects things continuing in that direction — not quoting numbers, "
+        "just describing how they keep feeling the same way or getting worse. "
+        "The ideal Anchor response acknowledges the PATTERN across sessions, not just the latest message."
+    ),
+}
+
+
+def generate_bio_user_turns(
+    teacher, profile: dict, mode: str, num_turns: int = 3
+) -> list[str] | None:
+    """Phase 1: simulate user turns appropriate for the given biometric mode."""
+    prompt = (
+        BIO_USER_SIM_PROMPT
+        .replace("{HEALTH_CONTEXT}", profile["health_context"])
+        .replace("{MODE}", mode.upper())
+        .replace("{MODE_INSTRUCTION}", BIO_MODE_INSTRUCTIONS[mode])
+        .replace("{NUM_TURNS}", str(num_turns))
+    )
+    resp = teacher.generate(prompt, max_new_tokens=500, temperature=0.86)
+    data = parse_json_robust(resp, expected_keys=["user_turns"])
+    if not data or "user_turns" not in data:
+        return None
+    turns = data["user_turns"]
+    if not isinstance(turns, list) or len(turns) < num_turns:
+        return None
+    return [str(t).strip() for t in turns[:num_turns]]
+
+
+# ── Phase 2: Anchor responder (teacher-as-Anchor) ─────────────────────────────
+
+def generate_anchor_turns(
+    teacher, system_prompt: str, user_turns: list[str]
+) -> list[dict]:
+    """
+    Phase 2: teacher constrained by production Anchor system prompt.
+    Generates one assistant turn at a time, seeing full conversation history.
+    Returns full messages list (system + alternating user/assistant).
+    """
+    messages = [{"role": "system", "content": system_prompt}]
+    for user_turn in user_turns:
+        messages.append({"role": "user", "content": user_turn})
+        response = teacher.chat(messages, max_new_tokens=250, temperature=0.82)
+        response = response.strip()
+        if not response:
+            return []
+        messages.append({"role": "assistant", "content": response})
+    return messages
+
+
+# ── Two-phase generation ───────────────────────────────────────────────────────
+
+def generate_bio_example(teacher, profile: dict, mode: str) -> dict | None:
+    """
+    Full two-phase generation for one biometric training example.
+
+    Phase 1: user simulator generates user turns for the given mode.
+    Phase 2: teacher acting as Anchor (with production system prompt + memory)
+             generates one assistant turn at a time.
+
+    This is the same approach as conv-memory. The key property: Anchor's responses
+    are grounded by the exact same production system prompt the student sees at
+    inference time — training and inference distributions are aligned.
+    """
+    profile = randomize_health_context(profile)
+
+    # Skip trend mode for single-session profiles (no trend to reference)
+    if mode == "trend" and "\n" not in profile["health_context"]:
+        return None
+
+    num_turns = random.randint(2, 3)
+    user_turns = generate_bio_user_turns(teacher, profile, mode, num_turns)
+    if not user_turns:
+        return None
+
+    system_prompt = build_anchor_system(profile)
+    messages = generate_anchor_turns(teacher, system_prompt, user_turns)
+    if not messages:
+        return None
+
+    # Heuristic validation
+    ok = {
+        "relevant":   heuristic_relevant,
+        "irrelevant": heuristic_irrelevant,
+        "adjacent":   heuristic_adjacent,
+        "trend":      heuristic_trend,
+    }[mode](messages, profile)
+    if not ok:
+        return None
+
+    return {
+        "conversations": messages,
+        "meta_mode": f"biometric_{mode}",
+        "meta_health_type": profile["health_type"],
+        "meta_profile": profile["name"],
+        "source": "biometric_sft_v3",  # v3 = two-phase teacher-as-Anchor
+    }
+
+
+def pick_mode() -> str:
+    """Weighted mode selection. irrelevant is most common — model learns not to inject by default."""
+    r = random.random()
+    cumulative = 0.0
+    for mode, weight in MODE_WEIGHTS.items():
+        cumulative += weight
+        if r < cumulative:
+            return mode
+    return "irrelevant"
+
+
+# ── Main ───────────────────────────────────────────────────────────────────────
+
+MODES = list(MODE_WEIGHTS.keys())
+
+def main():
+    print("=" * 60)
+    print("  MindMate Biometric SFT Pipeline — v3 (two-phase teacher-as-Anchor)")
+    print("  Modes: irrelevant(40%) · adjacent(25%) · relevant(25%) · trend(10%)")
+    print(f"  Profiles: {len(BIOMETRIC_PROFILES)}")
+    print(f"  Backend: {'vLLM' if os.environ.get('USE_VLLM') == '1' else 'HuggingFace'}")
+    if _shard_idx_env is not None:
+        print(f"  Shard: {_shard_idx_env}  (RNG seed: {1000 + int(_shard_idx_env) * 7919})")
+    print(f"  OUT_TRAIN: {OUT_TRAIN}")
+    print(f"  OUT_RAW:   {OUT_RAW}")
+    print("=" * 60)
+
+    teacher = TeacherModel()
+    counts = {m: 0 for m in MODES}
+    attempts = 0
+
+    while not shutdown_requested:
+        attempts += 1
+        profile = random.choice(BIOMETRIC_PROFILES)
+        mode = pick_mode()
+
+        try:
+            result = generate_bio_example(teacher, profile, mode)
+
+            if result:
+                append_jsonl(result, OUT_RAW)
+                append_jsonl({"conversations": result["conversations"]}, OUT_TRAIN)
+                counts[mode] += 1
+                total = sum(counts.values())
+                print(f"[{attempts}] {mode} PASS | total={total} | " +
+                      " ".join(f"{k}={v}" for k, v in counts.items()))
+            else:
+                print(f"[{attempts}] {mode} fail ({profile['name']})")
+
+        except Exception as e:
+            print(f"[{attempts}] Error: {e}")
+            time.sleep(2)
+
+        if attempts % 20 == 0:
+            total = sum(counts.values())
+            print(f"\n[{attempts}] Total kept: {total} | {counts}")
+            time.sleep(3)
+
+    total = sum(counts.values())
+    print(f"\n[Done] {total} examples | {counts}")
+    print(f"Output: {OUT_TRAIN}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+# ── Legacy single-call generation (v1/v2, kept for reference) ──────────────────
+# The block below is the old approach: one LLM call generates the entire
+# conversation (both user and Anchor turns) as a JSON script. Replaced by
+# two-phase teacher-as-Anchor (above). Left here for archaeology.
 
 RELEVANT_PROMPT = """You are generating training data for a mental health AI companion called Anchor.
 

@@ -29,6 +29,11 @@ cd $PROJECT_DIR
 export TEACHER_MODEL=30b
 export OUT_LABEL=qwen
 
+# USE_VLLM=1 enables vLLM backend (PagedAttention + FlashAttention2, ~1.5-2x faster)
+export USE_VLLM=1
+pip install -q vllm 2>&1 | tail -1
+echo "[Setup] USE_VLLM=$USE_VLLM"
+
 # Shard support — pass SHARD_IDX via --export=ALL,SHARD_IDX=N when submitting.
 # Without it, runs as a single unsharded job (writes to *_qwen.jsonl).
 # With SHARD_IDX=0,1,2 → three parallel jobs writing to *_qwen_s0.jsonl etc.

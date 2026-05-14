@@ -44,6 +44,24 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ---
 
+### Biometric pipeline (v1/v2): single-call generation — teacher played both user and Anchor roles
+
+**Bug:** `biometric_sft_pipeline.py` generated entire conversations in one LLM call by asking the model to produce a JSON script of both user and Anchor turns. This means:
+1. Anchor's responses were NOT grounded by the production system prompt — the teacher was imagining what Anchor would say, not being constrained to say it.
+2. The training-inference distribution was misaligned: at inference time Anchor has the real system prompt; during data generation it didn't.
+3. The "intelligence" of knowing when to reference biometric data was up to the teacher's imagination, not learned from real constrained responses.
+
+**Fix:** Rewrote as v3 two-phase teacher-as-Anchor (same approach as conv-memory):
+- Phase 1: user simulator generates user turns for a given mode (relevant/irrelevant/adjacent/trend)
+- Phase 2: teacher constrained by the exact production Anchor system prompt generates responses one turn at a time
+- Mode weights: irrelevant 40%, adjacent 25%, relevant 25%, trend 10% (model learns NOT to inject by default)
+- Added vLLM backend to `utils.py` (`USE_VLLM=1` env var) — PagedAttention + FlashAttention2
+- Cancelled 612894–612896, relaunched as 613120–613122
+
+Note: v3 rate ~10-15/hr per shard (was 180/hr for v2) — quality trade-off is worth it.
+
+---
+
 ### Conv-memory shards 3-5: first relaunch (612900-612902) used profile pool that was too small — cancelled, pool expanded
 
 **Bug:** Jobs 612900-612902 launched with `NEW_ONLY_PROFILES = 8 clinical + 4 companion = 12 profiles` total. With 3 parallel shards each running 72h, the 12-profile pool would produce heavily repeated characters. Also, the fact pool hadn't been expanded to match the new clinical diversity.
