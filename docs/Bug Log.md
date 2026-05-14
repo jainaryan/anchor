@@ -44,6 +44,14 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ---
 
+### Conv-memory shards 3-5: first relaunch (612900-612902) used profile pool that was too small — cancelled, pool expanded
+
+**Bug:** Jobs 612900-612902 launched with `NEW_ONLY_PROFILES = 8 clinical + 4 companion = 12 profiles` total. With 3 parallel shards each running 72h, the 12-profile pool would produce heavily repeated characters. Also, the fact pool hadn't been expanded to match the new clinical diversity.
+
+**Fix:** Expanded `NEW_CLINICAL_PROFILES` from 8 → 18 (added: Laila, Stefan, Mei, Patrick, Adaeze, Tom, Haruto, Freya, Luca, Sangita). Expanded `NEW_COMPANION_PROFILES` from 4 → 10 (added: Aiden, Nour, Felix, Zoe, Raj, Ines). `NEW_FACTS` expanded from 35 → 47. Cancelled 612900-612902, relaunched as 612903-612905 with the same `PROFILE_SET=new` flag.
+
+---
+
 ## 2026-05-10 (Session 5)
 
 ### Panic detection false positives — "help me" blocked normal messages ❗

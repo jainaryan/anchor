@@ -231,9 +231,11 @@ squeue -u aryanj -o "%.7i %.8j %.8u %.2t %R %N"
 | 612894 | mindmate-biometric-qwen | A100-80 | 🟢 RUNNING (shard 0) | `synthetic_train_biometric_qwen_s0.jsonl` |
 | 612895 | mindmate-biometric-qwen | A100-80 | 🟢 RUNNING (shard 1) | `synthetic_train_biometric_qwen_s1.jsonl` |
 | 612896 | mindmate-biometric-qwen | A100-80 | 🟢 RUNNING (shard 2) | `synthetic_train_biometric_qwen_s2.jsonl` |
-| 612900 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 3, new profiles only) | `synthetic_train_conv_memory_qwen_s3.jsonl` |
-| 612901 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 4, new profiles only) | `synthetic_train_conv_memory_qwen_s4.jsonl` |
-| 612902 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 5, new profiles only) | `synthetic_train_conv_memory_qwen_s5.jsonl` |
+| 612903 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 3, 28 new profiles) | `synthetic_train_conv_memory_qwen_s3.jsonl` |
+| 612904 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 4, 28 new profiles) | `synthetic_train_conv_memory_qwen_s4.jsonl` |
+| 612905 | mindmate-conv-memory-qwen | A100-80 | 🟢 RUNNING (shard 5, 28 new profiles) | `synthetic_train_conv_memory_qwen_s5.jsonl` |
+
+> ⚠️ **Jobs 612900–612902 cancelled** — relaunched as 612903–612905 after expanding `NEW_ONLY_PROFILES` from 12 → 28 (18 clinical + 10 companion) and `NEW_FACTS` from 35 → 47.
 
 All 72h jobs on `gpu-long`. Conv-memory shards 0–2 finishing ~2026-05-15. Biometric finishing ~2026-05-17. Conv-memory shards 3–5 finishing ~2026-05-17.
 
