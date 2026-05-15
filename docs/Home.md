@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 11 cont'd — v4 benchmark infra complete except cluster `run_benchmarks.py` rewrite (deferred to genzv5 run). Final pieces: `benchmarks/diff_results.py` (per-scenario PASS↔FAIL diff with REGRESSED highlighting), `benchmarks/leaderboard.py` (unified cluster+mobile, flags ≥5pp cross-runtime spread), `benchmarks/replay.py` (re-judge transcripts without re-inference; failure-artifact interactive mode with $PAGER). 8 commits today.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 11 cont'd — v4 benchmark infrastructure 100% complete. Final piece: `benchmarks/run_benchmarks_v4.py` + `run_benchmarks_v4.slurm` — multi-turn cluster runner using shared scenarios.json + JudgeService + EvalLogger. Supports NF4 adapter, Q4_K_M GGUF (via llama-cpp-python), dynamic scenarios with Qwen3-30B simulator, temp=0 for deterministic scripted, --skip-load plumbing mode. Output dir layout matches mobile so diff/leaderboard/replay tools work transparently. 9 commits today.)
 
 ---
 

@@ -33,7 +33,7 @@ Building a unified benchmark system where cluster and mobile run **the same scen
 | Shared scenarios + TS parity tests | ✅ | `src/eval/scenarios_loader.ts`, `fixtures/scenarios.v4.json` (anchor-app) |
 | Rsync pipeline for mobile→cluster→mobile | ✅ | `scripts/sync_mobile_eval.sh` |
 | Diff / leaderboard / replay tools | ✅ | `benchmarks/diff_results.py`, `leaderboard.py`, `replay.py` |
-| Rewrite cluster runner for new schema (deferred — current `run_benchmarks.py` still works against scenarios.py; rewrite when running genzv5) | ⬜ | `benchmarks/run_benchmarks.py` |
+| Cluster runner v4 (multi-turn, dynamic w/ Qwen3 sim, GGUF backend, temp=0) | ✅ | `benchmarks/run_benchmarks_v4.py`, `run_benchmarks_v4.slurm` |
 
 ### Diff, leaderboard, and replay
 
