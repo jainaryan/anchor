@@ -102,6 +102,34 @@ Note: v3 rate ~10-15/hr per shard (was 180/hr for v2) — quality trade-off is w
 
 ---
 
+## 2026-05-15 (Session 11)
+
+### Panic detection — 4 issues surfaced by new unit tests
+
+Added `src/utils/__tests__/panicDetection.test.ts` (anchor-app, 61 cases).
+Tests are documented via `test.failing` blocks — they pass while broken, will alert in CI when fixed.
+
+**Issue 1: bare `cutting` in URGENT pattern fires on benign nouns**
+- Pattern `/\b(self[\s-]?harm|hurt myself|cut myself|cutting)\b/i`
+- Matches: `"i've been cutting carbs"`, `"i'm cutting flowers from the garden"`
+- Fix: tighten the bare `cutting` alternation — require object phrase or remove it (the other patterns already cover self-harm intent: `self-harm`, `hurt myself`, `cut myself`).
+
+**Issue 2: "i wish i could just disappear" doesn't match URGENT**
+- Pattern `/\b(i (?:want|wish|feel like) (?:to )?(?:die|disappear|not exist))\b/i`
+- Requires zero filler words between `wish` and `disappear`
+- Real users write `"i wish i could disappear"` / `"i wish i could just disappear"`
+- Fix: allow up to 3 filler words between verb and noun, e.g. `(?:to )?(?:\w+\s+){0,3}(?:die|disappear|not exist)`
+
+**Issue 3: quoted speech triggers URGENT**
+- `"my friend said 'i want to die' the other day as a joke"` → URGENT
+- Detector has no concept of attribution. Acceptable to over-trigger for safety, but worth documenting.
+
+**Issue 4: detector covers `i need help` as WATCH (intentional, but test surfaces it)**
+- `"i need help understanding this"` → WATCH
+- Per Bug Log 2026-05-10, this is the correct WATCH behavior — the callback fires but the message still sends. My initial test expected NONE — corrected.
+
+---
+
 ## 2026-05-14 (Session 9 — continued)
 
 ### vLLM 0.20.2: `VLLM_USE_V1=0` removed — env var silently ignored

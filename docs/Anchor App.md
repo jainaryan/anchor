@@ -248,6 +248,41 @@ Stores the profile card (Tier 1). Key fields: `name`, `age`, `gender`, `location
 
 ## Eval Harness
 
+### v4 mobile eval infrastructure (in progress, 2026-05-15)
+
+The mobile eval is being rewritten to share schema + judge with the cluster benchmark:
+
+| Component | Status | File |
+|---|---|---|
+| Structured logger — JSONL + human + transcripts + failures, schema-shared with cluster | ✅ | `src/eval/logger.ts` |
+| Per-turn telemetry — TTFT, gen TPS, memory, thermal, with regression thresholds | ✅ | `src/eval/telemetry.ts` |
+| Panic detection unit tests (61 cases, 100% coverage on `panicDetection.ts`) | ✅ | `src/utils/__tests__/panicDetection.test.ts` |
+| EvalRunner rewrite — multi-turn, no on-device judge, structured output | ⬜ | `src/eval/EvalRunner.ts` |
+| Memory persistence integration test | ⬜ | `src/eval/integration/memoryPersistence.test.ts` |
+| Shared scenarios.json (build-time copy from mindmate repo) | ⬜ | `src/eval/fixtures/scenarios.json` |
+| `EVAL_RESULTS.md` becomes auto-generated from judged JSON | ⬜ | scripts |
+
+**Per-turn telemetry thresholds** (`PERF_THRESHOLDS` in `src/eval/telemetry.ts`):
+- min_gen_tps_per_turn: 4.0 (Pixel 8a baseline ~5.5)
+- max_ttft_cold_ms: 90,000 / max_ttft_cached_ms: 12,000
+- max_native_memory_mb: 3500 / min_available_ram_mb: 500
+- max_gen_tps_drop_pct: 25 (cross-turn — flags thermal throttle)
+- max_thermal_state: MODERATE (SEVERE/CRITICAL → warn)
+- max_native_memory_growth_mb: 200 (cross-turn — memory leak signal)
+
+Breaches surface as `perf_threshold_breach` warning events in `trace.log` — they don't fail the run.
+
+The mobile logger writes to `${RNFS.ExternalDirectoryPath}/eval_runs/<run_id>/` so the entire run directory is `adb pull`-able. After eval finishes:
+
+```bash
+adb pull /sdcard/Android/data/com.pocketpalai/files/eval_runs/<run_id>/ local/
+rsync -az local/<run_id>/ nus-student-cluster:~/projects/mindmate/results_pending/
+ssh nus-student-cluster "sbatch --export=ALL,MOBILE_RESULTS=results_pending/<run_id>/raw.json \\
+                                 ~/projects/mindmate/benchmarks/judge_mobile.slurm"
+```
+
+---
+
 ### ⚠️ Current eval results are stale — re-run needed
 
 Last run: **2026-04-22**, model: **genzv2_ck1600**, before all targeted fix data and before c3acdc9.

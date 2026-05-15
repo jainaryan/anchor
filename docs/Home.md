@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 11 cont'd — v4 benchmark phase 1.3 landed: judge_service.py (runtime-agnostic LLM judge with ambiguity retry, scope-aware transcripts), judge_mobile_results.py + judge_mobile.slurm (mobile→cluster judging pipeline). End-to-end test: mobile raw transcripts → Gemma4 judge → judged.json + failures + trace logs works with stub judge. Scenario count: 83 across 11 categories (45 dynamic, 38 single).)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 11 cont'd — v4 phase 2 mobile foundations: `src/eval/logger.ts` (TS mirror of benchmarks/logging.py, JSONL + human + transcripts + failures), `src/eval/telemetry.ts` (per-turn TTFT/TPS/memory/thermal with PERF_THRESHOLDS), `src/utils/__tests__/panicDetection.test.ts` (61 cases, 100% module coverage). Tests surfaced 4 real panic-detector bugs — captured as `test.failing` cases and bug-logged.)
 
 ---
 
