@@ -23,35 +23,50 @@ Building a unified benchmark system where cluster and mobile run **the same scen
 | Judge service (runtime-agnostic, ambiguity retry, scope-aware) | ✅ | `benchmarks/judge_service.py` |
 | Mobile-results judging entrypoint + SLURM | ✅ | `benchmarks/judge_mobile_results.py`, `benchmarks/judge_mobile.slurm` |
 
-### Phase 1 remaining
+### Phase 1+2 remaining
 
 | Component | Status | File |
 |---|---|---|
+| Mobile logger + telemetry + EvalRunner rewrite | ✅ | `src/eval/logger.ts`, `telemetry.ts`, `EvalRunnerV4.ts` (anchor-app) |
+| Panic detection (61 tests, 100% module coverage) | ✅ | `src/utils/__tests__/panicDetection.test.ts` (anchor-app) |
+| Memory persistence integration test (5 tests) | ✅ | `src/memory/__tests__/memoryPersistence.integration.test.ts` (anchor-app) |
+| Shared scenarios + TS parity tests | ✅ | `src/eval/scenarios_loader.ts`, `fixtures/scenarios.v4.json` (anchor-app) |
+| Rsync pipeline for mobile→cluster→mobile | ✅ | `scripts/sync_mobile_eval.sh` |
 | Rewrite cluster runner for new schema (multi-turn, temp=0, GGUF backend) | ⬜ | `benchmarks/run_benchmarks.py` |
 | Diff / leaderboard / replay tools | ⬜ | `benchmarks/diff_results.py`, `leaderboard.py`, `replay.py` |
-| Mobile logger + telemetry + EvalRunner rewrite | ⬜ | `src/eval/logger.ts`, `src/eval/telemetry.ts`, `src/eval/EvalRunner.ts` |
-| Panic detection + memory persistence tests | ⬜ | `src/utils/__tests__/`, `src/eval/integration/` |
-| Rsync pipeline for mobile→cluster→mobile | ⬜ | `scripts/sync_mobile_eval.sh` |
 
 ### How to judge mobile-generated transcripts
 
+One-shot — `scripts/sync_mobile_eval.sh all` does the whole round-trip:
+
 ```bash
-# 1. Mobile generates raw transcripts → writes JSON locally
-# 2. User pulls JSON to laptop via adb, rsyncs to cluster
-rsync -az local/eval_raw/*.json nus-student-cluster:~/projects/mindmate/results_pending/
-
-# 3. Submit judging job (Gemma4 on a100-80, ~5–15 min depending on scenario count)
-ssh nus-student-cluster "sbatch \
-    --export=ALL,MOBILE_RESULTS=results_pending/mobile_ck1200_20260515.json \
-    ~/projects/mindmate/benchmarks/judge_mobile.slurm"
-
-# 4. After job finishes, pull back judged output
-rsync -az nus-student-cluster:~/projects/mindmate/benchmarks/results/mobile_*_judged_*/ local/eval_judged/
+# Connect Pixel via USB, run eval in-app, then:
+scripts/sync_mobile_eval.sh all
+# → pulls most recent eval run from device → pushes to cluster
+# → submits SLURM judging job → waits for it → pulls judged.json back
 ```
 
-The judged output is a directory containing `judged.json`, `trace.jsonl`,
-`trace.log`, plus `failures/` and `transcripts/`. Self-contained — every
-failed criterion has a debug artifact with full transcript + judge response.
+Or step-by-step if you want to inspect intermediate state:
+
+```bash
+scripts/sync_mobile_eval.sh pull              # adb pull from device
+scripts/sync_mobile_eval.sh push <local_dir>  # rsync to cluster
+scripts/sync_mobile_eval.sh judge <run_dir>   # submit SLURM job
+scripts/sync_mobile_eval.sh fetch <job_id>    # poll + rsync judged.json back
+```
+
+Each judged run produces a self-contained directory:
+
+```
+mobile_eval_results/judged/mobile_<model>_judged_<timestamp>/
+├── judged.json          # per-scenario verdicts + summary + by_category
+├── trace.jsonl          # one JSON event per line
+├── trace.log            # human-readable mirror
+├── failures/            # one self-contained JSON per failed criterion
+│   └── <scenario>__<criterion>.json
+└── transcripts/         # preserved transcripts for replay
+    └── <scenario>.json
+```
 
 ### v4 scenario schema
 

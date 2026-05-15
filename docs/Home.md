@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 11 cont'd — v4 phase 2 mobile foundations: `src/eval/logger.ts` (TS mirror of benchmarks/logging.py, JSONL + human + transcripts + failures), `src/eval/telemetry.ts` (per-turn TTFT/TPS/memory/thermal with PERF_THRESHOLDS), `src/utils/__tests__/panicDetection.test.ts` (61 cases, 100% module coverage). Tests surfaced 4 real panic-detector bugs — captured as `test.failing` cases and bug-logged.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 11 cont'd — v4 phase 2 mobile complete + end-to-end pipeline: scenarios.v4.json + TS loader with parity tests (18), EvalRunnerV4 (multi-turn, per-turn telemetry, no on-device judging), memoryPersistence integration test (5), scripts/sync_mobile_eval.sh (pull/push/judge/fetch/all). 6 commits across both repos. Cluster runner rewrite + diff/leaderboard/replay tools remaining.)
 
 ---
 
