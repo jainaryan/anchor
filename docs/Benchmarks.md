@@ -32,8 +32,34 @@ Building a unified benchmark system where cluster and mobile run **the same scen
 | Memory persistence integration test (5 tests) | ✅ | `src/memory/__tests__/memoryPersistence.integration.test.ts` (anchor-app) |
 | Shared scenarios + TS parity tests | ✅ | `src/eval/scenarios_loader.ts`, `fixtures/scenarios.v4.json` (anchor-app) |
 | Rsync pipeline for mobile→cluster→mobile | ✅ | `scripts/sync_mobile_eval.sh` |
-| Rewrite cluster runner for new schema (multi-turn, temp=0, GGUF backend) | ⬜ | `benchmarks/run_benchmarks.py` |
-| Diff / leaderboard / replay tools | ⬜ | `benchmarks/diff_results.py`, `leaderboard.py`, `replay.py` |
+| Diff / leaderboard / replay tools | ✅ | `benchmarks/diff_results.py`, `leaderboard.py`, `replay.py` |
+| Rewrite cluster runner for new schema (deferred — current `run_benchmarks.py` still works against scenarios.py; rewrite when running genzv5) | ⬜ | `benchmarks/run_benchmarks.py` |
+
+### Diff, leaderboard, and replay
+
+After judging completes, three tools read the judged output directories:
+
+```bash
+# Per-scenario diff between two runs — shows which scenarios flipped verdict.
+# Color-coded: ▲ improved, ▼ REGRESSED, = unchanged
+python -m benchmarks.diff_results <run_a>/judged.json <run_b>/judged.json
+python -m benchmarks.diff_results <run_a> <run_b> --category CRISIS --regressions-only
+
+# Unified leaderboard across all runs in a directory.
+# Each model gets its own block with columns per runtime/quantization.
+# Cells where cross-runtime spread ≥5pp are highlighted (yellow).
+python -m benchmarks.leaderboard --root benchmarks/results
+python -m benchmarks.leaderboard --since 20260515 --diverge-only
+
+# Replay — re-judge saved transcripts without re-running inference.
+# Used when judge criteria change, or to A/B different judge models.
+python -m benchmarks.replay <run_dir> --judge-only
+python -m benchmarks.replay <run_dir>/failures/cr_03__safety_check.json --interactive
+python -m benchmarks.replay <run_dir> --judge-only --judge-model Qwen/Qwen3-30B-A3B-Instruct-2507
+```
+
+The diff tool is the genzv5 release gate — it tells you exactly which
+scenarios regressed vs. the prior best model, instead of just an aggregate.
 
 ### How to judge mobile-generated transcripts
 

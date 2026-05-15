@@ -231,6 +231,8 @@ def judge_mobile_file(
 
             judged_scenarios.append({
                 **raw_scen,
+                "category": scenario_def["category"],
+                "weight": scenario_def.get("weight", 1),
                 "criteria_results": [r.to_dict() for r in results],
                 "summary": score,
             })
