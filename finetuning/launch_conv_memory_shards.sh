@@ -14,7 +14,7 @@ NUM_SHARDS="${1:-3}"
 echo "Launching $NUM_SHARDS parallel shards of conv-memory pipeline (Qwen3-30B)..."
 
 for ((i=0; i<NUM_SHARDS; i++)); do
-  JOB=$(sbatch --gres=gpu:a100-80:1 \
+  JOB=$(sbatch --gres=gpu:h100-96:1 \
     --export=ALL,SHARD_IDX=$i \
     finetuning/conv_memory_pipeline_qwen.slurm | awk '{print $4}')
   echo "  shard $i → job $JOB"

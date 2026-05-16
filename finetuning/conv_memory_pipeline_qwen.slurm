@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --partition=gpu-long
-#SBATCH --gres=gpu:a100-80:1
+#SBATCH --gres=gpu:h100-96:1
 #SBATCH --time=72:00:00
 
 PROJECT_DIR=~/projects/mindmate
@@ -29,9 +29,9 @@ cd $PROJECT_DIR
 export TEACHER_MODEL=30b
 export OUT_LABEL=qwen
 
-# USE_VLLM=1 enables vLLM backend (PagedAttention + FlashAttention2, ~1.5-2x faster)
-export USE_VLLM=1
-uv pip install vllm 2>&1 | tail -3
+# USE_VLLM=0: vLLM fails on H100 nodes (CUDA fork issue — cannot re-init CUDA in forked subprocess).
+# HF backend is proven to work (biometric jobs 613218-613220 ran fine with USE_VLLM=0).
+export USE_VLLM=0
 echo "[Setup] USE_VLLM=$USE_VLLM"
 
 # Shard support — pass SHARD_IDX via --export=ALL,SHARD_IDX=N when submitting.
