@@ -124,19 +124,20 @@ ssh nus-student-cluster "sbatch ~/projects/mindmate/finetuning/run_sft_v5.slurm"
 
 genzv5 shortcuts are already wired into `benchmarks/run_benchmarks_v4.py::MODEL_SHORTCUTS` (ck200/400/600/800). For other checkpoints, edit `MODEL_SHORTCUTS` first.
 
-```bash
-# Single run — scripted scenarios at temp=0 (single-run trustworthy)
-# + dynamic at temp=0.7 (still benefits from 3 runs)
-sbatch --gres=gpu:a100-80:1 \
-    --export=ALL,MODEL=genzv5_ck200 \
-    benchmarks/run_benchmarks_v4.slurm
+**v4 uses production sampling (temp=0.7, top_p=0.95, top_k=40, min_p=0.05) so every scenario type is non-deterministic. Always do 3-run averaging for leaderboard rankings.**
 
-# Three runs for stable dynamic-scenario averaging
+```bash
+# 3 runs for stable averaging across scripted + dynamic scenarios
 for i in 1 2 3; do
   sbatch --gres=gpu:a100-80:1 \
       --export=ALL,MODEL=genzv5_ck200,LABEL=genzv5_ck200_run${i} \
       benchmarks/run_benchmarks_v4.slurm
 done
+
+# Quick single-run sanity check (variance is real — don't rank on this)
+sbatch --gres=gpu:a100-80:1 \
+    --export=ALL,MODEL=genzv5_ck200 \
+    benchmarks/run_benchmarks_v4.slurm
 
 # Per-scenario diff vs current best SFT — this is the release gate
 python -m benchmarks.diff_results \

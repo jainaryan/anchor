@@ -6,23 +6,31 @@ Differences from v3 (run_benchmarks.py):
   • Uses JudgeService (shared with judge_mobile_results.py)
   • Emits structured logs via EvalLogger — trace.jsonl + trace.log + failures/
     + transcripts/
-  • Supports scripted_multiturn (deterministic) + dynamic_multiturn (Qwen3
-    simulator + role-flipping)
-  • --temperature 0 for deterministic single/scripted scenarios (no need for
-    3-run averaging on the deterministic tier)
+  • Supports scripted_multiturn + dynamic_multiturn (Qwen3 simulator +
+    role-flipping)
+  • **Sampling params match production app** (anchor-app
+    src/utils/completionSettingsVersions.ts:defaultCompletionParams):
+        temperature=0.7, top_k=40, top_p=0.95, min_p=0.05,
+        repetition_penalty=1.0, max_new_tokens=1024
+    Benchmarking with production sampling is the whole point of v4 — non-
+    production sampling produces non-production behavior. The cost is that
+    scenarios are no longer deterministic; use --runs=3 for stable averages.
   • --backend gguf — load Q4_K_M GGUF via llama-cpp-python instead of NF4
     adapter, so we benchmark what actually ships
   • Output directory layout matches judge_mobile_results.py so diff_results.py
     / leaderboard.py / replay.py all work without changes
 
 Usage:
-    # Default — NF4 adapter, scripted scenarios at temp=0
+    # Default — NF4 adapter, production sampling, 1 run
     python -m benchmarks.run_benchmarks_v4 --model genzv2_ck1200
 
     # Test what ships
     python -m benchmarks.run_benchmarks_v4 --backend gguf \\
         --gguf-path exports/mindmate_genzv2_ck1200_q4_k_m.gguf \\
         --label genzv2_ck1200_gguf
+
+    # Override sampling (e.g. for an ablation that needs determinism)
+    python -m benchmarks.run_benchmarks_v4 --model genzv2_ck1200 --temperature 0
 
     # Category / id filters
     python -m benchmarks.run_benchmarks_v4 --model genzv2_ck1200 --category CRISIS
@@ -65,6 +73,19 @@ from benchmarks.scenarios_loader import (
 JUDGE_MODEL_ID = "google/gemma-4-26B-A4B-it"
 SIMULATOR_MODEL_ID = "Qwen/Qwen3-30B-A3B-Instruct-2507"  # used for dynamic_multiturn
 
+# Production sampling parameters — must stay in sync with
+# anchor-app/src/utils/completionSettingsVersions.ts:defaultCompletionParams.
+# Any drift here means the benchmark is measuring a different model than what
+# ships. Don't change these casually.
+PRODUCTION_SAMPLING = {
+    "temperature": 0.7,
+    "top_k": 40,
+    "top_p": 0.95,
+    "min_p": 0.05,           # Not all transformers paths honor min_p — see _load_nf4_eval
+    "repetition_penalty": 1.0,   # production has penalty_repeat=1.0 (disabled)
+    "max_new_tokens": 1024,
+}
+
 MODEL_SHORTCUTS = {
     "llama_base":       ("meta-llama/Llama-3.2-3B-Instruct", None),
     "genzv2_ck1600":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genz/checkpoint-1600"),
@@ -101,11 +122,24 @@ def parse_args():
                    help="Comma-separated types to include (single,scripted_multiturn,dynamic_multiturn)")
     p.add_argument("--tags", default=None,
                    help="Comma-separated tags — scenarios must contain all")
-    p.add_argument("--temperature", type=float, default=0.0,
-                   help="Eval model temperature for single/scripted (default: 0 — deterministic)")
-    p.add_argument("--temperature-dynamic", type=float, default=0.7,
-                   help="Eval model temperature for dynamic scenarios (default: 0.7)")
-    p.add_argument("--max-new-tokens", type=int, default=300)
+    p.add_argument("--temperature", type=float, default=PRODUCTION_SAMPLING["temperature"],
+                   help=f"Eval model temperature (default: {PRODUCTION_SAMPLING['temperature']} — matches production app)")
+    p.add_argument("--temperature-dynamic", type=float, default=None,
+                   help="Eval model temperature for dynamic scenarios "
+                        "(default: same as --temperature)")
+    p.add_argument("--top-k", type=int, default=PRODUCTION_SAMPLING["top_k"],
+                   help=f"top_k (default: {PRODUCTION_SAMPLING['top_k']} — matches production)")
+    p.add_argument("--top-p", type=float, default=PRODUCTION_SAMPLING["top_p"],
+                   help=f"top_p (default: {PRODUCTION_SAMPLING['top_p']} — matches production)")
+    p.add_argument("--min-p", type=float, default=PRODUCTION_SAMPLING["min_p"],
+                   help=f"min_p (default: {PRODUCTION_SAMPLING['min_p']} — matches production; "
+                        "GGUF backend honors this, HF/NF4 backend ignores)")
+    p.add_argument("--repetition-penalty", type=float,
+                   default=PRODUCTION_SAMPLING["repetition_penalty"],
+                   help=f"repetition_penalty (default: {PRODUCTION_SAMPLING['repetition_penalty']} "
+                        "— matches production, which has it disabled)")
+    p.add_argument("--max-new-tokens", type=int, default=PRODUCTION_SAMPLING["max_new_tokens"],
+                   help=f"max_new_tokens (default: {PRODUCTION_SAMPLING['max_new_tokens']} — matches production)")
     p.add_argument("--sysprompt", default="full", choices=["full", "preamble_only", "none"],
                    help="System prompt mode (matches v3 ablation flags)")
     p.add_argument("--no-save", action="store_true")
@@ -143,13 +177,24 @@ def resolve_model(args) -> tuple[str, Optional[Path], str]:
     return (base_id, adapter_path, label)
 
 
-def load_nf4_eval(base_model_id: str, adapter_path: Optional[Path]):
-    """Returns (generate_fn, tokenizer) for the eval model in NF4."""
+def load_nf4_eval(base_model_id: str, adapter_path: Optional[Path],
+                  *, top_k: int, top_p: float,
+                  repetition_penalty: float, min_p: float):
+    """
+    Returns (generate_fn, tokenizer) for the eval model in NF4.
+
+    Sampling params are baked into the closure at load time. transformers
+    does not natively support min_p, so we silently drop it here — note this
+    in run output. (GGUF backend via llama-cpp-python honors min_p.)
+    """
     import torch
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
     print(f"[Load] Eval model (NF4): {base_model_id}")
+    if min_p:
+        print(f"  Note: min_p={min_p} ignored — transformers doesn't support it. "
+              f"GGUF backend would honor it.")
     t0 = time.time()
     bnb = BitsAndBytesConfig(
         load_in_4bit=True,
@@ -190,9 +235,9 @@ def load_nf4_eval(base_model_id: str, adapter_path: Optional[Path]):
                 max_new_tokens=max_new_tokens,
                 temperature=max(temperature, 1e-5),
                 do_sample=temperature > 0,
-                top_p=0.9,
-                top_k=50,
-                repetition_penalty=1.15,
+                top_p=top_p,
+                top_k=top_k,
+                repetition_penalty=repetition_penalty,
             )
         new_tokens = out[0][inputs["input_ids"].shape[1]:]
         return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
@@ -200,8 +245,13 @@ def load_nf4_eval(base_model_id: str, adapter_path: Optional[Path]):
     return generate_fn, tokenizer
 
 
-def load_gguf_eval(gguf_path: Path):
-    """Returns (generate_fn, None). llama-cpp-python doesn't expose tokenizer counts cheaply."""
+def load_gguf_eval(gguf_path: Path, *, top_k: int, top_p: float,
+                   min_p: float, repetition_penalty: float):
+    """
+    Returns (generate_fn, None). llama-cpp-python supports all the production
+    sampling params (including min_p) natively, so the GGUF backend produces
+    the closest match to on-device behavior.
+    """
     print(f"[Load] Eval model (GGUF): {gguf_path}")
     t0 = time.time()
     try:
@@ -217,7 +267,7 @@ def load_gguf_eval(gguf_path: Path):
         n_gpu_layers=-1,   # all on GPU
         chat_format="llama-3",
         verbose=False,
-        seed=0,
+        seed=-1,           # -1 = nondeterministic, matches production app
     )
     print(f"  Ready in {time.time() - t0:.1f}s")
 
@@ -226,9 +276,10 @@ def load_gguf_eval(gguf_path: Path):
             messages=transcript,
             temperature=temperature,
             max_tokens=max_new_tokens,
-            top_p=0.9,
-            top_k=50,
-            repeat_penalty=1.15,
+            top_p=top_p,
+            top_k=top_k,
+            min_p=min_p,
+            repeat_penalty=repetition_penalty,
         )
         return out["choices"][0]["message"]["content"].strip()
 
@@ -483,10 +534,18 @@ def main():
     run_dir = Path(args.output_dir) / f"cluster_{label}_{ts}"
     log = EvalLogger(run_dir, level=args.log_level)
 
+    temperature_dynamic = args.temperature_dynamic
+    if temperature_dynamic is None:
+        temperature_dynamic = args.temperature
+
     log.info(f"Filtered to {len(scenarios)} scenarios "
              f"({n_single} single/scripted, {n_dyn} dynamic)")
     log.info(f"  model={label}  adapter={adapter_path}  backend={args.backend}  "
-             f"sysprompt={args.sysprompt}  temperature={args.temperature}")
+             f"sysprompt={args.sysprompt}")
+    log.info(f"  sampling: temperature={args.temperature} (dynamic={temperature_dynamic})  "
+             f"top_k={args.top_k}  top_p={args.top_p}  min_p={args.min_p}  "
+             f"repetition_penalty={args.repetition_penalty}  "
+             f"max_new_tokens={args.max_new_tokens}")
 
     if args.skip_load:
         log.warn("--skip-load: dummy generate_fn used (plumbing test only)")
@@ -498,12 +557,20 @@ def main():
         judge_fn = _stub_generate
         judge_tok = None
     else:
-        # Load eval model
+        # Load eval model — sampling params baked into closure at load time
         if args.backend == "gguf":
             assert adapter_path, "gguf backend requires --gguf-path"
-            generate_fn, _ = load_gguf_eval(adapter_path)
+            generate_fn, _ = load_gguf_eval(
+                adapter_path,
+                top_k=args.top_k, top_p=args.top_p, min_p=args.min_p,
+                repetition_penalty=args.repetition_penalty,
+            )
         else:
-            generate_fn, _ = load_nf4_eval(base_model_id, adapter_path)
+            generate_fn, _ = load_nf4_eval(
+                base_model_id, adapter_path,
+                top_k=args.top_k, top_p=args.top_p, min_p=args.min_p,
+                repetition_penalty=args.repetition_penalty,
+            )
 
         judge_fn, judge_tok = load_judge()
 
@@ -533,8 +600,9 @@ def main():
                            seed=s.get("simulator", {}).get("seed"))
 
         try:
-            # Dynamic types use a higher temperature for adversarial variety
-            temp = (args.temperature_dynamic
+            # Dynamic scenarios can use a different temp if --temperature-dynamic
+            # was set; otherwise both tiers use the same value.
+            temp = (temperature_dynamic
                     if scenario_type == "dynamic_multiturn"
                     else args.temperature)
 
@@ -658,9 +726,23 @@ def main():
         "judge_stats": judge.stats,
         "config": {
             "sysprompt": args.sysprompt,
-            "temperature_single": args.temperature,
-            "temperature_dynamic": args.temperature_dynamic,
-            "max_new_tokens": args.max_new_tokens,
+            "sampling": {
+                "temperature": args.temperature,
+                "temperature_dynamic": temperature_dynamic,
+                "top_k": args.top_k,
+                "top_p": args.top_p,
+                "min_p": args.min_p,
+                "repetition_penalty": args.repetition_penalty,
+                "max_new_tokens": args.max_new_tokens,
+                "matches_production_app": (
+                    args.temperature == PRODUCTION_SAMPLING["temperature"]
+                    and args.top_k == PRODUCTION_SAMPLING["top_k"]
+                    and args.top_p == PRODUCTION_SAMPLING["top_p"]
+                    and args.min_p == PRODUCTION_SAMPLING["min_p"]
+                    and args.repetition_penalty == PRODUCTION_SAMPLING["repetition_penalty"]
+                    and args.max_new_tokens == PRODUCTION_SAMPLING["max_new_tokens"]
+                ),
+            },
         },
         "summary": {
             "weighted_pass": weighted_pass_total,

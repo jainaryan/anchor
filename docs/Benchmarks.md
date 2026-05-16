@@ -17,12 +17,33 @@ The unified benchmark system. Cluster and mobile run **the same scenarios** agai
 | | |
 |---|---|
 | Scenarios | 83 across 11 categories |
-| Scripted (`single` + `scripted_multiturn`) | 38 — temperature=0, single-run trustworthy |
-| Dynamic (`dynamic_multiturn`) | 45 — Qwen3-30B simulator, temp=0.7, 3-run averaged |
+| Scripted (`single` + `scripted_multiturn`) | 38 — fixed user turns |
+| Dynamic (`dynamic_multiturn`) | 45 — Qwen3-30B simulator |
 | Judge | Gemma4 26B A4B IT (bfloat16, A100-80, ~52GB VRAM) |
 | Weighted total | varies by run (sum of `weight` across `judge_criteria`) |
 | Critical categories | CRISIS (weight 2-3), SAFETY_AMBIGUITY (weight 2) |
 | New categories vs v3 | MEMORY_DRIFT, SAFETY_AMBIGUITY |
+
+### v4 sampling — matches production
+
+The whole point of v4 is to measure what users actually experience. Eval-time sampling parameters are pulled from the production chat config and **must not be overridden** for leaderboard runs:
+
+| Parameter | Value | Source |
+|---|---|---|
+| `temperature` | 0.7 | `defaultCompletionParams.temperature` |
+| `top_p` | 0.95 | `defaultCompletionParams.top_p` |
+| `top_k` | 40 | `defaultCompletionParams.top_k` |
+| `min_p` | 0.05 | `defaultCompletionParams.min_p` (GGUF only — HF/NF4 ignores) |
+| `penalty_repeat` | 1.0 | disabled in production |
+| `n_predict` / `max_new_tokens` | 1024 | `defaultCompletionParams.n_predict` |
+
+- Cluster runner: `PRODUCTION_SAMPLING` constant in `benchmarks/run_benchmarks_v4.py` (must stay in sync with the mobile constant — there's a comment pointing at the TS file).
+- Mobile runner: imports `defaultCompletionParams` directly from `src/utils/completionSettingsVersions.ts` — single source of truth, zero drift possible.
+- Both runtimes emit `sampling.matches_production_app: bool` in their result docs; flips false the moment any param is overridden.
+
+**Consequence:** scenarios are non-deterministic on every type (including scripted). Use 3-run averaging when ranking models. The diff tool (`benchmarks/diff_results.py`) is still useful single-run for spotting *category-level* regressions — fine-grained scenario flips need 3 runs to be trustworthy.
+
+Ablations that need determinism (e.g. studying the format-fix impact) can override via `--temperature 0`. The output JSON will record `matches_production_app: false`, so leaderboard tooling can flag the run as not-comparable.
 
 ### v4 infrastructure (all landed 2026-05-15 → 2026-05-16)
 

@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-16 (session 11 wrap — v4 benchmark infrastructure 100% complete across both repos. 9 commits to mindmate (logging → scenarios → judge → mobile-judge → sync pipeline → diff/leaderboard/replay → cluster runner v4) + 4 commits to anchor-app (logger + telemetry + 61-test panic suite + shared scenarios loader + EvalRunnerV4 + memory persistence integration test). Outstanding work is now data + training (genzv5), not infrastructure.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-16 (session 11 wrap — v4 benchmark infrastructure complete. Sampling parameters now match the production app (`defaultCompletionParams`): temp=0.7, top_p=0.95, top_k=40, min_p=0.05, penalty_repeat=1.0, n_predict=1024. The cluster runner reads from a `PRODUCTION_SAMPLING` constant; mobile EvalRunnerV4 imports `defaultCompletionParams` directly so it can never drift. Both runtimes emit a `sampling.matches_production_app: bool` flag in each result doc — flips false the moment anyone overrides a param.)
 
 ---
 
@@ -25,7 +25,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Best on v3 overall** | `llama_base` — base model, no fine-tuning, **51%** on v3 benchmark |
 | **Best SFT GGUF** | `exports/mindmate_genzv2_ck1200_q4_k_m.gguf` |
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
-| **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, temp=0 for scripted. v3 stays available for legacy comparisons. See [[Benchmarks]]. |
+| **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05 — matches `defaultCompletionParams` in the app). v3 stays available for legacy comparisons. See [[Benchmarks]]. |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
 | **Active cluster jobs** | 611377/611379–611381 — conv-memory shards 0–2 (finishing) · 613218–613220 — biometric PCIe HF (~0.7–0.9/hr) · 613666–613668 — biometric SXM vLLM (queued, ~5/hr when running) · 612903–612905, 613115–613117 — conv-memory new pool shards 3–8 |
 | **Next milestone** | genzv5 SFT — first model on the v4 benchmark — once conv-memory + biometric data merge |
@@ -51,7 +51,7 @@ These are the non-obvious invariants that burn time if unknown:
 
 7. **`finetuning/` has the current scripts. Root-level scripts are legacy.** `CUDA_train_qlora.py`, `build_dataset.py`, etc. at the project root are old duplicates from early development. Always use `finetuning/CUDA_train_qlora.py`, `finetuning/build_dataset.py`, etc.
 
-8. **v3 benchmark scores have ±~2pt variance** at temperature=0.7. A single run can swing ±17 scenarios. Always use 3-run averaged results (`benchmarks/average_results.py --since YYYYMMDD`). Never rank models on single-run v3 scores. **v4 single/scripted_multiturn scenarios use temperature=0 and are single-run trustworthy**; only `dynamic_multiturn` (Qwen3 simulator) needs 3-run averaging in v4.
+8. **Benchmarks use production sampling — variance is real.** v4 uses the same sampling params as the production chat (temperature=0.7, top_p=0.95, top_k=40, min_p=0.05). This means scores are non-deterministic on every scenario type — 3-run averaging is required for any leaderboard ranking. The rationale: a benchmark with temp=0 measures a model nobody ships. v3 had the same problem; v4 inherits the same fix (`--runs=3` + `benchmarks/diff_results.py`).
 
 9. **`--wrap` in sbatch uses `/bin/sh`, not bash.** `source` command is not available. Use `bash -c "source ... && python ..."` instead.
 
