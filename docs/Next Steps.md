@@ -8,6 +8,19 @@ tags: [anchor, next-steps]
 
 ---
 
+## What just landed (2026-05-16)
+
+✅ **v4 benchmark infrastructure complete** across both repos. Outstanding work is now data + training, not infrastructure. See [[Benchmarks]] → "Suite v4".
+
+What this changes for genzv5:
+- Use `benchmarks/run_benchmarks_v4.slurm` (not the legacy `run_benchmarks.slurm`)
+- Scripted scenarios are deterministic at temp=0 — no need for 3-run averaging on those
+- Per-scenario diff (`benchmarks/diff_results.py --regressions-only`) is the release gate
+- Test the actual GGUF before shipping (`--backend gguf`) — surfaces quantization regressions
+- Mobile re-run on genzv2_ck1200 should use the new `EvalRunnerV4` + `scripts/sync_mobile_eval.sh all`
+
+---
+
 ## Immediate — Waiting on Cluster
 
 ### 1. Wait for conv-memory + biometric pipelines to finish
@@ -107,20 +120,53 @@ rsync -avz finetuning/ nus-student-cluster:~/projects/mindmate/finetuning/
 ssh nus-student-cluster "sbatch ~/projects/mindmate/finetuning/run_sft_v5.slurm"
 ```
 
-### Step 4: Benchmark (3-run averaged)
+### Step 4: Benchmark on v4 suite
+
+genzv5 shortcuts are already wired into `benchmarks/run_benchmarks_v4.py::MODEL_SHORTCUTS` (ck200/400/600/800). For other checkpoints, edit `MODEL_SHORTCUTS` first.
 
 ```bash
-# Add genzv5_ckXXX to MODEL_SHORTCUTS in benchmarks/run_benchmarks.py first
-# Then submit 3 runs per checkpoint
+# Single run — scripted scenarios at temp=0 (single-run trustworthy)
+# + dynamic at temp=0.7 (still benefits from 3 runs)
+sbatch --gres=gpu:a100-80:1 \
+    --export=ALL,MODEL=genzv5_ck200 \
+    benchmarks/run_benchmarks_v4.slurm
+
+# Three runs for stable dynamic-scenario averaging
 for i in 1 2 3; do
-  sbatch --gres=gpu:a100-80:1 --export=ALL,MODEL=genzv5_ck200 benchmarks/run_benchmarks.slurm
+  sbatch --gres=gpu:a100-80:1 \
+      --export=ALL,MODEL=genzv5_ck200,LABEL=genzv5_ck200_run${i} \
+      benchmarks/run_benchmarks_v4.slurm
 done
 
-# Average when all 3 complete
-python benchmarks/average_results.py --since <YYYYMMDD>
+# Per-scenario diff vs current best SFT — this is the release gate
+python -m benchmarks.diff_results \
+    benchmarks/results/cluster_genzv2_ck1200_*/judged.json \
+    benchmarks/results/cluster_genzv5_ck200_*/judged.json \
+    --regressions-only
+
+# Unified leaderboard across all checkpoints
+python -m benchmarks.leaderboard --since 20260516
 ```
 
-Run a checkpoint sweep: genzv5_ck200, ck400, ck600, ck800, ck1000, ck1200 — find the Goldilocks zone.
+Run a checkpoint sweep: genzv5_ck200, ck400, ck600, ck800, ck1000, ck1200 — find the Goldilocks zone (v3 and v4 both peaked at ck200).
+
+### Step 5: Test the GGUF before shipping
+
+Export ck of choice → Q4_K_M GGUF → benchmark the GGUF (not the NF4 adapter):
+
+```bash
+# Export
+python scripts/export_gguf_cuda.py --adapter adapters/genzv5/checkpoint-200 \
+    --out exports/mindmate_genzv5_ck200_q4_k_m.gguf
+
+# Benchmark the actual shipping artifact
+sbatch --gres=gpu:a100-80:1 \
+    --export=ALL,GGUF_PATH=exports/mindmate_genzv5_ck200_q4_k_m.gguf,LABEL=genzv5_ck200_gguf \
+    benchmarks/run_benchmarks_v4.slurm
+
+# Compare NF4 vs GGUF on the same scenarios — flags any quantization regression
+python -m benchmarks.leaderboard --diverge-only
+```
 
 ### Expected outcomes
 

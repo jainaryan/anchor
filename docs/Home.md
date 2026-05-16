@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-15 (session 11 cont'd — v4 benchmark infrastructure 100% complete. Final piece: `benchmarks/run_benchmarks_v4.py` + `run_benchmarks_v4.slurm` — multi-turn cluster runner using shared scenarios.json + JudgeService + EvalLogger. Supports NF4 adapter, Q4_K_M GGUF (via llama-cpp-python), dynamic scenarios with Qwen3-30B simulator, temp=0 for deterministic scripted, --skip-load plumbing mode. Output dir layout matches mobile so diff/leaderboard/replay tools work transparently. 9 commits today.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-16 (session 11 wrap — v4 benchmark infrastructure 100% complete across both repos. 9 commits to mindmate (logging → scenarios → judge → mobile-judge → sync pipeline → diff/leaderboard/replay → cluster runner v4) + 4 commits to anchor-app (logger + telemetry + 61-test panic suite + shared scenarios loader + EvalRunnerV4 + memory persistence integration test). Outstanding work is now data + training (genzv5), not infrastructure.)
 
 ---
 
@@ -17,20 +17,18 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 
 ---
 
-## Quick Status (2026-05-14)
+## Quick Status (2026-05-16)
 
 | | |
 |---|---|
-| **Best overall (v3)** | `llama_base` — base model, no fine-tuning, **51%** on v3 benchmark |
-| **Best SFT checkpoint** | `genzv2_ck1200` — `adapters/genz/checkpoint-1200`, **44%** on v3, **71%** on v1 |
+| **Best SFT checkpoint** | `genzv2_ck1200` — `adapters/genz/checkpoint-1200`, **44%** on v3 benchmark (still best SFT pending genzv5) |
+| **Best on v3 overall** | `llama_base` — base model, no fine-tuning, **51%** on v3 benchmark |
 | **Best SFT GGUF** | `exports/mindmate_genzv2_ck1200_q4_k_m.gguf` |
-| **v3 benchmark** | llama_base **51%** > genzv3_ck200 45% = genzv2_ck1600 45% > genzv2_ck1200 44% > genzv4_ck200 42% |
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
-
+| **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, temp=0 for scripted. v3 stays available for legacy comparisons. See [[Benchmarks]]. |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
-| **Ablation complete** | 610501 (preamble_only): 41% · 610502 (nosys): 33% — preamble +8pp, memory blocks +10pp |
-| **Active cluster jobs** | 611377/611379–611381 — conv-memory shards 0–2 (finishing imminently) · **613218–613220** — biometric PCIe HF (~0.7-0.9/hr) · **613666–613668** — biometric SXM vLLM PENDING (~5/hr when running) · **612903–612905** — conv-memory new pool shards 3–5 · **613115–613117** — conv-memory new pool shards 6–8 |
-| **Next milestone** | genzv5 SFT once conv-memory (all shards) + biometric data lands and merges |
+| **Active cluster jobs** | 611377/611379–611381 — conv-memory shards 0–2 (finishing) · 613218–613220 — biometric PCIe HF (~0.7–0.9/hr) · 613666–613668 — biometric SXM vLLM (queued, ~5/hr when running) · 612903–612905, 613115–613117 — conv-memory new pool shards 3–8 |
+| **Next milestone** | genzv5 SFT — first model on the v4 benchmark — once conv-memory + biometric data merge |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
 ---
@@ -53,7 +51,7 @@ These are the non-obvious invariants that burn time if unknown:
 
 7. **`finetuning/` has the current scripts. Root-level scripts are legacy.** `CUDA_train_qlora.py`, `build_dataset.py`, etc. at the project root are old duplicates from early development. Always use `finetuning/CUDA_train_qlora.py`, `finetuning/build_dataset.py`, etc.
 
-8. **Benchmark scores have ±~2pt variance** at temperature=0.7. A single run can swing ±17 scenarios. Always use 3-run averaged results (`benchmarks/average_results.py --since YYYYMMDD`). Never rank models on single-run scores.
+8. **v3 benchmark scores have ±~2pt variance** at temperature=0.7. A single run can swing ±17 scenarios. Always use 3-run averaged results (`benchmarks/average_results.py --since YYYYMMDD`). Never rank models on single-run v3 scores. **v4 single/scripted_multiturn scenarios use temperature=0 and are single-run trustworthy**; only `dynamic_multiturn` (Qwen3 simulator) needs 3-run averaging in v4.
 
 9. **`--wrap` in sbatch uses `/bin/sh`, not bash.** `source` command is not available. Use `bash -c "source ... && python ..."` instead.
 

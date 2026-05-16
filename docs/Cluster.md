@@ -274,6 +274,46 @@ cat data/synthetic_train_biometric_qwen_s*.jsonl > data/synthetic_train_biometri
 
 ---
 
+## Benchmark Jobs (v4)
+
+### Cluster benchmark
+
+```bash
+# Standard NF4 adapter run (single + scripted_multiturn at temp=0, dynamic at temp=0.7)
+sbatch --gres=gpu:a100-80:1 \
+    --export=ALL,MODEL=genzv5_ck200 \
+    benchmarks/run_benchmarks_v4.slurm
+
+# GGUF run — tests what actually ships (Q4_K_M via llama-cpp-python)
+sbatch --gres=gpu:a100-80:1 \
+    --export=ALL,GGUF_PATH=exports/mindmate_genzv2_ck1200_q4_k_m.gguf,LABEL=ck1200_gguf \
+    benchmarks/run_benchmarks_v4.slurm
+
+# Scripted-only — skips dynamic scenarios (no Qwen3 simulator load)
+sbatch --gres=gpu:a100-80:1 \
+    --export=ALL,MODEL=genzv5_ck200,TYPE=single,scripted_multiturn \
+    benchmarks/run_benchmarks_v4.slurm
+```
+
+### Judging mobile transcripts
+
+```bash
+# Mobile generates raw transcripts on-device, rsynced to cluster, judged here
+sbatch --gres=gpu:a100-80:1 \
+    --export=ALL,MOBILE_RESULTS=results_pending/<run_dir>/raw.json \
+    benchmarks/judge_mobile.slurm
+```
+
+Or one-shot from laptop (handles adb pull → rsync → sbatch → fetch):
+
+```bash
+scripts/sync_mobile_eval.sh all
+```
+
+See [[Benchmarks]] → "How to judge mobile-generated transcripts" for the full pipeline.
+
+---
+
 ## See also
 
 - [[Training]] — SLURM scripts for SFT

@@ -8,32 +8,39 @@ tags: [anchor, benchmarks]
 
 ---
 
-## Suite v4 (in progress, 2026-05-15) — unified cluster + mobile benchmark
+## Suite v4 (current, released 2026-05-16) — unified cluster + mobile benchmark
 
-Building a unified benchmark system where cluster and mobile run **the same scenarios** against **the same judge** (Gemma4 on cluster). Mobile generates transcripts on-device → rsync to cluster → cluster judges → results merge back into a unified leaderboard. This finally tests what ships (Q4_K_M GGUF) and replaces manual mobile scoring with automated judging.
+The unified benchmark system. Cluster and mobile run **the same scenarios** against **the same judge** (Gemma4 on cluster). Mobile generates transcripts on-device → rsync to cluster → cluster judges → results merge into a unified leaderboard. This finally tests what ships (Q4_K_M GGUF) and replaces manual mobile scoring with automated judging.
 
-### Phase 1 progress (landed)
+### v4 by the numbers
 
-| Component | Status | File |
-|---|---|---|
-| Structured logger (JSONL + human + failure artifacts + transcripts) | ✅ | `benchmarks/logging.py` |
-| Shared scenario schema (v4) + loader | ✅ | `benchmarks/scenarios_loader.py` |
-| Port script (v3 Python → v4 JSON, round-trip verified) | ✅ | `benchmarks/_port_scenarios.py` |
-| `scenarios.json` — 83 scenarios (58 ported + 25 new dynamic), 11 categories | ✅ | `benchmarks/scenarios.json` |
-| Judge service (runtime-agnostic, ambiguity retry, scope-aware) | ✅ | `benchmarks/judge_service.py` |
-| Mobile-results judging entrypoint + SLURM | ✅ | `benchmarks/judge_mobile_results.py`, `benchmarks/judge_mobile.slurm` |
+| | |
+|---|---|
+| Scenarios | 83 across 11 categories |
+| Scripted (`single` + `scripted_multiturn`) | 38 — temperature=0, single-run trustworthy |
+| Dynamic (`dynamic_multiturn`) | 45 — Qwen3-30B simulator, temp=0.7, 3-run averaged |
+| Judge | Gemma4 26B A4B IT (bfloat16, A100-80, ~52GB VRAM) |
+| Weighted total | varies by run (sum of `weight` across `judge_criteria`) |
+| Critical categories | CRISIS (weight 2-3), SAFETY_AMBIGUITY (weight 2) |
+| New categories vs v3 | MEMORY_DRIFT, SAFETY_AMBIGUITY |
 
-### Phase 1+2 remaining
+### v4 infrastructure (all landed 2026-05-15 → 2026-05-16)
 
-| Component | Status | File |
-|---|---|---|
-| Mobile logger + telemetry + EvalRunner rewrite | ✅ | `src/eval/logger.ts`, `telemetry.ts`, `EvalRunnerV4.ts` (anchor-app) |
-| Panic detection (61 tests, 100% module coverage) | ✅ | `src/utils/__tests__/panicDetection.test.ts` (anchor-app) |
-| Memory persistence integration test (5 tests) | ✅ | `src/memory/__tests__/memoryPersistence.integration.test.ts` (anchor-app) |
-| Shared scenarios + TS parity tests | ✅ | `src/eval/scenarios_loader.ts`, `fixtures/scenarios.v4.json` (anchor-app) |
-| Rsync pipeline for mobile→cluster→mobile | ✅ | `scripts/sync_mobile_eval.sh` |
-| Diff / leaderboard / replay tools | ✅ | `benchmarks/diff_results.py`, `leaderboard.py`, `replay.py` |
-| Cluster runner v4 (multi-turn, dynamic w/ Qwen3 sim, GGUF backend, temp=0) | ✅ | `benchmarks/run_benchmarks_v4.py`, `run_benchmarks_v4.slurm` |
+| Component | File |
+|---|---|
+| Structured logger (JSONL + human + failure artifacts + transcripts) | `benchmarks/logging.py` |
+| Shared scenario schema + Python loader | `benchmarks/scenarios.json`, `benchmarks/scenarios_loader.py` |
+| Port script (v3 Python → v4 JSON, round-trip verified) | `benchmarks/_port_scenarios.py` |
+| Judge service (runtime-agnostic, ambiguity retry, scope-aware) | `benchmarks/judge_service.py` |
+| Cluster runner v4 (multi-turn, dynamic w/ Qwen3 sim, GGUF backend, temp=0) | `benchmarks/run_benchmarks_v4.py`, `run_benchmarks_v4.slurm` |
+| Mobile-results judging entrypoint + SLURM | `benchmarks/judge_mobile_results.py`, `benchmarks/judge_mobile.slurm` |
+| Diff / leaderboard / replay tools | `benchmarks/diff_results.py`, `leaderboard.py`, `replay.py` |
+| Rsync pipeline mobile→cluster→mobile | `scripts/sync_mobile_eval.sh` |
+| Mobile logger + telemetry (TS mirror of Python logger) | `src/eval/logger.ts`, `telemetry.ts` (anchor-app) |
+| Mobile EvalRunnerV4 (multi-turn, per-turn perf, no on-device judge) | `src/eval/EvalRunnerV4.ts` (anchor-app) |
+| Mobile shared scenarios + TS loader + 18 parity tests | `src/eval/scenarios_loader.ts`, `fixtures/scenarios.v4.json` (anchor-app) |
+| Panic detection unit tests (61 cases, 100% module coverage) | `src/utils/__tests__/panicDetection.test.ts` (anchor-app) |
+| Memory persistence integration test (5 tests) | `src/memory/__tests__/memoryPersistence.integration.test.ts` (anchor-app) |
 
 ### Diff, leaderboard, and replay
 
@@ -137,9 +144,52 @@ Failure artifacts include full transcript + judge raw response + cross-reference
 
 ---
 
-## Suite v3 (current) — 58 scenarios, 9 categories
+## Running a v4 benchmark
 
-**Active as of 2026-05-09. Supersedes v1 and v2.** Will be superseded by v4 once Phase 1 lands fully.
+```bash
+# Default: NF4 adapter, all 83 scenarios, scripted at temp=0
+ssh nus-student-cluster "sbatch \
+    --gres=gpu:a100-80:1 \
+    --export=ALL,MODEL=genzv5_ck200 \
+    ~/projects/mindmate/benchmarks/run_benchmarks_v4.slurm"
+
+# Test what ships — Q4_K_M GGUF via llama-cpp-python
+ssh nus-student-cluster "sbatch \
+    --gres=gpu:a100-80:1 \
+    --export=ALL,GGUF_PATH=exports/mindmate_genzv2_ck1200_q4_k_m.gguf,LABEL=ck1200_gguf \
+    ~/projects/mindmate/benchmarks/run_benchmarks_v4.slurm"
+
+# Scripted-only (skip dynamic — Qwen3 simulator is heavy)
+ssh nus-student-cluster "sbatch \
+    --gres=gpu:a100-80:1 \
+    --export=ALL,MODEL=genzv5_ck200,TYPE=single,scripted_multiturn \
+    ~/projects/mindmate/benchmarks/run_benchmarks_v4.slurm"
+
+# Single category
+ssh nus-student-cluster "sbatch \
+    --gres=gpu:a100-80:1 \
+    --export=ALL,MODEL=genzv5_ck200,CATEGORY=CRISIS \
+    ~/projects/mindmate/benchmarks/run_benchmarks_v4.slurm"
+
+# Ablation (system prompt modes)
+ssh nus-student-cluster "sbatch \
+    --gres=gpu:a100-80:1 \
+    --export=ALL,MODEL=llama_base,SYSPROMPT=none \
+    ~/projects/mindmate/benchmarks/run_benchmarks_v4.slurm"
+```
+
+Output dir: `benchmarks/results/cluster_<label>_<timestamp>/` containing:
+- `judged.json` — full results with per-scenario verdicts + summary + by_category
+- `trace.jsonl` — one JSON event per line
+- `trace.log` — human-readable mirror
+- `failures/<scenario_id>__<criterion_id>.json` — debug artifacts for every failed criterion
+- `transcripts/<scenario_id>.json` — preserved transcripts for replay
+
+---
+
+## Suite v3 (legacy) — 58 scenarios, 9 categories
+
+**Active 2026-05-09 → 2026-05-15. Superseded by v4.** Kept for legacy back-comparison and the v3 result corpus (genzv2/genzv3/genzv4 leaderboards). Use v4 for all new model evaluations including genzv5.
 
 | Parameter | Value |
 |---|---|
