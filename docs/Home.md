@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-16 (session 11 wrap — v4 benchmark infrastructure 100% complete across both repos. 9 commits to mindmate (logging → scenarios → judge → mobile-judge → sync pipeline → diff/leaderboard/replay → cluster runner v4) + 4 commits to anchor-app (logger + telemetry + 61-test panic suite + shared scenarios loader + EvalRunnerV4 + memory persistence integration test). Outstanding work is now data + training (genzv5), not infrastructure.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-16 (session 12 — cancelled stuck job 612903 (86k OOM errors, conv-memory new-pool shard 3); confirmed shards 4–8 (612904, 612905, 613115–613117) all OOM-killed at weight load, zero output. New-pool conv-memory data is essentially lost (only 10 convs in s3). session 11 wrap — v4 benchmark infrastructure 100% complete across both repos. 9 commits to mindmate (logging → scenarios → judge → mobile-judge → sync pipeline → diff/leaderboard/replay → cluster runner v4) + 4 commits to anchor-app (logger + telemetry + 61-test panic suite + shared scenarios loader + EvalRunnerV4 + memory persistence integration test). Outstanding work is now data + training (genzv5), not infrastructure.)
 
 ---
 
@@ -27,7 +27,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, temp=0 for scripted. v3 stays available for legacy comparisons. See [[Benchmarks]]. |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
-| **Active cluster jobs** | 611377/611379–611381 — conv-memory shards 0–2 (finishing) · 613218–613220 — biometric PCIe HF (~0.7–0.9/hr) · 613666–613668 — biometric SXM vLLM (queued, ~5/hr when running) · 612903–612905, 613115–613117 — conv-memory new pool shards 3–8 |
+| **Active cluster jobs** | 613218–613220 — biometric-qwen shards 0–2 (running, HF, xgph14-16) · 614942–614947 — conv-memory new-pool shards 3–8 (running, HF, H100-96, 72h) |
 | **Next milestone** | genzv5 SFT — first model on the v4 benchmark — once conv-memory + biometric data merge |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 

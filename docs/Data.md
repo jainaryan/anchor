@@ -35,12 +35,8 @@ tags: [anchor, data]
 | `synthetic_train_conv_memory_qwen_s1.jsonl` | Qwen shard 1 — same config, disjoint RNG | job 611380 |
 | `synthetic_train_conv_memory_qwen_s2.jsonl` | Qwen shard 2 — same config, disjoint RNG | job 611381 |
 | `synthetic_train_conv_memory_overref_qwen_s{0,1,2}.jsonl` | **Inspection only** — casual chats where Anchor shoehorned therapy/coping. NOT for training as-is; potential DPO negatives later | same jobs (filter side-channel) |
-| `synthetic_train_conv_memory_qwen_s3.jsonl` | Qwen shard 3 — **new profiles only** (`PROFILE_SET=new`): 18 new clinical + 10 new companion (28 total), 47 facts, 2 new modes | job 612903 |
-| `synthetic_train_conv_memory_qwen_s4.jsonl` | Qwen shard 4 — same config as shard 3, disjoint RNG | job 612904 |
-| `synthetic_train_conv_memory_qwen_s5.jsonl` | Qwen shard 5 — same config as shard 3, disjoint RNG | job 612905 |
-| `synthetic_train_conv_memory_qwen_s6.jsonl` | Qwen shard 6 — same config as shard 3, disjoint RNG | job 613115 |
-| `synthetic_train_conv_memory_qwen_s7.jsonl` | Qwen shard 7 — same config as shard 3, disjoint RNG | job 613116 |
-| `synthetic_train_conv_memory_qwen_s8.jsonl` | Qwen shard 8 — same config as shard 3, disjoint RNG | job 613117 |
+| `synthetic_train_conv_memory_qwen_s3.jsonl` | Qwen shard 3 — **new profiles only** (`PROFILE_SET=new`): 18 new clinical + 10 new companion (28 total), 47 facts, 2 new modes. **❌ FAILED** — job 612903 OOM'd during inference after generating only 10 conversations. Ran stuck in OOM loop for 2+ days before cancellation. | job 612903 (cancelled) |
+| `synthetic_train_conv_memory_qwen_s4–s8.jsonl` | Shards 4–8 — same new-profile config. **❌ ALL FAILED** — jobs 612904, 612905, 613115–613117 all OOM-killed at weight loading (~55% through 531 shards). Zero data produced. Root cause: new-pool script loads Qwen3-30B differently and uses more RAM than the original shards 0–2. | jobs 612904, 612905, 613115–613117 (OOM-killed) |
 
 ### Biometric SFT data (biometric context handling, in progress)
 
@@ -115,9 +111,12 @@ All files live in `~/projects/mindmate/data/` (local) and mirrored on cluster. A
 | `synthetic_train_therapist_.jsonl` | 2,637 | Therapeutic dialogue | `synthetic/pipeline.py` | ✅ normalized |
 | `synthetic_train_biometric.jsonl` | **2,348** | Biometric health context (sleep, HRV, mood) | `synthetic/biometric_sft_pipeline.py`, job 599030 | ✅ normalized |
 | `synthetic_train_targeted_fixes.jsonl` | **181** | Hand-crafted gold examples | Manual + targeted scripts | ✅ normalized |
-| `synthetic_train_conv_memory.jsonl` | **~7k–10k (generating)** | Multi-turn + memory context, teacher-as-Anchor v2 | `synthetic/conversation_memory_pipeline.py`, jobs 609110–609111 | 🟢 RUNNING (72h A100-80, finishing) |
-| `synthetic_train_conv_memory_qwen.jsonl` | **(generating, pre-shard)** | Same pipeline, Qwen3-30B teacher, 65/35 casual/clinical | jobs 611377 | 🟢 RUNNING |
-| `synthetic_train_conv_memory_qwen_s{0,1,2}.jsonl` | **(3 parallel shards, generating)** | Qwen3-30B teacher, **50/50 casual/clinical mix**, over-reference filter routes therapy-shoehorned casual chats to `_overref_qwen_s*.jsonl` for inspection | `synthetic/conversation_memory_pipeline.py` + `finetuning/launch_conv_memory_shards.sh`, jobs 611379–611381 | 🟢 RUNNING (72h A100-80 each, 3 parallel) |
+| `synthetic_train_conv_memory.jsonl` | 845KB | Multi-turn + memory context, teacher-as-Anchor v2, Gemma4, 65/35 mix | `synthetic/conversation_memory_pipeline.py`, jobs 609110–609111 | ✅ DONE |
+| `synthetic_train_conv_memory_qwen.jsonl` | 1.6MB | Same pipeline, Qwen3-30B teacher, 65/35 casual/clinical | job 611377 | ✅ DONE |
+| `synthetic_train_conv_memory_qwen_s{0,1,2}.jsonl` | ~1.6–1.7MB each | Qwen3-30B, **50/50 mix**, over-reference filter | jobs 611379–611381 | ✅ DONE |
+| `synthetic_train_conv_memory_overref_qwen_s{0,1,2}.jsonl` | 42–72KB each | Inspection only — casual where Anchor over-therapized | jobs 611379–611381 | ✅ DONE (not for training) |
+| `synthetic_train_conv_memory_qwen_s3.jsonl` | 48KB (10 convs) | New-profile pool attempt — **❌ OOM, barely started** | job 612903 | ❌ FAILED |
+| `synthetic_train_conv_memory_qwen_s{4–8}.jsonl` | — (no files) | New-profile pool shards — **❌ all OOM-killed at weight load** | jobs 612904, 612905, 613115–613117 | ❌ FAILED |
 
 **Total normalized: 42,038 examples** (not counting conv_memory, which generates in correct format already)
 
