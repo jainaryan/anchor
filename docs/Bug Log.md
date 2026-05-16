@@ -8,6 +8,20 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-05-17
+
+### vLLM fails on H100-96 nodes (CUDA fork error)
+- **Jobs:** 614822–614827 (conv-memory new-pool shards 3–8, first H100 attempt)
+- **Error:** `RuntimeError: Cannot re-initialize CUDA in forked subprocess` — vLLM's EngineCore uses `fork` start method, which breaks CUDA on H100 nodes
+- **Fix:** Set `USE_VLLM=0` in `finetuning/conv_memory_pipeline_qwen.slurm` — falls back to HuggingFace backend (proven working on biometric jobs 613218–613220)
+- **Resubmitted:** jobs 614942–614947 on H100-96 with HF backend, loading successfully
+
+### New-pool conv-memory shards OOM on A100-80
+- **Jobs:** 612903–612905, 613115–613117 (shards 3–8, first attempt on A100-80)
+- **Error:** 612903 got 10 convs then OOM'd in inference loop for 2+ days; 612904+ OOM-killed at ~55% weight load
+- **Root cause:** `USE_VLLM=1` causes vLLM to pre-allocate KV cache on top of 30B model weights, exceeding 80GB
+- **Fix:** Moved to H100-96 (96GB) + disabled vLLM
+
 ---
 
 ## 2026-05-14 (Sessions 7–8)
