@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=mindmate-conv-memory-qwen
+#SBATCH --job-name=mindmate-crisis-help-qwen
 #SBATCH --output=/home/a/aryanj/logs/%x_%j.out
 #SBATCH --error=/home/a/aryanj/logs/%x_%j.err
 #SBATCH --nodes=1
@@ -8,16 +8,17 @@
 #SBATCH --mem=64G
 #SBATCH --partition=gpu-long
 #SBATCH --gres=gpu:h100-96:1
-#SBATCH --time=72:00:00
+#SBATCH --time=48:00:00
 
 PROJECT_DIR=~/projects/mindmate
 
 echo "======================================="
-echo "  MindMate Conversation+Memory Pipeline"
+echo "  MindMate Crisis + Help Mode Pipeline"
 echo "  Teacher: Qwen3-30B-A3B"
 echo "  Job: $SLURM_JOB_ID"
 echo "  Node: $SLURMD_NODENAME"
 echo "  Started: $(date)"
+echo "  PIPELINE_MODE: ${PIPELINE_MODE:-crisis}"
 echo "======================================="
 
 source $PROJECT_DIR/mindmatenv/bin/activate
@@ -29,14 +30,16 @@ cd $PROJECT_DIR
 export TEACHER_MODEL=30b
 export OUT_LABEL=qwen
 
-# USE_VLLM=0: vLLM fails on H100 nodes (CUDA fork issue — cannot re-init CUDA in forked subprocess).
-# HF backend is proven to work (biometric jobs 613218-613220 ran fine with USE_VLLM=0).
+# USE_VLLM=0: vLLM fails on H100 nodes (CUDA fork issue).
+# HF backend proven stable on H100-96 (conv-memory jobs 614942-614947 ran with it).
 export USE_VLLM=0
 echo "[Setup] USE_VLLM=$USE_VLLM"
 
-# Shard support — pass SHARD_IDX via --export=ALL,SHARD_IDX=N when submitting.
-# Without it, runs as a single unsharded job (writes to *_qwen.jsonl).
-# With SHARD_IDX=0,1,2 → three parallel jobs writing to *_qwen_s0.jsonl etc.
+# PIPELINE_MODE is passed via --export=ALL,PIPELINE_MODE=crisis (or help_mode).
+# Defaults to 'crisis' if not set.
+export PIPELINE_MODE=${PIPELINE_MODE:-crisis}
+
+# SHARD_IDX support — pass via --export=ALL,PIPELINE_MODE=crisis,SHARD_IDX=0
 if [ -n "${SHARD_IDX:-}" ]; then
   echo "[Setup] Running as shard $SHARD_IDX"
 fi
@@ -48,7 +51,7 @@ if [ -z "${HF_TOKEN:-}" ]; then
   echo "ERROR: HF_TOKEN not set" && exit 1
 fi
 
-echo "Starting conversation+memory data pipeline (Qwen3-30B-A3B)..."
-python synthetic/conversation_memory_pipeline.py
+echo "Starting ${PIPELINE_MODE} pipeline (Qwen3-30B-A3B, HF backend)..."
+python synthetic/crisis_help_pipeline.py
 
 echo "Pipeline finished at $(date)"

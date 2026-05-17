@@ -23,42 +23,70 @@ What this changes for genzv5:
 
 ## Immediate — Waiting on Cluster
 
-### 1. Wait for conv-memory + biometric pipelines to finish
+### 1. genzv5 data mix status (2026-05-17)
 
-| Jobs | Expected finish | Output |
+**Done — ready to include:**
+
+| File | Rows | Notes |
 |---|---|---|
-| 611377, 611379–611381 | ~2026-05-15 | `synthetic_train_conv_memory_qwen*.jsonl` (4 files, ~1,400 examples total) |
-| 612894–612896 | ~2026-05-17 | `synthetic_train_biometric_qwen_s{0,1,2}.jsonl` |
+| `synthetic_train_targeted_fix.jsonl` | 13,524 | help_mode + memory_recall, normalized |
+| `synthetic_train_friend_1.jsonl` | 7,380 | friend tone, normalized |
+| `synthetic_train_transition.jsonl` | 6,184 | casual→emotional pivot, normalized |
+| `synthetic_train_casual.jsonl` | 5,000 | non-distress casual, normalized |
+| `synthetic_train.jsonl` | 5,565 | grief/loss, normalized |
+| `synthetic_train_therapist_.jsonl` | 2,637 | therapeutic, normalized |
+| `synthetic_train_targeted_fixes.jsonl` | 181 | gold examples, 100% inclusion |
+| `synthetic_train_conv_memory_qwen.jsonl` (pre-shard) | 299 | ready |
+| `synthetic_train_conv_memory_qwen_s0.jsonl` | 335 | ready |
+| `synthetic_train_conv_memory_qwen_s1.jsonl` | 316 | ready |
+| `synthetic_train_conv_memory_qwen_s2.jsonl` | 324 | ready |
+| `synthetic_train_biometric_qwen_s0.jsonl` | 993 | ready |
+| `synthetic_train_biometric_qwen_s1.jsonl` | 80 | ready (short — less wall time) |
+| `synthetic_train_biometric_qwen_s2.jsonl` | 78 | ready (short — less wall time) |
+| `synthetic_train_biometric.jsonl` (old Gemma4) | 2,348 | keep — additive to Qwen biometric |
+| `synthetic_train_conv_memory.jsonl` (old Gemma4) | 167 | keep — additive to Qwen conv-memory |
+| **Conv-memory total (done)** | **1,441** | 1,274 Qwen + 167 Gemma4 |
+| **Biometric total (done)** | **3,499** | 1,151 Qwen + 2,348 Gemma4 |
+
+**Generating now (active cluster jobs):**
+
+| Jobs | What | Expected rows | ETA |
+|---|---|---|---|
+| 615485–615490 | conv-memory new-pool shards 3–8 (`PROFILE_SET=new`) | ~1,800–3,000 | ~72h from 2026-05-17 |
+| 615491–615493 | biometric shards 3–5 | ~2,900 (s0 throughput × 3) | ~72h from 2026-05-17 |
+
+**Not yet started — MISSING:**
+
+| What | Rows | Blocker |
+|---|---|---|
+| `synthetic_train_crisis_qwen.jsonl` | 0 | `launch_crisis_help.sh` built + synced but not submitted |
+| `synthetic_train_help_mode_qwen.jsonl` | 0 | same |
+
+**On hold (do not include in genzv5 yet):**
+
+| File | Rows | Reason |
+|---|---|---|
+| `synthetic_train_conv_memory_overref_qwen_s*.jsonl` | 29 (~12 false pos + 17 genuine) | See Bug Log 2026-05-17 — revisit as DPO after genzv5 |
+| `synthetic_train_conv_memory_overref_qwen_s*.jsonl` | 29 (~12 false pos + 17 genuine) | See Bug Log 2026-05-17 — revisit as DPO after genzv5 |
+
+### 2. Unblock crisis + help_mode data generation
+
+`launch_crisis_help.sh` is synced to the cluster. Just submit it:
 
 ```bash
-# Check status
-ssh nus-student-cluster "squeue -u aryanj"
+ssh nus-student-cluster "cd ~/projects/mindmate && bash finetuning/launch_crisis_help.sh"
+```
 
-# Pull conv-memory results once done (all shards + pre-shard run)
-rsync -az -e "ssh -o LogLevel=QUIET" \
-  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_qwen.jsonl" \
-  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_qwen_s0.jsonl" \
-  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_qwen_s1.jsonl" \
-  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_qwen_s2.jsonl" \
-  data/
+This submits 2 jobs (one `PIPELINE_MODE=crisis`, one `PIPELINE_MODE=help_mode`). Each runs 48h on H100-96 with `--mem=64G`.
 
-# Merge shards locally (or on cluster)
-cat data/synthetic_train_conv_memory_qwen_s*.jsonl > data/synthetic_train_conv_memory_qwen_merged.jsonl
+### 3. Merge shards once done
 
-# Pull biometric results once done
-rsync -az -e "ssh -o LogLevel=QUIET" \
-  "nus-student-cluster:projects/mindmate/data/synthetic_train_biometric_qwen_s0.jsonl" \
-  "nus-student-cluster:projects/mindmate/data/synthetic_train_biometric_qwen_s1.jsonl" \
-  "nus-student-cluster:projects/mindmate/data/synthetic_train_biometric_qwen_s2.jsonl" \
-  data/
-cat data/synthetic_train_biometric_qwen_s*.jsonl > data/synthetic_train_biometric_qwen.jsonl
+```bash
+# Conv-memory (all shards including new-pool)
+cat data/synthetic_train_conv_memory_qwen*.jsonl > data/synthetic_train_conv_memory_qwen_merged.jsonl
 
-# Also pull overref files for inspection (potential DPO negatives)
-rsync -az -e "ssh -o LogLevel=QUIET" \
-  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_overref_qwen_s0.jsonl" \
-  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_overref_qwen_s1.jsonl" \
-  "nus-student-cluster:projects/mindmate/data/synthetic_train_conv_memory_overref_qwen_s2.jsonl" \
-  data/
+# Biometric (all shards)
+cat data/synthetic_train_biometric_qwen_s*.jsonl > data/synthetic_train_biometric_qwen_merged.jsonl
 ```
 
 ---

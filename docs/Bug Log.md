@@ -10,6 +10,12 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-17
 
+### Over-reference filter: 12 false positives held as future DPO negatives
+- **File:** `data/synthetic_train_conv_memory_overref_*.jsonl` (29 total examples)
+- **Split:** ~12 false positives (seed `new_fact = "They had a really good therapy session today."` — Anchor correctly using "therapist/therapy" in response to a user who mentioned their session), ~17 genuine overrefs (Anchor injecting clinical framing into casual chat unprompted)
+- **Action:** The 12 false positives are **held** — do not include in genzv5 training data or DPO now. Revisit after genzv5 ships as potential DPO negatives with a corrected filter (whitelist user-mentioned therapy seeds).
+- **Genuine overrefs:** Also held for now (post-genzv5 DPO). Both sets remain in `_overref_*` files.
+
 ### vLLM fails on H100-96 nodes (CUDA fork error)
 - **Jobs:** 614822–614827 (conv-memory new-pool shards 3–8, first H100 attempt)
 - **Error:** `RuntimeError: Cannot re-initialize CUDA in forked subprocess` — vLLM's EngineCore uses `fork` start method, which breaks CUDA on H100 nodes
