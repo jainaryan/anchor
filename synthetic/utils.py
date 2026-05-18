@@ -137,16 +137,12 @@ class TeacherModel:
         Qwen3-30B-A3B-Instruct-2507 (MoE) is supported via Qwen3MoeForCausalLM.
         GPU memory: ~60GB model + ~10GB KV cache on A100-80 with util=0.90.
 
-        Always defaults to V0 engine (VLLM_USE_V1=0) unless the caller explicitly
-        sets VLLM_USE_V1=1. V1's EngineCore spawns a subprocess via fork, which
-        cannot re-initialize CUDA on H100 nodes — the V0 engine runs in-process
-        with no subprocess and is stable on all tested node types.
+        CLUSTER NOTE (2026-05-19): H100-96 nodes run CUDA driver 12090 (12.0.90).
+        vLLM V1 calls torch.accelerator.set_device_index() which requires a newer
+        driver → DeferredCudaCallError. Both subprocess and in-process modes fail.
+        Use USE_VLLM=0 (HF backend) on this cluster. vLLM may work on newer nodes.
         """
-        # Default to V0 (safe on H100, no fork/CUDA re-init issues).
-        # Must be set before vllm imports to take effect.
-        if os.environ.get("VLLM_USE_V1", "") != "1":
-            os.environ["VLLM_USE_V1"] = "0"
-            print("[Teacher] vLLM V0 engine (VLLM_USE_V1=0) — safe on H100 nodes")
+        print("[Teacher] vLLM V1 engine — loading")
 
         try:
             from vllm import LLM

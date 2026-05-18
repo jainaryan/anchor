@@ -10,6 +10,14 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-19
 
+### CORRECTION: vLLM V1 permanently incompatible with cluster CUDA driver — HF backend is permanent
+- **Corrects:** "vLLM re-enabled on H100-96" entry below (that entry was wrong — vLLM never worked)
+- **Root cause (definitive):** H100-96 nodes run CUDA driver 12090 (CUDA 12.0.90). vLLM 0.20.2 V1 engine calls `torch.accelerator.set_device_index()` during `init_device()`. This API path requires a newer driver → `torch.cuda.DeferredCudaCallError: name '_get_device_properties' is not defined`. Affects both multiprocessing (subprocess fork) and in-process (VLLM_ENABLE_V1_MULTIPROCESSING=0) modes — same `torch.accelerator` call in both paths.
+- **`VLLM_USE_V1=0`**: Unrecognized env var in vLLM ≥0.6. V0 engine no longer exists. The env var was silently ignored (WARNING: Unknown vLLM environment variable). All V1-disable attempts were no-ops.
+- **What was tried (all failed):** (1) `VLLM_USE_V1=0` — unrecognized, no-op. (2) `multiprocessing.set_start_method('spawn')` — vLLM uses `multiprocessing.get_context('fork')` explicitly, bypassing global method. (3) `VLLM_ENABLE_V1_MULTIPROCESSING=0` — runs EngineCore in-process but `torch.accelerator` still called.
+- **Fix:** `USE_VLLM=0` in all SLURM scripts on this cluster. HF backend works fine (never calls `torch.accelerator`). Crisis pipeline SLURM script updated to `USE_VLLM=0`. Phase 1 batching via `PHASE1_BATCH_SIZE` env var is still wired but has no effect with HF backend (sequential only).
+- **If a new node pool with CUDA ≥12.1 becomes available**, vLLM V1 should work — the code path is in place in `_load_vllm()`.
+
 ### CRISIS calibration + holdout scenarios added (benchmark integrity)
 - **Files:** `benchmarks/crisis_calibration.py` (new), `benchmarks/scenarios_holdout.py` (new), `benchmarks/scenarios.json`, `benchmarks/scenarios.py`, `benchmarks/scenarios_loader.py`, `benchmarks/run_benchmarks_v4.py`
 - **Motivation:** All 13 CRISIS scenarios are now tagged with `distress_level: 1|2|3` (1=ambiguous vague hopelessness, 2=passive ideation/help-seeking, 3=explicit SI/active plan). This enables detecting the most dangerous SFT failure mode: a model that handles mild crisis signals but fails at explicit SI moments.

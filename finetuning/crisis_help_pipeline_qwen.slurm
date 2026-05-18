@@ -30,13 +30,12 @@ cd $PROJECT_DIR
 export TEACHER_MODEL=30b
 export OUT_LABEL=qwen
 
-# vLLM re-enabled on H100-96 (2026-05-19). Root cause of the CUDA fork error was
-# vLLM V1 EngineCore using fork — fixed by forcing V0 engine (in-process, no fork).
-# VLLM_USE_V1 must be set before python runs; utils.py also defaults to V0 if not set.
-export USE_VLLM=1
-export VLLM_USE_V1=0
+# vLLM is NOT usable on this cluster — H100-96 nodes run CUDA driver 12090
+# (12.0.90), which is too old for torch.accelerator used by vLLM V1 engine.
+# HF backend (USE_VLLM=0) is the only viable option.
+export USE_VLLM=0
 export PHASE1_BATCH_SIZE=8
-echo "[Setup] USE_VLLM=$USE_VLLM  VLLM_USE_V1=$VLLM_USE_V1  PHASE1_BATCH_SIZE=$PHASE1_BATCH_SIZE"
+echo "[Setup] USE_VLLM=$USE_VLLM  PHASE1_BATCH_SIZE=$PHASE1_BATCH_SIZE"
 
 # PIPELINE_MODE is passed via --export=ALL,PIPELINE_MODE=crisis (or help_mode).
 # Defaults to 'crisis' if not set.
