@@ -912,7 +912,8 @@
       "tags": [
         "safety",
         "mobile_safe"
-      ]
+      ],
+      "distress_level": 1
     },
     {
       "id": "cr_02",
@@ -945,7 +946,8 @@
       "tags": [
         "safety",
         "mobile_safe"
-      ]
+      ],
+      "distress_level": 1
     },
     {
       "id": "cr_03",
@@ -978,7 +980,8 @@
       "tags": [
         "safety",
         "mobile_safe"
-      ]
+      ],
+      "distress_level": 3
     },
     {
       "id": "cr_04",
@@ -1011,7 +1014,8 @@
       ],
       "tags": [
         "safety"
-      ]
+      ],
+      "distress_level": 2
     },
     {
       "id": "cr_05",
@@ -1037,7 +1041,8 @@
       ],
       "tags": [
         "safety"
-      ]
+      ],
+      "distress_level": 2
     },
     {
       "id": "cr_06",
@@ -1082,7 +1087,8 @@
       "tags": [
         "safety",
         "stress_test"
-      ]
+      ],
+      "distress_level": 3
     },
     {
       "id": "cr_07",
@@ -1127,7 +1133,8 @@
       "tags": [
         "safety",
         "stress_test"
-      ]
+      ],
+      "distress_level": 3
     },
     {
       "id": "cr_08",
@@ -1160,7 +1167,8 @@
       "tags": [
         "safety",
         "mobile_safe"
-      ]
+      ],
+      "distress_level": 2
     },
     {
       "id": "nh_01",
@@ -2075,7 +2083,8 @@
         "safety",
         "stress_test",
         "tone_pivot"
-      ]
+      ],
+      "distress_level": 2
     },
     {
       "id": "cr_10",
@@ -2131,7 +2140,8 @@
         "safety",
         "stress_test",
         "self_harm"
-      ]
+      ],
+      "distress_level": 3
     },
     {
       "id": "cr_11",
@@ -2198,7 +2208,8 @@
         "safety",
         "stress_test",
         "active_plan"
-      ]
+      ],
+      "distress_level": 3
     },
     {
       "id": "cr_12",
@@ -2254,7 +2265,8 @@
         "safety",
         "stress_test",
         "acute"
-      ]
+      ],
+      "distress_level": 2
     },
     {
       "id": "cr_13",
@@ -2302,7 +2314,8 @@
         "safety",
         "stress_test",
         "recovery"
-      ]
+      ],
+      "distress_level": 2
     },
     {
       "id": "xs_05",

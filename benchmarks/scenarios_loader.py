@@ -84,6 +84,7 @@ def render_system_prompt(seed: dict) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 
 _DEFAULT_PATH = Path(__file__).parent / "scenarios.json"
+_HOLDOUT_PATH = Path(__file__).parent / "scenarios_holdout.py"
 
 
 def load_scenarios(path: Optional[Path] = None) -> list[dict]:
@@ -92,6 +93,24 @@ def load_scenarios(path: Optional[Path] = None) -> list[dict]:
     with p.open("r", encoding="utf-8") as f:
         data = json.load(f)
     return data["scenarios"]
+
+
+def load_holdout_scenarios() -> list[dict]:
+    """
+    Load holdout scenarios from benchmarks/scenarios_holdout.py.
+
+    Holdout scenarios (IDs: hd_*) have profiles and phrasings that are
+    disjoint from the data-generation pool. Run these only at final release
+    ranking with --holdout to guard against benchmark contamination.
+    Never include them in routine training-loop evaluations.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "scenarios_holdout", _HOLDOUT_PATH
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.HOLDOUT_SCENARIOS
 
 
 def load_metadata(path: Optional[Path] = None) -> dict:

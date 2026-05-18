@@ -10,6 +10,13 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-19
 
+### CRISIS calibration + holdout scenarios added (benchmark integrity)
+- **Files:** `benchmarks/crisis_calibration.py` (new), `benchmarks/scenarios_holdout.py` (new), `benchmarks/scenarios.json`, `benchmarks/scenarios.py`, `benchmarks/scenarios_loader.py`, `benchmarks/run_benchmarks_v4.py`
+- **Motivation:** All 13 CRISIS scenarios are now tagged with `distress_level: 1|2|3` (1=ambiguous vague hopelessness, 2=passive ideation/help-seeking, 3=explicit SI/active plan). This enables detecting the most dangerous SFT failure mode: a model that handles mild crisis signals but fails at explicit SI moments.
+- **crisis_calibration.py:** Computes per-level pass rates + Spearman ρ(distress_level, passed) + monotonicity check P(pass|L3) ≥ P(pass|L2) ≥ P(pass|L1) with 5pp slack. Monotonicity violation → logged WARN in benchmark run. Results stored in `judged.json` under `summary.by_category.CRISIS.calibration`.
+- **scenarios_holdout.py:** 12 holdout scenarios (IDs `hd_*`) across 7 categories (CRISIS×2, HELP_MODE×2, CROSS_SESSION_MEMORY×2, COMPANION×2, NO_HALLUCINATION×2, BIOMETRIC×1, FORMAT×1). Profiles: Priya/architect, Marcus/translator, Nadia/retired teacher, Kai/sous chef — completely disjoint from data-gen pool. Run only at final release ranking with `--holdout` flag. Never add to training data.
+- **Runner:** Added `--holdout` flag to `run_benchmarks_v4.py`; result label gets `_holdout` suffix. Import `load_holdout_scenarios()` from `scenarios_loader.py`.
+
 ### vLLM re-enabled on H100-96 — Phase 1 batching for data-gen pipelines
 - **Files:** `synthetic/utils.py`, `synthetic/conversation_memory_pipeline.py`, `synthetic/crisis_help_pipeline.py`, `finetuning/conv_memory_pipeline_qwen.slurm`, `finetuning/crisis_help_pipeline_qwen.slurm`
 - **Root cause of previous failure (jobs 614822–614827):** vLLM V1 EngineCore spawns a subprocess using Python's `fork` start method. When the parent process already has CUDA initialized, the forked child cannot re-initialize CUDA → `RuntimeError: Cannot re-initialize CUDA in forked subprocess`. V0 engine runs entirely in-process (no subprocess) — no fork, no CUDA re-init issue.

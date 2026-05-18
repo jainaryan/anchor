@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-19 (category-conditional loss weighting + MinHash near-dedup + fixed extra_paths bug; vLLM re-enabled on H100-96 with Phase 1 batching for data-gen pipelines. See Bug Log 2026-05-19.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-19 (category-conditional loss weighting + MinHash near-dedup + fixed extra_paths bug; vLLM re-enabled on H100-96 with Phase 1 batching; CRISIS calibration (distress_level + Spearman ρ + monotonicity) + holdout scenario set (12 hd_* scenarios, disjoint profiles). See Bug Log 2026-05-19.)
 
 ---
 
