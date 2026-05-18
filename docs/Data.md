@@ -6,7 +6,7 @@ tags: [anchor, data]
 
 ← [[Home]]
 
-> **2026-05-19 pipeline update:** vLLM re-enabled on H100-96 nodes (V0 engine, `VLLM_USE_V1=0`) + Phase 1 user-simulator batching (`PHASE1_BATCH_SIZE=8`). Conv-memory and crisis/help pipelines now submit 8 user-simulator prompts per vLLM call — estimate 2–4× end-to-end throughput improvement. Biometric pipeline (A100-40 nodes, CUDA 12.0) unchanged.
+> **2026-05-19 status:** vLLM is permanently incompatible with all cluster nodes — H100-96 CUDA driver 12090 (12.0.90) too old for `torch.accelerator` used by vLLM V1. HF backend (`USE_VLLM=0`) is the only viable option on this cluster. Crisis (job 616436) and help_mode (job 615518) pipelines are now running with HF backend. See Bug Log 2026-05-19 for full failure history.
 
 ---
 
@@ -39,6 +39,16 @@ tags: [anchor, data]
 | `synthetic_train_conv_memory_overref_qwen_s{0,1,2}.jsonl` | **Inspection only** — casual chats where Anchor shoehorned therapy/coping. NOT for training as-is; potential DPO negatives later | same jobs (filter side-channel) |
 | `synthetic_train_conv_memory_qwen_s3.jsonl` | Qwen shard 3 — **new profiles only** (`PROFILE_SET=new`): 18 new clinical + 10 new companion (28 total), 47 facts, 2 new modes. **❌ FAILED** — job 612903 OOM'd during inference after generating only 10 conversations. Ran stuck in OOM loop for 2+ days before cancellation. | job 612903 (cancelled) |
 | `synthetic_train_conv_memory_qwen_s4–s8.jsonl` | Shards 4–8 — same new-profile config. **❌ ALL FAILED** — jobs 612904, 612905, 613115–613117 all OOM-killed at weight loading (~55% through 531 shards). Zero data produced. Root cause: new-pool script loads Qwen3-30B differently and uses more RAM than the original shards 0–2. | jobs 612904, 612905, 613115–613117 (OOM-killed) |
+
+### Crisis + help_mode SFT data (in progress)
+
+Teaches Anchor to handle the two categories most degraded by SFT: CRISIS (67%→48%) and HELP_MODE (58%→25-44%).
+Two-phase teacher-as-Anchor. Crisis: 4 modes (passive_si 30%, humor_deflect 20%, active_si 20%, ambiguous 30%). Help: 3 modes (cold_open 50%, mid_session 30%, not_working 20%).
+
+| File | Role | Origin |
+|---|---|---|
+| `synthetic_train_crisis_qwen.jsonl` | Crisis SFT — Anchor catches passive/active SI, deflection, ambiguous signals | job 616436 🟢 RUNNING |
+| `synthetic_train_help_mode_qwen.jsonl` | Help mode SFT — Anchor gives technique in first turn on explicit help request | job 615518 🟢 RUNNING |
 
 ### Biometric SFT data (biometric context handling, in progress)
 

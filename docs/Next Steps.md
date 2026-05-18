@@ -54,13 +54,10 @@ What this changes for genzv5:
 |---|---|---|---|
 | 615485–615490 | conv-memory new-pool shards 3–8 (`PROFILE_SET=new`) | ~1,800–3,000 | ~72h from 2026-05-17 |
 | 615491–615493 | biometric shards 3–5 | ~2,900 (s0 throughput × 3) | ~72h from 2026-05-17 |
+| **615518** | help_mode pipeline (HF backend) | TBD | 48h from 2026-05-19 |
+| **616436** | crisis pipeline (HF backend) | TBD | 48h from 2026-05-19 |
 
-**Not yet started — MISSING:**
-
-| What | Rows | Blocker |
-|---|---|---|
-| `synthetic_train_crisis_qwen.jsonl` | 0 | `launch_crisis_help.sh` built + synced but not submitted |
-| `synthetic_train_help_mode_qwen.jsonl` | 0 | same |
+Note: vLLM is incompatible with the cluster's CUDA driver (12.0.90). All data-gen jobs use HF backend (`USE_VLLM=0`). Phase 1 batching (`PHASE1_BATCH_SIZE`) has no effect with HF.
 
 **On hold (do not include in genzv5 yet):**
 
@@ -69,15 +66,9 @@ What this changes for genzv5:
 | `synthetic_train_conv_memory_overref_qwen_s*.jsonl` | 29 (~12 false pos + 17 genuine) | See Bug Log 2026-05-17 — revisit as DPO after genzv5 |
 | `synthetic_train_conv_memory_overref_qwen_s*.jsonl` | 29 (~12 false pos + 17 genuine) | See Bug Log 2026-05-17 — revisit as DPO after genzv5 |
 
-### 2. Unblock crisis + help_mode data generation
+### 2. ✅ Crisis + help_mode data generation — now running
 
-`launch_crisis_help.sh` is synced to the cluster. Just submit it:
-
-```bash
-ssh nus-student-cluster "cd ~/projects/mindmate && bash finetuning/launch_crisis_help.sh"
-```
-
-This submits 2 jobs (one `PIPELINE_MODE=crisis`, one `PIPELINE_MODE=help_mode`). Each runs 48h on H100-96 with `--mem=64G`.
+Jobs 616436 (crisis) and 615518 (help_mode) are running on H100-96 with HF backend (`USE_VLLM=0`). No action needed until they finish. Note: vLLM is permanently incompatible with the cluster — see Bug Log 2026-05-19.
 
 ### 3. Merge shards once done
 
