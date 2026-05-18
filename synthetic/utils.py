@@ -137,13 +137,16 @@ class TeacherModel:
         Qwen3-30B-A3B-Instruct-2507 (MoE) is supported via Qwen3MoeForCausalLM.
         GPU memory: ~60GB model + ~10GB KV cache on A100-80 with util=0.90.
 
-        VLLM_USE_V1=0 forces V0 engine (no subprocess EngineCore), needed on
-        nodes with CUDA 12.0.x where V1's subprocess init crashes.
+        Always defaults to V0 engine (VLLM_USE_V1=0) unless the caller explicitly
+        sets VLLM_USE_V1=1. V1's EngineCore spawns a subprocess via fork, which
+        cannot re-initialize CUDA on H100 nodes — the V0 engine runs in-process
+        with no subprocess and is stable on all tested node types.
         """
+        # Default to V0 (safe on H100, no fork/CUDA re-init issues).
         # Must be set before vllm imports to take effect.
-        if os.environ.get("VLLM_USE_V1", "") == "0":
+        if os.environ.get("VLLM_USE_V1", "") != "1":
             os.environ["VLLM_USE_V1"] = "0"
-            print("[Teacher] Forcing vLLM V0 engine (VLLM_USE_V1=0)")
+            print("[Teacher] vLLM V0 engine (VLLM_USE_V1=0) — safe on H100 nodes")
 
         try:
             from vllm import LLM
@@ -170,23 +173,32 @@ class TeacherModel:
         print("[Teacher] vLLM engine ready.")
 
     def _vllm_call(self, messages: list, max_new_tokens: int, temperature: float) -> str:
+        return self._vllm_batch_call([messages], max_new_tokens, temperature)[0]
+
+    def _vllm_batch_call(self, messages_list: list, max_new_tokens: int, temperature: float) -> list:
+        """Submit all prompts in one vLLM request — continuous batching handles them in parallel."""
         from vllm import SamplingParams
-        try:
-            prompt = self.tokenizer.apply_chat_template(
-                messages, enable_thinking=False,
-                tokenize=False, add_generation_prompt=True,
-            )
-        except TypeError:
-            prompt = self.tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True,
-            )
+
+        prompts = []
+        for messages in messages_list:
+            try:
+                p = self.tokenizer.apply_chat_template(
+                    messages, enable_thinking=False,
+                    tokenize=False, add_generation_prompt=True,
+                )
+            except TypeError:
+                p = self.tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True,
+                )
+            prompts.append(p)
+
         params = SamplingParams(
             temperature=temperature,
             top_p=0.9,
             max_tokens=max_new_tokens,
         )
-        outputs = self.vllm_engine.generate([prompt], params)
-        return outputs[0].outputs[0].text
+        outputs = self.vllm_engine.generate(prompts, params)
+        return [o.outputs[0].text for o in outputs]
 
     # ── Public API (same interface regardless of backend) ──────────────────────
 
@@ -207,6 +219,27 @@ class TeacherModel:
             {"role": "user", "content": prompt},
         ]
         return self._call(messages, max_new_tokens, temperature)
+
+    def generate_batch(self, prompts: list, max_new_tokens: int = 1000, temperature: float = 0.7) -> list:
+        """
+        Batch version of generate(). Passes all prompts in a single vLLM call so they
+        are processed in parallel via continuous batching. HF backend falls back to a
+        sequential loop (same result, no speedup, but identical API).
+
+        Returns a list of response strings in the same order as prompts.
+        """
+        _sys = (
+            "You are a data generation assistant. "
+            "You must output strict, valid JSON only. "
+            "Do not output markdown blocks or conversational text."
+        )
+        messages_list = [
+            [{"role": "system", "content": _sys}, {"role": "user", "content": p}]
+            for p in prompts
+        ]
+        if self.use_vllm:
+            return self._vllm_batch_call(messages_list, max_new_tokens, temperature)
+        return [self._hf_call(msgs, max_new_tokens, temperature) for msgs in messages_list]
 
     def chat(self, messages: list, max_new_tokens: int = 400, temperature: float = 0.82) -> str:
         """

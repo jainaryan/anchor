@@ -1088,17 +1088,15 @@ Output JSON only:
 {{"user_turns": ["<turn 1>", "<turn 2>", ..., "<turn {NUM_TURNS}>"]}}"""
 
 
-def generate_user_turns(teacher, profile: dict, new_fact: str, mode: str, num_turns: int) -> list[str] | None:
-    """Phase 1: Gemma4 as user simulator → returns list of user message strings."""
-    # Build a descriptor that handles companion profiles (no diagnosis) cleanly.
+def _build_user_sim_prompt(profile: dict, new_fact: str, mode: str, num_turns: int) -> str:
+    """Build the user-simulator prompt string (no LLM call — pure string construction)."""
     parts = [profile["age"]]
     if profile.get("diagnoses"):
         parts.append(profile["diagnoses"])
     if profile.get("interests"):
         parts.append(f"into {profile['interests']}")
     descriptor = ", ".join(parts)
-
-    prompt = (
+    return (
         USER_SIM_PROMPT
         .replace("{PERSON_DESCRIPTOR}", descriptor)
         .replace("{NEW_FACT}", new_fact)
@@ -1106,7 +1104,10 @@ def generate_user_turns(teacher, profile: dict, new_fact: str, mode: str, num_tu
         .replace("{MODE_INSTRUCTION}", USER_MODE_INSTRUCTIONS[mode])
         .replace("{NUM_TURNS}", str(num_turns))
     )
-    response = teacher.generate(prompt, max_new_tokens=600, temperature=0.85)
+
+
+def _parse_user_turns(response: str, num_turns: int) -> list[str] | None:
+    """Parse a user-simulator response into a list of turn strings."""
     data = parse_json_robust(response, expected_keys=["user_turns"])
     if not data or "user_turns" not in data:
         return None
@@ -1114,6 +1115,13 @@ def generate_user_turns(teacher, profile: dict, new_fact: str, mode: str, num_tu
     if not isinstance(turns, list) or len(turns) < num_turns:
         return None
     return [str(t).strip() for t in turns[:num_turns]]
+
+
+def generate_user_turns(teacher, profile: dict, new_fact: str, mode: str, num_turns: int) -> list[str] | None:
+    """Phase 1 (single conversation): build prompt, call teacher, parse result."""
+    prompt = _build_user_sim_prompt(profile, new_fact, mode, num_turns)
+    response = teacher.generate(prompt, max_new_tokens=600, temperature=0.85)
+    return _parse_user_turns(response, num_turns)
 
 
 # ─── Phase 2: Anchor responder ────────────────────────────────────────────────
@@ -1290,6 +1298,15 @@ def generate_example(teacher, profile: dict) -> dict | None:
 
 # ─── Main ──────────────────────────────────────────────────────────────────────
 
+# PHASE1_BATCH_SIZE: number of conversations whose user-simulator prompts are
+# submitted to the teacher in a single batched call. vLLM processes them in
+# parallel via continuous batching — the batch finishes in roughly the time of one
+# single request, giving ~BATCH_SIZE× throughput for Phase 1 vs sequential.
+# HF backend ignores this and processes them sequentially (same outputs, no speedup).
+# Default 8; lower on nodes with less VRAM, raise if VRAM/throughput allows.
+PHASE1_BATCH_SIZE = int(os.environ.get("PHASE1_BATCH_SIZE", "8"))
+
+
 def main():
     print("[Pipeline] Loading teacher model...")
     teacher = TeacherModel()
@@ -1299,50 +1316,99 @@ def main():
     attempts = 0
     skipped = 0
 
+    use_batch = teacher.use_vllm and PHASE1_BATCH_SIZE > 1
     print(f"[Pipeline] Target: {TARGET} examples (wall-time controlled)")
     print(f"[Pipeline] Train output:    {OUT_TRAIN}")
     print(f"[Pipeline] Overref output:  {OUT_OVERREF}")
     print(f"[Pipeline] Profile set:     {_profile_set} ({len(ACTIVE_PROFILES)} profiles)")
     print(f"[Pipeline] Mode: teacher-as-Anchor (two-phase generation)")
+    print(f"[Pipeline] Phase 1 batching: {'ON  PHASE1_BATCH_SIZE=' + str(PHASE1_BATCH_SIZE) if use_batch else 'OFF (HF backend — sequential)'}")
 
     while count < TARGET and not shutdown_requested:
-        attempts += 1
-        profile = random.choice(ACTIVE_PROFILES)
+        # ── Batch Phase 1 ─────────────────────────────────────────────────────
+        # Collect PHASE1_BATCH_SIZE conversations' parameters and build all
+        # user-simulator prompts, then submit them in one vLLM generate() call.
+        batch_size = PHASE1_BATCH_SIZE if use_batch else 1
+        batch_jobs = []
+        for _ in range(batch_size):
+            profile = random.choice(ACTIVE_PROFILES)
+            new_fact = random.choice(NEW_FACTS)
+            mode = pick_mode(profile)
+            num_turns = random.choice([4, 5, 6])
+            batch_jobs.append((profile, new_fact, mode, num_turns))
 
         try:
-            result = generate_example(teacher, profile)
-            if result:
+            if use_batch:
+                prompts = [
+                    _build_user_sim_prompt(profile, new_fact, mode, num_turns)
+                    for profile, new_fact, mode, num_turns in batch_jobs
+                ]
+                responses = teacher.generate_batch(prompts, max_new_tokens=600, temperature=0.85)
+            else:
+                # HF path — single generate call, no real batching
+                profile, new_fact, mode, num_turns = batch_jobs[0]
+                prompt = _build_user_sim_prompt(profile, new_fact, mode, num_turns)
+                responses = [teacher.generate(prompt, max_new_tokens=600, temperature=0.85)]
+        except Exception as e:
+            print(f"[batch Phase 1 error] {e}")
+            time.sleep(2)
+            continue
+
+        # ── Phase 2 for each conversation in the batch ────────────────────────
+        for (profile, new_fact, mode, num_turns), response in zip(batch_jobs, responses):
+            attempts += 1
+            try:
+                user_turns = _parse_user_turns(response, num_turns)
+                if not user_turns:
+                    skipped += 1
+                    continue
+
+                system_prompt = build_system_prompt(profile)
+                _, messages = generate_anchor_turns(teacher, system_prompt, user_turns)
+
+                conv = messages
+                verdict = heuristic_check(conv, profile, new_fact, mode)
+                if verdict == "drop":
+                    skipped += 1
+                    continue
+
+                result = {
+                    "conversations": conv,
+                    "meta": {
+                        "mode": mode,
+                        "new_fact": new_fact,
+                        "profile_name": profile["name"],
+                        "num_turns": num_turns,
+                        "source": "conv_memory_v2",
+                        "verdict": verdict,
+                    },
+                }
+
                 append_jsonl(result, OUT_RAW)
                 train_entry = {"conversations": result["conversations"]}
-                verdict = result["meta"].get("verdict", "keep")
                 if verdict == "overref":
                     append_jsonl(result, OUT_OVERREF)
                     overref_count += 1
                     print(
                         f"[{attempts}] ⚠ overref ({overref_count}) | "
-                        f"mode={result['meta']['mode']} | "
-                        f"profile={result['meta']['profile_name']}"
+                        f"mode={mode} | profile={profile['name']}"
                     )
                 else:
                     append_jsonl(train_entry, OUT_TRAIN)
                     count += 1
                     print(
-                        f"[{attempts}] ✓ {count} | "
-                        f"mode={result['meta']['mode']} | "
-                        f"profile={result['meta']['profile_name']} | "
-                        f"turns={result['meta']['num_turns']}"
+                        f"[{attempts}] ✓ {count} | mode={mode} | "
+                        f"profile={profile['name']} | turns={num_turns}"
                     )
-            else:
+
+            except Exception as e:
+                print(f"[{attempts}] Error in Phase 2: {e}")
                 skipped += 1
-                if attempts % 10 == 0:
-                    print(f"[{attempts}] skip={skipped} pass={count} overref={overref_count}")
 
-        except Exception as e:
-            print(f"[{attempts}] Error: {e}")
-            time.sleep(2)
-            continue
+            if attempts % 10 == 0 and count == 0:
+                print(f"[{attempts}] skip={skipped} pass={count} overref={overref_count}")
 
-        if attempts % 50 == 0:
+        if attempts % 50 == 0 and attempts > 0:
             rate = count / attempts * 100
             print(
                 f"[{attempts}] Checkpoint: {count} kept, {overref_count} overref, "

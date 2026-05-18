@@ -30,10 +30,13 @@ cd $PROJECT_DIR
 export TEACHER_MODEL=30b
 export OUT_LABEL=qwen
 
-# USE_VLLM=0: vLLM fails on H100 nodes (CUDA fork issue).
-# HF backend proven stable on H100-96 (conv-memory jobs 614942-614947 ran with it).
-export USE_VLLM=0
-echo "[Setup] USE_VLLM=$USE_VLLM"
+# vLLM re-enabled on H100-96 (2026-05-19). Root cause of the CUDA fork error was
+# vLLM V1 EngineCore using fork — fixed by forcing V0 engine (in-process, no fork).
+# VLLM_USE_V1 must be set before python runs; utils.py also defaults to V0 if not set.
+export USE_VLLM=1
+export VLLM_USE_V1=0
+export PHASE1_BATCH_SIZE=8
+echo "[Setup] USE_VLLM=$USE_VLLM  VLLM_USE_V1=$VLLM_USE_V1  PHASE1_BATCH_SIZE=$PHASE1_BATCH_SIZE"
 
 # PIPELINE_MODE is passed via --export=ALL,PIPELINE_MODE=crisis (or help_mode).
 # Defaults to 'crisis' if not set.

@@ -10,6 +10,20 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-19
 
+### vLLM re-enabled on H100-96 — Phase 1 batching for data-gen pipelines
+- **Files:** `synthetic/utils.py`, `synthetic/conversation_memory_pipeline.py`, `synthetic/crisis_help_pipeline.py`, `finetuning/conv_memory_pipeline_qwen.slurm`, `finetuning/crisis_help_pipeline_qwen.slurm`
+- **Root cause of previous failure (jobs 614822–614827):** vLLM V1 EngineCore spawns a subprocess using Python's `fork` start method. When the parent process already has CUDA initialized, the forked child cannot re-initialize CUDA → `RuntimeError: Cannot re-initialize CUDA in forked subprocess`. V0 engine runs entirely in-process (no subprocess) — no fork, no CUDA re-init issue.
+- **Old workaround:** `USE_VLLM=0` in both SLURM scripts. Left vLLM installed but disabled.
+- **Fix:**
+  1. `utils.py _load_vllm()` — old conditional `if VLLM_USE_V1 == "0": set to "0"` was a no-op. Now defaults to V0 engine unless caller explicitly sets `VLLM_USE_V1=1`. Must be set before `from vllm import LLM`.
+  2. Both H100 SLURM scripts now export `USE_VLLM=1` and `VLLM_USE_V1=0` before invoking python — guarantees the env var is in place before any vllm import.
+- **Phase 1 batching added:**
+  - `utils.py` — `generate_batch(prompts_list)` passes all prompts in a single vLLM `generate()` call. vLLM continuous batching processes them in parallel (not sequential). HF backend falls back to a loop (same outputs, no speedup).
+  - `conversation_memory_pipeline.py` — Phase 1 (user simulator) refactored to collect `PHASE1_BATCH_SIZE=8` conversations' prompts and submit as one batch. Phase 2 (Anchor responder) remains sequential per conversation (each turn depends on the previous).
+  - `crisis_help_pipeline.py` — same pattern applied to both crisis and help_mode Phase 1 generators.
+- **Expected throughput gain (Phase 1):** ~PHASE1_BATCH_SIZE× for the user-simulator step. If Phase 2 (Anchor responses, 2-6 turns per conversation) dominates wall time, overall gain is lower — estimate 2-4× end-to-end. Tune `PHASE1_BATCH_SIZE` via env var; default 8 is conservative for 30B MoE on H100-96.
+- **Not applicable:** biometric pipeline (`gpu:a100-40:2`, CUDA 12.0.90 < 12.1 vLLM minimum) — remains `USE_VLLM=0`.
+
 ### Near-duplicate deduplication added to clean_dataset.py
 - **File:** `finetuning/clean_dataset.py`
 - **Problem:** `--dedup` was string-level exact matching. The conv-memory pipeline generates conversations from the same profile pool across multiple shards and teachers (Gemma4 + Qwen3-30B). Same-profile sessions regenerated with slightly different phrasing pass exact dedup but are semantically near-identical — the model sees effectively the same example many times, wasting gradient steps and potentially overfitting to specific profile phrasings.

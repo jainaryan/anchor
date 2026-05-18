@@ -6,6 +6,8 @@ tags: [anchor, data]
 
 ← [[Home]]
 
+> **2026-05-19 pipeline update:** vLLM re-enabled on H100-96 nodes (V0 engine, `VLLM_USE_V1=0`) + Phase 1 user-simulator batching (`PHASE1_BATCH_SIZE=8`). Conv-memory and crisis/help pipelines now submit 8 user-simulator prompts per vLLM call — estimate 2–4× end-to-end throughput improvement. Biometric pipeline (A100-40 nodes, CUDA 12.0) unchanged.
+
 ---
 
 ## File Index — What Each `.jsonl` Is For
