@@ -47,7 +47,9 @@ python -u finetuning/clean_dataset.py \
     --val-out   data/conversations_cleaned_v4/mindmate_val.jsonl \
     --ensure-assistant-last \
     --drop-min-turns 4 \
-    --dedup
+    --dedup \
+    --near-dedup \
+    --near-dedup-threshold 0.8
 
 # Step 3: Train
 echo "[Step 3] Training (2400 steps, fresh LoRA)..."

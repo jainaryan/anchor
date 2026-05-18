@@ -34,13 +34,12 @@ random.seed(SEED)
 PROJECT_ROOT = Path(__file__).parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 
-extra_paths = [
-    PROJECT_ROOT / "data" / "synthetic_train_therapist_.jsonl",
-    PROJECT_ROOT / "data" / "synthetic_train_friend_1.jsonl",
-    PROJECT_ROOT / "data" / "synthetic_train.jsonl",
-    PROJECT_ROOT / "data" / "synthetic_train_casual.jsonl",
-    PROJECT_ROOT / "data" / "synthetic_train_transition.jsonl",
-]
+# NOTE: historically this was a hand-maintained list. It drifted out of sync with
+# DATA_MIX_PRESETS — v3/v4 silently skipped targeted_fix.jsonl, biometric.jsonl, and
+# the gold targeted_fixes.jsonl because they weren't in the list (see Bug Log 2026-05-19).
+# Now derived from the active preset's keys so it cannot go stale again.
+# Resolved below, after _preset_args is parsed.
+extra_paths: list = []
 
 # Data mix presets
 DATA_MIX_PRESETS = {
@@ -126,6 +125,42 @@ DATA_MIX_PRESETS = {
     },
 }
 
+# --------------------------
+# Category-conditional loss weights (filename → per-example loss multiplier)
+# Applied in the trainer via WeightedLossTrainer.compute_loss.
+# Rationale: CRISIS / HELP_MODE / NO_HALLUCINATION categories regress under
+# undifferentiated SFT because friend-voice loss dominates. Upweighting their
+# per-example loss steers gradients toward safety-critical behaviour without
+# crowding out friend/casual data via raw sample-count rebalancing.
+# Defaults: 1.0. Override below.
+CATEGORY_WEIGHTS = {
+    # gold hand-crafted examples — NO_HALLUCINATION + memory_recall fixes
+    "synthetic_train_targeted_fixes.jsonl": 3.0,
+    # help_mode + memory_recall targeted data (primary HELP_MODE fix)
+    "synthetic_train_targeted_fix.jsonl": 2.0,
+    # crisis data (Qwen-generated) — biggest regression vs base
+    "synthetic_train_crisis_qwen.jsonl": 4.0,
+    # help_mode data (Qwen-generated)
+    "synthetic_train_help_mode_qwen.jsonl": 3.0,
+    # conv-memory + biometric — currently weak vs base, modest upweight
+    "synthetic_train_conv_memory.jsonl": 1.5,
+    "synthetic_train_biometric.jsonl": 1.5,
+    # everything else: 1.0 (default below)
+}
+DEFAULT_LOSS_WEIGHT = 1.0
+
+
+def _weight_for(filename: str) -> float:
+    """Resolve loss weight by exact filename, then by category prefix (handles _qwen_s0, _merged, etc.)."""
+    if filename in CATEGORY_WEIGHTS:
+        return CATEGORY_WEIGHTS[filename]
+    for key, w in CATEGORY_WEIGHTS.items():
+        stem = key.replace(".jsonl", "")
+        if filename.startswith(stem):
+            return w
+    return DEFAULT_LOSS_WEIGHT
+
+
 import argparse as _argparse
 _preset_parser = _argparse.ArgumentParser(add_help=False)
 _preset_parser.add_argument("--model", type=str, default="v2", choices=list(DATA_MIX_PRESETS.keys()))
@@ -133,8 +168,10 @@ _preset_args, _ = _preset_parser.parse_known_args()
 
 SOURCE_CAPS = DATA_MIX_PRESETS[_preset_args.model]
 OUT_DIR = PROJECT_ROOT / "data" / f"conversations_raw_{_preset_args.model}"
+extra_paths = [PROJECT_ROOT / "data" / fname for fname in SOURCE_CAPS.keys()]
 print(f"[build_dataset] Using data mix preset: {_preset_args.model}")
 print(f"[build_dataset] Output dir: {OUT_DIR}")
+print(f"[build_dataset] Loading {len(extra_paths)} source files: {[p.name for p in extra_paths]}")
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -366,6 +403,7 @@ def main():
         
         count_before = len(extra)
         cap = SOURCE_CAPS.get(ep.name)
+        weight = _weight_for(ep.name)
         rows_from_file = []
         with open(ep, "r", encoding="utf-8") as f:
             for line in f:
@@ -378,7 +416,7 @@ def main():
                     # skip bad lines
                     continue
                 if "conversations" in obj and isinstance(obj["conversations"], list):
-                    rows_from_file.append({"conversations": obj["conversations"]})
+                    rows_from_file.append({"conversations": obj["conversations"], "loss_weight": weight})
                 elif "text" in obj and isinstance(obj["text"], str):
                     # Fallback for old format if mixed in
                     parts = re.split(r"(<\|user\|>|<\|assistant\|>)", obj["text"])
@@ -389,7 +427,9 @@ def main():
                         if p == "<|user|>": role = "user"
                         elif p == "<|assistant|>": role = "assistant"
                         elif p: conv.append({"role": role, "content": p})
-                    rows_from_file.append({"conversations": conv})
+                    rows_from_file.append({"conversations": conv, "loss_weight": weight})
+        if weight != DEFAULT_LOSS_WEIGHT:
+            print(f"  -> tagged {ep.name} with loss_weight={weight}")
 
         if cap is not None and len(rows_from_file) > cap:
             rng.shuffle(rows_from_file)

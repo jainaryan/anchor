@@ -102,9 +102,10 @@ import re
 def tokenize(batch):
     # This function implements robust "Assistant-Only Loss Masking"
     # using structured 'conversations' and Llama 3 native templates.
-    
+
     formatted_texts = []
     conversations = batch["conversations"]
+    batch_weights = batch.get("loss_weight", [1.0] * len(conversations))
     
     for conv in conversations:
         # conv is already a list of {"role": "...", "content": "..."}
@@ -183,6 +184,7 @@ def tokenize(batch):
         all_labels.append(labels)
         
     tokenized["labels"] = all_labels
+    tokenized["loss_weight"] = [float(w) if w is not None else 1.0 for w in batch_weights]
     del tokenized["offset_mapping"]
     return tokenized
 
@@ -224,13 +226,27 @@ args = TrainingArguments(
     optim="paged_adamw_32bit",
 )
 
-collator = DataCollatorForSeq2Seq(
+_base_collator = DataCollatorForSeq2Seq(
     tokenizer=tokenizer,
     model=model,
     padding=True,
     pad_to_multiple_of=8,
     label_pad_token_id=-100,
 )
+
+
+def collator(features):
+    # Pop per-example loss weights before delegating to the seq2seq collator,
+    # which doesn't know how to handle scalar fields.
+    weights = []
+    stripped = []
+    for f in features:
+        w = f.get("loss_weight", 1.0)
+        weights.append(float(w) if w is not None else 1.0)
+        stripped.append({k: v for k, v in f.items() if k != "loss_weight"})
+    batch = _base_collator(stripped)
+    batch["loss_weight"] = torch.tensor(weights, dtype=torch.float32)
+    return batch
 
 # Fail fast before launching Trainer if collation is malformed.
 _smoke = [dataset["train"][j] for j in range(min(4, len(dataset["train"])))]
@@ -246,7 +262,43 @@ if _smoke:
         f"{tuple(smoke_batch['input_ids'].shape)}"
     )
 
-trainer = Trainer(
+class WeightedLossTrainer(Trainer):
+    """Trainer that scales each example's loss by its `loss_weight`.
+
+    Per-example loss = mean cross-entropy over its unmasked (assistant) tokens.
+    Batch loss = sum(w_i * L_i) / sum(w_i)   (weighted mean — keeps gradient scale
+    comparable to unweighted training so the existing LR / cosine schedule still applies).
+    """
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        weights = inputs.pop("loss_weight", None)
+        labels = inputs["labels"]
+        outputs = model(**inputs)
+        logits = outputs.logits
+
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = labels[..., 1:].contiguous()
+
+        loss_fct = torch.nn.CrossEntropyLoss(reduction="none", ignore_index=-100)
+        flat = loss_fct(
+            shift_logits.view(-1, shift_logits.size(-1)),
+            shift_labels.view(-1),
+        ).view(shift_labels.size())
+
+        mask = (shift_labels != -100).float()
+        denom = mask.sum(dim=1).clamp(min=1.0)
+        per_example = (flat * mask).sum(dim=1) / denom
+
+        if weights is not None:
+            w = weights.to(per_example.device).float()
+            loss = (per_example * w).sum() / w.sum().clamp(min=1e-6)
+        else:
+            loss = per_example.mean()
+
+        return (loss, outputs) if return_outputs else loss
+
+
+trainer = WeightedLossTrainer(
     model=model,
     args=args,
     train_dataset=dataset["train"],

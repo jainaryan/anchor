@@ -8,6 +8,34 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-05-19
+
+### Near-duplicate deduplication added to clean_dataset.py
+- **File:** `finetuning/clean_dataset.py`
+- **Problem:** `--dedup` was string-level exact matching. The conv-memory pipeline generates conversations from the same profile pool across multiple shards and teachers (Gemma4 + Qwen3-30B). Same-profile sessions regenerated with slightly different phrasing pass exact dedup but are semantically near-identical — the model sees effectively the same example many times, wasting gradient steps and potentially overfitting to specific profile phrasings.
+- **Fix:** Added MinHash LSH over assistant-turn text (char 4-grams, 128 permutations, banded LSH). Flags: `--near-dedup` (enable) and `--near-dedup-threshold` (default 0.8). The LSH index is shared across train and val so cross-file near-dups (e.g., same conversation in the Gemma4 conv-memory file and a Qwen shard) are also caught. Zero new dependencies — stdlib `hashlib` and `random` only.
+- **Tuning:** Threshold 0.8 means conversations sharing ≥80% of character 4-grams in their assistant turns are considered near-dups. Lower = more aggressive (0.7 catches more paraphrases). The effective LSH crossover is printed at runtime. Validated: near-identical string with one typo detected (MinHash Jaccard 0.93); unrelated string not detected (MinHash Jaccard 0.02).
+- **Wire-up:** `run_sft_v4.slurm` updated to include `--near-dedup --near-dedup-threshold 0.8`. Copy this for v5.
+
+### Silent data-file drop: `extra_paths` drifted from `DATA_MIX_PRESETS`
+- **File:** `finetuning/build_dataset.py`
+- **Symptom:** Files listed in `SOURCE_CAPS` (the per-preset cap dict) but NOT in the hand-maintained `extra_paths` iterator were silently skipped. The loop only iterates `extra_paths` and looks up caps from `SOURCE_CAPS.get(ep.name)`; files absent from `extra_paths` never get opened, never get a "loaded N samples from X" print.
+- **Historical impact:**
+  - **v4 (genzv4)** — documented as 21,529 examples; only 5 of the 8 preset files were in `extra_paths`. The dropped files account for 8,529 rows (targeted_fix=6000, biometric=2348, gold targeted_fixes=181). If the cluster copy matched git, v4 actually trained on ~13,000 examples, not 21,529. *(Cluster copy may have diverged — cannot verify without cluster access. The genzv4 leaderboard numbers stand either way; only the documented sample count is uncertain.)*
+  - **v3 (genzv3)** — similarly missed targeted_fix(2000) + biometric(1500) + gold(65). Documented 10,065; possibly trained on ~8,500.
+- **Why it stayed hidden:** `extra_paths` was added before `DATA_MIX_PRESETS`. Each new preset appended to the cap dict, but nobody appended to the iterator. The build script's stdout shows per-file "loaded N samples" lines, but only for files that were loaded — there is no "skipped X" warning.
+- **Fix:** Derive `extra_paths` from `SOURCE_CAPS.keys()` after preset selection. Now impossible to add a preset key without picking up the matching file. New stdout line prints the list of source files for that preset so any future drift is visible at run time.
+- **Implication for genzv5:** Without this fix, the new Qwen-generated files (`conv_memory_qwen*`, `biometric_qwen_*`, `crisis_qwen`, `help_mode_qwen`) would have been silently skipped too, neutering the category-conditional loss weighting (which targets exactly those files).
+
+### Category-conditional loss weighting added to SFT pipeline
+- **Motivation:** Under v2/v3/v4 SFT, CRISIS dropped 67→48%, HELP_MODE 58→25-44%, NO_HALLUCINATION 67→54% vs base. Raw sample-count rebalancing crowds out friend/casual data (which COMPANION 92% depends on). Per-example loss reweighting steers gradients toward safety-critical categories without changing the mix distribution.
+- **Implementation:**
+  - `finetuning/build_dataset.py` — `CATEGORY_WEIGHTS` dict (filename → multiplier), each row tagged with `loss_weight`. Prefix matching handles sharded files (`*_qwen_s0.jsonl`, `*_merged.jsonl`).
+  - `finetuning/clean_dataset.py` — preserves `loss_weight` through dedup / cleaning.
+  - `finetuning/CUDA_train_qlora.py` — `WeightedLossTrainer` subclasses `Trainer.compute_loss` with `sum(w_i * L_i) / sum(w_i)` weighted mean over per-example assistant-token CE losses; wrapped collator pops `loss_weight` into a separate tensor (DataCollatorForSeq2Seq can't handle scalar fields).
+- **Default behaviour preserved:** examples without `loss_weight` get 1.0 — old cleaned datasets still train identically. To disable, set every entry in `CATEGORY_WEIGHTS` to 1.0.
+- **Validate before v5:** smoke-test on a small slice with `print(weights)` in `compute_loss` to confirm the tensor matches expected category counts. Also check that training loss curve is roughly in the same range as unweighted runs (the weighted-mean reduction keeps it comparable).
+
 ## 2026-05-17
 
 ### Over-reference filter: 12 false positives held as future DPO negatives

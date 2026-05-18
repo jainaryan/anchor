@@ -26,11 +26,14 @@ If you want *zero* behavior changes beyond text cleanup, simply omit the last tw
 """
 
 import argparse
+import hashlib
 import html
 import json
+import math
 import os
+import random
 import re
-from typing import List, Tuple, Iterable
+from typing import List, Tuple, Iterable, Optional
 
 # Role mapping (must match your build_dataset.py)
 ROLE_USER = "user"
@@ -109,8 +112,91 @@ def merge_consecutive_user_turns(messages: List[dict]) -> List[dict]:
 
 
 # ---------------------------
-# Optional utilities
+# MinHash LSH near-duplicate detection (stdlib only, no new deps)
 # ---------------------------
+# Hashes assistant-turn text only — that's what gets trained on, and that's where
+# near-dups from same-profile Qwen regenerations accumulate.
+
+_NUM_PERM = 128
+_SHINGLE_K = 4          # char 4-grams
+_MERSENNE_PRIME = (1 << 61) - 1
+_MAX_HASH = (1 << 32) - 1
+
+
+def _make_hash_params(num_perm: int, seed: int = 42):
+    rng = random.Random(seed)
+    a = [rng.randint(1, _MERSENNE_PRIME - 1) for _ in range(num_perm)]
+    b = [rng.randint(0, _MERSENNE_PRIME - 1) for _ in range(num_perm)]
+    return a, b
+
+
+_HASH_A, _HASH_B = _make_hash_params(_NUM_PERM)
+
+
+def _shingle_hashes(text: str, k: int = _SHINGLE_K):
+    text = text.lower()
+    seen: set = set()
+    for i in range(len(text) - k + 1):
+        gram = text[i : i + k]
+        if gram not in seen:
+            seen.add(gram)
+            raw = int.from_bytes(hashlib.md5(gram.encode()).digest()[:4], "little")
+            yield raw
+
+
+def minhash_signature(text: str) -> list:
+    sig = [_MAX_HASH] * _NUM_PERM
+    for raw in _shingle_hashes(text):
+        for i in range(_NUM_PERM):
+            h = ((_HASH_A[i] * raw + _HASH_B[i]) % _MERSENNE_PRIME) & _MAX_HASH
+            if h < sig[i]:
+                sig[i] = h
+    return sig
+
+
+def _best_br(num_perm: int, threshold: float):
+    """Find (b, r) that minimises |LSH crossover - threshold|. Crossover ≈ (1/b)^(1/r)."""
+    best_b, best_r, best_err = 2, num_perm // 2, float("inf")
+    for b in range(2, num_perm + 1):
+        r = num_perm // b
+        if r < 1:
+            break
+        crossover = (1.0 / b) ** (1.0 / r)
+        err = abs(crossover - threshold)
+        if err < best_err:
+            best_b, best_r, best_err = b, r, err
+    return best_b, best_r
+
+
+class LSHIndex:
+    """Banded LSH index for MinHash near-duplicate detection."""
+
+    def __init__(self, threshold: float = 0.8, num_perm: int = _NUM_PERM):
+        self.b, self.r = _best_br(num_perm, threshold)
+        self.num_perm = num_perm
+        effective = (1.0 / self.b) ** (1.0 / self.r)
+        print(f"[near-dedup] LSH params: b={self.b} r={self.r} "
+              f"| target threshold={threshold:.2f} effective≈{effective:.2f}")
+        self.tables: list = [{} for _ in range(self.b)]
+
+    def _band_keys(self, sig):
+        for bi in range(self.b):
+            yield bi, tuple(sig[bi * self.r : (bi + 1) * self.r])
+
+    def is_near_dup(self, sig: list) -> bool:
+        return any(band in self.tables[bi] for bi, band in self._band_keys(sig))
+
+    def add(self, sig: list):
+        for bi, band in self._band_keys(sig):
+            self.tables[bi][band] = True
+
+
+def _assistant_text(msgs: list) -> str:
+    """Concatenate all assistant turn content — the text being trained on."""
+    return " ".join(
+        m.get("content", "") for m in msgs if m.get("role") == ROLE_ASSIST
+    )
+
 
 # ---------------------------
 # File processing
@@ -124,16 +210,20 @@ def process_file(
     merge_user: bool = False,
     drop_no_assist: bool = False,
     sample_peek: int = 2,
+    lsh_index: Optional[LSHIndex] = None,
 ):
     """
-    Read JSONL at inp_path, clean text safely, optionally enforce assistant-last / min turns / dedup,
-    and write cleaned JSONL to out_path. Also prints summary stats.
+    Read JSONL at inp_path, clean text safely, optionally enforce assistant-last / min turns /
+    exact dedup / near-dedup (MinHash LSH), and write cleaned JSONL to out_path.
+
+    Pass a shared LSHIndex via lsh_index to deduplicate across train+val simultaneously.
     """
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
     total = 0
     kept = 0
-    uniq_guard = set()  # for --dedup
+    near_dup_dropped = 0
+    uniq_guard = set()  # for exact --dedup
 
     # Stats accumulators
     turn_counts: List[int] = []
@@ -152,6 +242,8 @@ def process_file(
             msgs = obj.get("conversations", [])
             if not msgs:
                 continue
+            # Preserve per-example loss weight if upstream tagged it.
+            loss_weight = obj.get("loss_weight", None)
 
             # Clean ONLY the text content
             cleaned = []
@@ -170,14 +262,27 @@ def process_file(
             if min_turns_to_keep > 0 and drop_min_turns(msgs, min_turns_to_keep):
                 continue
 
-            # dedupe check (simple stringify)
+            # exact dedupe check
             serialized = json.dumps(msgs, ensure_ascii=False)
             if dedup:
                 if serialized in uniq_guard:
                     continue
                 uniq_guard.add(serialized)
 
-            fout.write(json.dumps({"conversations": msgs}, ensure_ascii=False) + "\n")
+            # near-duplicate check via MinHash LSH on assistant text
+            if lsh_index is not None:
+                asst_text = _assistant_text(msgs)
+                if asst_text.strip():
+                    sig = minhash_signature(asst_text)
+                    if lsh_index.is_near_dup(sig):
+                        near_dup_dropped += 1
+                        continue
+                    lsh_index.add(sig)
+
+            out_obj = {"conversations": msgs}
+            if loss_weight is not None:
+                out_obj["loss_weight"] = loss_weight
+            fout.write(json.dumps(out_obj, ensure_ascii=False) + "\n")
             kept += 1
 
             # Stats
@@ -190,7 +295,8 @@ def process_file(
                 samples_after.append(serialized[:300])
 
     # Print summary
-    print(f"[{os.path.basename(inp_path)}] kept {kept}/{total} → {os.path.basename(out_path)}")
+    near_dup_msg = f" (near-dup dropped: {near_dup_dropped})" if near_dup_dropped else ""
+    print(f"[{os.path.basename(inp_path)}] kept {kept}/{total}{near_dup_msg} → {os.path.basename(out_path)}")
     if samples_before:
         print("  sample BEFORE:\n ", samples_before[0])
     if samples_after:
@@ -234,8 +340,18 @@ def main():
                     help="If set, merge consecutive user turns into a single turn separated by newline.")
     ap.add_argument("--drop-no-assistant", action="store_true",
                     help="If set, drop examples that have ZERO assistant turns.")
+    ap.add_argument("--near-dedup", action="store_true",
+                    help="If set, drop near-duplicate examples using MinHash LSH on assistant text. "
+                         "A single shared LSH index is built across both train and val files so "
+                         "cross-file near-dups are also caught.")
+    ap.add_argument("--near-dedup-threshold", type=float, default=0.8,
+                    help="Approximate Jaccard similarity threshold for near-dup detection (default 0.8). "
+                         "Actual LSH crossover is printed at runtime — it will be close but not exact.")
 
     args = ap.parse_args()
+
+    # Build a shared LSH index if near-dedup is requested so train+val dedup together.
+    lsh: Optional[LSHIndex] = LSHIndex(threshold=args.near_dedup_threshold) if args.near_dedup else None
 
     process_file(
         inp_path=args.train_in,
@@ -245,6 +361,7 @@ def main():
         dedup=args.dedup,
         merge_user=args.merge_consecutive_user,
         drop_no_assist=args.drop_no_assistant,
+        lsh_index=lsh,
     )
     process_file(
         inp_path=args.val_in,
@@ -254,6 +371,7 @@ def main():
         dedup=args.dedup,
         merge_user=args.merge_consecutive_user,
         drop_no_assist=args.drop_no_assistant,
+        lsh_index=lsh,
     )
 
 

@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-18 (session 13 cont — audited overref files: 12 false positives held for DPO; submitted crisis (615517) + help_mode (615518) pipeline jobs; genzv5 data mix: conv-memory 1,441 rows done, biometric 3,499 rows done; 11 jobs total active.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-19 (category-conditional loss weighting + MinHash LSH near-dedup added to SFT pipeline; fixed silent data-file-drop bug in `build_dataset.py`. See Bug Log 2026-05-19 × 3 entries.)
 
 ---
 
@@ -50,6 +50,8 @@ These are the non-obvious invariants that burn time if unknown:
 6. **Log path on cluster is `/home/a/aryanj/logs/`** — not `/home/aryanj/logs/` (the latter is a different, wrong path that causes silent SLURM failure).
 
 7. **`finetuning/` has the current scripts. Root-level scripts are legacy.** `CUDA_train_qlora.py`, `build_dataset.py`, etc. at the project root are old duplicates from early development. Always use `finetuning/CUDA_train_qlora.py`, `finetuning/build_dataset.py`, etc.
+
+7b. **Documented v3/v4 sample counts may be wrong.** `extra_paths` drift (fixed 2026-05-19) caused v3/v4 build_dataset.py runs to silently skip 3 of 8 files in SOURCE_CAPS. v4 documented as 21,529 examples may have actually been ~13,000 in git's version; v3 documented as 10,065 may have been ~8,500. Cluster copies may differ. Genzv5+ are unaffected (fix is in). See Bug Log 2026-05-19.
 
 8. **Benchmarks use production sampling — variance is real.** v4 uses the same sampling params as the production chat (temperature=0.7, top_p=0.95, top_k=40, min_p=0.05). This means scores are non-deterministic on every scenario type — 3-run averaging is required for any leaderboard ranking. The rationale: a benchmark with temp=0 measures a model nobody ships. v3 had the same problem; v4 inherits the same fix (`--runs=3` + `benchmarks/diff_results.py`).
 

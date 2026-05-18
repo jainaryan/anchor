@@ -61,7 +61,23 @@ All defined in `finetuning/CUDA_train_qlora.py`:
 | Base model | `meta-llama/Llama-3.2-3B-Instruct` | HF model ID |
 | `PYTORCH_CUDA_ALLOC_CONF` | `expandable_segments:True` | env var, prevents OOM fragmentation |
 
+**Near-duplicate deduplication (added 2026-05-19):** `clean_dataset.py --near-dedup` runs MinHash LSH over assistant-turn text (the part being trained on). Char 4-gram shingles, 128 permutations, banded LSH auto-tuned to `--near-dedup-threshold` (default 0.8 ≈ 80% Jaccard similarity). A single shared LSH index spans both train and val files, so cross-file near-dups (e.g., same-profile Qwen shard vs Gemma4 file) are also caught. No new dependencies — stdlib only. Effective threshold and drop count are printed at runtime. Both `run_sft_v4.slurm` and the planned `run_sft_v5.slurm` include this flag.
+
 **Loss masking:** Assistant-only loss masking via `tokenizer.apply_chat_template`. System and user tokens get label=-100; only assistant response tokens are trained on.
+
+**Category-conditional loss weights (added 2026-05-19):** Each training example carries a `loss_weight` field, set by source file in `finetuning/build_dataset.py::CATEGORY_WEIGHTS` and propagated through `clean_dataset.py`. `WeightedLossTrainer` in `CUDA_train_qlora.py` computes per-example assistant-token mean cross-entropy and reduces with `sum(w_i * L_i) / sum(w_i)` (weighted-mean — keeps gradient scale comparable to unweighted runs, so existing LR / cosine schedule still applies). Current weights:
+
+| File (or prefix) | Weight | Why |
+|---|---|---|
+| `synthetic_train_targeted_fixes.jsonl` | 3.0 | Gold NO_HALLUCINATION + memory_recall fixes |
+| `synthetic_train_targeted_fix.jsonl` | 2.0 | Primary HELP_MODE fix data |
+| `synthetic_train_crisis_qwen*` | 4.0 | CRISIS is the largest SFT regression (67% → 48%) |
+| `synthetic_train_help_mode_qwen*` | 3.0 | HELP_MODE 58% → 25–44% under prior SFT |
+| `synthetic_train_conv_memory*` | 1.5 | Memory categories weak vs base |
+| `synthetic_train_biometric*` | 1.5 | BIOMETRIC 60% → 30% under prior SFT |
+| (default) | 1.0 | friend / casual / transition / therapist / grief |
+
+Prefix matching means sharded files (`*_qwen_s0.jsonl`, `*_merged.jsonl`) inherit the same weight. Examples missing the field default to 1.0 — old datasets continue to work unchanged.
 
 **⚠️ NEVER use `--adapter-path` (continued training).** Tested in `genzv2_continued`: MEMORY_USE collapsed from 4/8 to 0/8 on all checkpoints. The approach is broken. Always train fresh from base model.
 
@@ -70,6 +86,8 @@ All defined in `finetuning/CUDA_train_qlora.py`:
 ## Data Mix Presets
 
 Defined in `finetuning/build_dataset.py` → `DATA_MIX_PRESETS`. Each key maps to `{filename: sample_count}`.
+
+**As of 2026-05-19, the iterator `extra_paths` is derived from `SOURCE_CAPS.keys()`** — adding a file to a preset automatically picks it up at load time. Previously `extra_paths` was a separate hand-maintained list and silently dropped files that weren't in it. v3 and v4 build_dataset runs against the git version of this file under-loaded by 3 files (`targeted_fix`, `biometric`, `targeted_fixes`); the documented `~21k` / `~10k` totals below reflect *intent*, not necessarily what was loaded historically. See Bug Log 2026-05-19.
 
 ### v4 — current (job 602945, genzv4)
 
