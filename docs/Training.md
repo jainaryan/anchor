@@ -149,7 +149,10 @@ Early genzv5 training with currently available data. Full v5 (with finished conv
 # Steps: 2000 (~1 epoch; checkpoints every 200)
 ```
 
-Note: SLURM script uses `data/conversations_raw_v5` and `data/conversations_cleaned_v5`. Near-dedup flag NOT included (not available on cluster's `clean_dataset.py`). CUDA guard in `CUDA_train_qlora.py` removed in commit `16ad500` — needed because PyTorch cu130 reports `cuda.is_available()=False` on driver 12090 even though `device_map="auto"` works fine.
+Note: SLURM script uses `data/conversations_raw_v5` and `data/conversations_cleaned_v5`. Near-dedup flag NOT included (not available on cluster's `clean_dataset.py`). Three CUDA workarounds applied to `CUDA_train_qlora.py` (all nodes have driver 12090 / PyTorch cu130 mismatch):
+1. Hard CUDA guard replaced with warning (commit `16ad500`)
+2. `torch.cuda.is_available` patched to `True` so `TrainingArguments` accepts bf16 (commit `16ad500`)
+3. `torch.cuda.is_bf16_supported` patched to `True` — it calls `_lazy_init()` directly, triggering `DeferredCudaCallError` before model load (commit `466568e`). Once bitsandbytes loads the model, CUDA context is initialised and all subsequent CUDA calls work normally.
 
 ### Older presets (kept for reference, do not reuse)
 

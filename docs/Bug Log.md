@@ -8,6 +8,13 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-05-20
+
+### TrainingArguments bf16 validation triggers DeferredCudaCallError before model load (jobs 617047, 617237)
+- **Symptom:** Jobs 617047 and 617237 (genzv5 on H200) both died after dataset build/clean with `torch.cuda.DeferredCudaCallError: name '_get_device_properties' is not defined`.
+- **Root cause:** `TrainingArguments(bf16=True)` calls `torch.cuda.is_bf16_supported()` → `torch.cuda.current_device()` → `_lazy_init()` during `__post_init__`. On cu130/driver 12090, `_lazy_init` raises `DeferredCudaCallError`. This fires *before* the model is loaded. Patching `is_available=True` (done in commit `16ad500`) wasn't enough — `is_bf16_supported` bypasses `is_available` and goes directly to `_lazy_init`. Once bitsandbytes loads the model it initialises the CUDA context as a side-effect, after which all CUDA calls work — so the problem is specifically in the narrow window between script start and model load.
+- **Fix:** Also patch `torch.cuda.is_bf16_supported = lambda *a, **kw: True` immediately after patching `is_available`. Commit `466568e`. Resubmitted as job 617247 (H200, PENDING).
+
 ## 2026-05-19
 
 ### PyTorch cu130 vs driver 12090 — training job 616653 killed by CUDA guard

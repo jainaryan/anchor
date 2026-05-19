@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-19 (category-conditional loss weighting + MinHash near-dedup + fixed extra_paths bug; CRISIS calibration (distress_level + Spearman ρ + monotonicity) + holdout scenario set (12 hd_* scenarios, disjoint profiles); vLLM confirmed incompatible with cluster CUDA 12.0.90 — HF backend permanent; PyTorch cu130 vs driver 12090 CUDA guard removed from trainer; genzv5 SFT job 616892 submitted. See Bug Log 2026-05-19.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-20 (PyTorch cu130/driver 12090 CUDA patches — removed guard + patched is_available + is_bf16_supported; genzv5 SFT job 617247 on H200 PENDING; H200 confirmed same driver mismatch as H100-96/A100-80. See Bug Log 2026-05-20.)
 
 ---
 
@@ -27,8 +27,8 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05 — matches `defaultCompletionParams` in the app). v3 stays available for legacy comparisons. See [[Benchmarks]]. |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
-| **Active cluster jobs** | 615485–615490 — conv-memory new-pool shards 3–8 (72h) · 615491–615493 — biometric shards 3–5 (72h) · **615518** — help_mode (48h, xgpi2) · **616643** — crisis (48h, xgpi17 H100-47, Qwen3 safety fix applied) · **617047** — genzv5 SFT (3h, H200-141 xgpk0, 2000 steps, PENDING) |
-| **Next milestone** | genzv5 SFT — first model on the v4 benchmark — job 617047 running on H200 (early v5, ~13,988 examples, ~3h) |
+| **Active cluster jobs** | 615485–615490 — conv-memory new-pool shards 3–8 (72h, ~24h left) · 615491–615493 — biometric shards 3–5 (72h, ~24h left) · **615518** — help_mode (48h, xgpi2) · **616643** — crisis (48h, xgpi17 H100-47) · **617247** — genzv5 SFT (3h, H200-141 xgpk0, PENDING — bf16 fix applied) |
+| **Next milestone** | genzv5 SFT — job 617247 on H200 once it starts; then benchmark on v4 suite |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
 ---
