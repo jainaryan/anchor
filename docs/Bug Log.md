@@ -10,6 +10,16 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-19
 
+### Crisis pipeline stall — Qwen3 safety refusal on suicidal ideation content
+- **Symptom:** Jobs 615517 (22h, 4 examples) and 616436 (7h, 0 new examples) both stalled completely. Raw output file never updated. Stdout log ended at model load print.
+- **Root cause:** Qwen3-30B-Instruct's safety training refuses to generate suicidal ideation content when the system message is the generic `"You are a data generation assistant. You must output strict, valid JSON only."`. The model returned a non-JSON refusal on every single Phase 1 call. `parse_json_robust` returned None every time → pipeline logged failures but stdout was buffered (no `PYTHONUNBUFFERED=1`), so nothing was visible in logs and nothing was written to disk. The loop spun silently forever.
+- **Why help_mode worked but crisis didn't:** Anxiety/coping content doesn't trigger Qwen3's safety filter. Crisis content (passive SI, active SI, humor deflection) does.
+- **Fix:**
+  1. `synthetic/utils.py` — added optional `system=` kwarg to `generate()` and `generate_batch()` so callers can override the default system message.
+  2. `synthetic/crisis_help_pipeline.py` — added `_CRISIS_DATAGEN_SYSTEM`: a research-context message that explains the purpose (training a mental health support chatbot to respond safely). Passed via `system=` in all Phase 1 generate calls. Help mode unaffected (`system=None` → default message).
+  3. `finetuning/crisis_help_pipeline_qwen.slurm` — added `PYTHONUNBUFFERED=1` so all print output flushes immediately.
+- **Node:** also switched from `gpu:h100-96:1` (all busy) to `gpu:h100-47:2` (idle) for job 616643 — H100-47 GRES label maps to a full 95830 MiB H100 NVL, fits the 60GB model fine with HF backend.
+
 ### CORRECTION: vLLM V1 permanently incompatible with cluster CUDA driver — HF backend is permanent
 - **Corrects:** "vLLM re-enabled on H100-96" entry below (that entry was wrong — vLLM never worked)
 - **Root cause (definitive):** H100-96 nodes run CUDA driver 12090 (CUDA 12.0.90). vLLM 0.20.2 V1 engine calls `torch.accelerator.set_device_index()` during `init_device()`. This API path requires a newer driver → `torch.cuda.DeferredCudaCallError: name '_get_device_properties' is not defined`. Affects both multiprocessing (subprocess fork) and in-process (VLLM_ENABLE_V1_MULTIPROCESSING=0) modes — same `torch.accelerator` call in both paths.

@@ -54,10 +54,10 @@ What this changes for genzv5:
 |---|---|---|---|
 | 615485–615490 | conv-memory new-pool shards 3–8 (`PROFILE_SET=new`) | ~1,800–3,000 | ~72h from 2026-05-17 |
 | 615491–615493 | biometric shards 3–5 | ~2,900 (s0 throughput × 3) | ~72h from 2026-05-17 |
-| **615518** | help_mode pipeline (HF backend) | TBD | 48h from 2026-05-19 |
-| **616436** | crisis pipeline (HF backend) | TBD | 48h from 2026-05-19 |
+| **615518** | help_mode pipeline (HF backend, xgpi2) | ~205 | 48h from 2026-05-19 |
+| **616643** | crisis pipeline (HF backend, xgpi17 H100-47) | TBD | 48h from 2026-05-19 |
 
-Note: vLLM is incompatible with the cluster's CUDA driver (12.0.90). All data-gen jobs use HF backend (`USE_VLLM=0`). Phase 1 batching (`PHASE1_BATCH_SIZE`) has no effect with HF.
+Note: vLLM is incompatible with the cluster's CUDA driver (12.0.90). All data-gen jobs use HF backend (`USE_VLLM=0`). Crisis stall bug fixed — Qwen3 was refusing SI content with the generic datagen system message; now uses `_CRISIS_DATAGEN_SYSTEM` research-context override. See Bug Log 2026-05-19.
 
 **On hold (do not include in genzv5 yet):**
 
@@ -68,7 +68,7 @@ Note: vLLM is incompatible with the cluster's CUDA driver (12.0.90). All data-ge
 
 ### 2. ✅ Crisis + help_mode data generation — now running
 
-Jobs 616436 (crisis) and 615518 (help_mode) are running on H100-96 with HF backend (`USE_VLLM=0`). No action needed until they finish. Note: vLLM is permanently incompatible with the cluster — see Bug Log 2026-05-19.
+Jobs 616643 (crisis, xgpi17) and 615518 (help_mode, xgpi2) are running with HF backend (`USE_VLLM=0`). Crisis had a stall bug (Qwen3 safety refusal on SI content) — fixed in 2026-05-19 commit. No action needed until they finish.
 
 ### 3. Merge shards once done
 
