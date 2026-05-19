@@ -22,6 +22,7 @@ echo "  PIPELINE_MODE: ${PIPELINE_MODE:-crisis}"
 echo "======================================="
 
 source $PROJECT_DIR/mindmatenv/bin/activate
+export PYTHONUNBUFFERED=1
 echo "[Setup] Python: $(which python) -- $(python --version)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 echo ""

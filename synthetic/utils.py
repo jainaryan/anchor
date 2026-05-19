@@ -198,25 +198,28 @@ class TeacherModel:
 
     # ── Public API (same interface regardless of backend) ──────────────────────
 
-    def generate(self, prompt: str, max_new_tokens: int = 1000, temperature: float = 0.7) -> str:
+    _DEFAULT_GEN_SYSTEM = (
+        "You are a data generation assistant. "
+        "You must output strict, valid JSON only. "
+        "Do not output markdown blocks or conversational text."
+    )
+
+    def generate(self, prompt: str, max_new_tokens: int = 1000, temperature: float = 0.7,
+                 system: str = None) -> str:
         """
         Structured data generation: wraps prompt in a JSON-assistant meta-system message.
         Use this for generating JSON outputs (user turn lists, scenario data, etc.).
+        Pass system= to override the default system message (e.g. for sensitive content
+        that the default message doesn't give enough context for).
         """
         messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a data generation assistant. "
-                    "You must output strict, valid JSON only. "
-                    "Do not output markdown blocks or conversational text."
-                ),
-            },
+            {"role": "system", "content": system or self._DEFAULT_GEN_SYSTEM},
             {"role": "user", "content": prompt},
         ]
         return self._call(messages, max_new_tokens, temperature)
 
-    def generate_batch(self, prompts: list, max_new_tokens: int = 1000, temperature: float = 0.7) -> list:
+    def generate_batch(self, prompts: list, max_new_tokens: int = 1000, temperature: float = 0.7,
+                       system: str = None) -> list:
         """
         Batch version of generate(). Passes all prompts in a single vLLM call so they
         are processed in parallel via continuous batching. HF backend falls back to a
@@ -224,11 +227,7 @@ class TeacherModel:
 
         Returns a list of response strings in the same order as prompts.
         """
-        _sys = (
-            "You are a data generation assistant. "
-            "You must output strict, valid JSON only. "
-            "Do not output markdown blocks or conversational text."
-        )
+        _sys = system or self._DEFAULT_GEN_SYSTEM
         messages_list = [
             [{"role": "system", "content": _sys}, {"role": "user", "content": p}]
             for p in prompts
