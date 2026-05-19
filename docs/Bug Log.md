@@ -10,6 +10,11 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-19
 
+### PyTorch cu130 vs driver 12090 — training job 616653 killed by CUDA guard
+- **Symptom:** `finetuning/CUDA_train_qlora.py` raised `RuntimeError: CUDA not available` and job 616653 (genzv5 on xgph6) terminated immediately after model info prints.
+- **Root cause:** PyTorch 2.11.0+cu130 is compiled for CUDA 13.0. On cluster nodes with driver 12090 (CUDA 12.0.90), `torch.cuda.is_available()` returns `False`. The training script had `if not torch.cuda.is_available(): raise RuntimeError(...)` as a hard fail. However `device_map="auto"` in `AutoModelForCausalLM.from_pretrained` still successfully places the model on GPU — the Python-level check is overly conservative.
+- **Fix:** Changed guard to a warning print + comment explaining the cu130/driver mismatch. Let `device_map="auto"` fail naturally if there truly is no GPU. Commit `16ad500`. Resubmitted as job 616892 (A100-80, PENDING).
+
 ### Crisis pipeline stall — Qwen3 safety refusal on suicidal ideation content
 - **Symptom:** Jobs 615517 (22h, 4 examples) and 616436 (7h, 0 new examples) both stalled completely. Raw output file never updated. Stdout log ended at model load print.
 - **Root cause:** Qwen3-30B-Instruct's safety training refuses to generate suicidal ideation content when the system message is the generic `"You are a data generation assistant. You must output strict, valid JSON only."`. The model returned a non-JSON refusal on every single Phase 1 call. `parse_json_robust` returned None every time → pipeline logged failures but stdout was buffered (no `PYTHONUNBUFFERED=1`), so nothing was visible in logs and nothing was written to disk. The loop spun silently forever.
