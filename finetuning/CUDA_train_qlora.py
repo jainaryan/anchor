@@ -35,8 +35,11 @@ print(f'CUDA version: {torch.version.cuda}')
 if not torch.cuda.is_available():
     print("[trainer] WARNING: torch.cuda.is_available()=False — proceeding anyway "
           "(cu130 vs driver 12090 mismatch; device_map=auto still works)")
-    # Patch so TrainingArguments bf16 validation passes — it checks is_available() internally.
+    # Patch is_available + is_bf16_supported so TrainingArguments validation passes.
+    # Both are called before the model loads; after bitsandbytes loads the model it
+    # initialises the CUDA context as a side-effect, so all subsequent CUDA calls work.
     torch.cuda.is_available = lambda: True
+    torch.cuda.is_bf16_supported = lambda *a, **kw: True
     
 
 BASE_MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
