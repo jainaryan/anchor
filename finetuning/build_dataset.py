@@ -108,6 +108,38 @@ DATA_MIX_PRESETS = {
         "synthetic_train.jsonl":                1000,
         "synthetic_train_targeted_fixes.jsonl":  181,
     },
+    # v5 (2026-05-19): first run with conv-memory + biometric Qwen data + help_mode data.
+    # Key change vs v4: adds conv-memory (CROSS_SESSION_MEMORY fix), biometric Qwen shards
+    # (BIOMETRIC fix), and help_mode Qwen data (HELP_MODE fix). Loss weighting handles
+    # the safety-critical categories (crisis 4.0, help_mode 3.0, gold 3.0, targeted_fix 2.0,
+    # conv_memory/biometric 1.5 via prefix match in _weight_for).
+    # Core proportions kept from v4 to preserve COMPANION (92%) and FORMAT (56%).
+    # Total: ~13,988. At batch=8: ~1,750 steps/epoch → run 2000 steps.
+    # Use --model v5 arg. Output: adapters/genzv5, conversations_raw_v5, conversations_cleaned_v5.
+    "v5": {
+        # Core (same sources as v4, adjusted counts)
+        "synthetic_train_targeted_fix.jsonl":        4000,
+        "synthetic_train_friend_1.jsonl":            2000,
+        "synthetic_train_transition.jsonl":          1500,
+        "synthetic_train_casual.jsonl":              1000,
+        "synthetic_train_therapist_.jsonl":           800,
+        "synthetic_train.jsonl":                      300,
+        "synthetic_train_targeted_fixes.jsonl":       181,
+        # Conv-memory (all available shards — 1,441 total, loss_weight=1.5 via prefix)
+        "synthetic_train_conv_memory.jsonl":          167,
+        "synthetic_train_conv_memory_qwen.jsonl":     299,
+        "synthetic_train_conv_memory_qwen_s0.jsonl":  335,
+        "synthetic_train_conv_memory_qwen_s1.jsonl":  316,
+        "synthetic_train_conv_memory_qwen_s2.jsonl":  324,
+        # Biometric (Qwen shards s0–s2 + old Gemma4 capped, loss_weight=1.5 via prefix)
+        "synthetic_train_biometric_qwen_s0.jsonl":    993,
+        "synthetic_train_biometric_qwen_s1.jsonl":     80,
+        "synthetic_train_biometric_qwen_s2.jsonl":     78,
+        "synthetic_train_biometric.jsonl":            1500,
+        # Help-mode (loss_weight=3.0 via exact key match)
+        "synthetic_train_help_mode_qwen.jsonl":        115,
+        # Crisis skipped — only 4 examples, insufficient signal
+    },
     # v2_continued (2026-04-29): continued training from genzv2 ck1600
     # Base model already knows: casual tone, pivot, CRISIS, FORMAT, NO_HALLUCINATION
     # Only fixing: MEMORY_USE, BIOMETRIC, HELP_MODE
@@ -163,7 +195,7 @@ def _weight_for(filename: str) -> float:
 
 import argparse as _argparse
 _preset_parser = _argparse.ArgumentParser(add_help=False)
-_preset_parser.add_argument("--model", type=str, default="v2", choices=list(DATA_MIX_PRESETS.keys()))
+_preset_parser.add_argument("--model", type=str, default="v2", choices=list(DATA_MIX_PRESETS.keys()))  # v5 is latest
 _preset_args, _ = _preset_parser.parse_known_args()
 
 SOURCE_CAPS = DATA_MIX_PRESETS[_preset_args.model]
