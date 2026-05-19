@@ -56,8 +56,11 @@ What this changes for genzv5:
 | 615491–615493 | biometric shards 3–5 | ~2,900 (s0 throughput × 3) | ~72h from 2026-05-17 |
 | **615518** | help_mode pipeline (HF backend, xgpi2) | ~205 | 48h from 2026-05-19 |
 | **616643** | crisis pipeline (HF backend, xgpi17 H100-47) | TBD | 48h from 2026-05-19 |
+| **616892** | genzv5 SFT (A100-80, early run) | adapters/genzv5 | 24h from 2026-05-19 |
 
 Note: vLLM is incompatible with the cluster's CUDA driver (12.0.90). All data-gen jobs use HF backend (`USE_VLLM=0`). Crisis stall bug fixed — Qwen3 was refusing SI content with the generic datagen system message; now uses `_CRISIS_DATAGEN_SYSTEM` research-context override. See Bug Log 2026-05-19.
+
+⚠️ **Crisis heuristic issue (job 616643):** After the safety-refusal fix, Qwen3 is generating conversations but 0/60+ pass the strict heuristic checks (no clinical words, must acknowledge directly, must not open with deflection, etc.). The conversations generate fine — the heuristic may be too strict for Qwen3's output style, or the prompt framing needs adjustment. Check log once job has run longer. If still 0 kept, loosen the heuristic or adjust Phase 2 prompt.
 
 **On hold (do not include in genzv5 yet):**
 
@@ -86,58 +89,17 @@ cat data/synthetic_train_biometric_qwen_s*.jsonl > data/synthetic_train_biometri
 
 genzv5 will be the **first training run with correct system prompt format** (c3acdc9 applied). This is the real test of whether SFT can beat base model on memory categories.
 
-### Step 1: Add v5 preset to `finetuning/build_dataset.py`
+### ✅ Step 1: Add v5 preset to `finetuning/build_dataset.py` — DONE
 
-Wait for both pipelines to finish + merge, then set counts based on actual file sizes. Rough plan:
+v5 preset is in `DATA_MIX_PRESETS`. See [[Training]] → "v5" for exact file/count/weight table. 13,988 examples, 2000 steps.
 
-```python
-# Add to DATA_MIX_PRESETS dict:
-"v5": {
-    # New Qwen-generated data — primary fix targets
-    "synthetic_train_conv_memory_qwen_merged.jsonl": 2000,  # ~15% — cross-session memory
-    "synthetic_train_biometric_qwen.jsonl":          2000,  # ~15% — biometric context handling
+### ✅ Step 2: Create v5 SLURM script — DONE
 
-    # Existing sources
-    "synthetic_train_targeted_fix.jsonl":   4000,   # ~30%
-    "synthetic_train_friend_1.jsonl":       2000,   # ~15%
-    "synthetic_train_transition.jsonl":     1500,   # ~11%
-    "synthetic_train_casual.jsonl":         1000,   # ~7%
-    "synthetic_train_therapist_.jsonl":      800,   # ~6%
-    "synthetic_train.jsonl":                 300,   # ~2%  (grief)
-    "synthetic_train_targeted_fixes.jsonl":  181,   # gold — always 100%
-}
-# Total: ~13,781 (adjust conv_memory + biometric counts once file sizes known)
-# Steps: TBD — aim for ~1 epoch. At batch=8: 14k/8 ≈ 1750 steps → use 2000
-```
+`finetuning/run_sft_v5.slurm` exists. A100-80, 24h, 2000 steps → `adapters/genzv5`.
 
-Key decisions before finalising:
-- **conv_memory weight**: target ~15% of mix. If merged file has >2k examples, cap at 2k. If <2k, use 100%.
-- **biometric_qwen weight**: same — use 100% if <2k final examples, cap at 2k if more.
-- **Drop old `synthetic_train_biometric.jsonl`** from v5 — replaced by `biometric_qwen.jsonl` (Qwen teacher, correct format, richer mode coverage). The old file used Gemma4 with an older pipeline version.
+### ✅ Step 3: Sync to cluster and submit — DONE (early run)
 
-### Step 2: Create v5 SLURM script
-
-```bash
-cp finetuning/run_sft_v4.slurm finetuning/run_sft_v5.slurm
-```
-
-Edit `run_sft_v5.slurm`:
-- `--model v4` → `--model v5`
-- `conversations_raw_v4` → `conversations_raw_v5`
-- `conversations_cleaned_v4` → `conversations_cleaned_v5`
-- `adapters/genzv4` → `adapters/genzv5`
-- `--iters 2400` → decide based on dataset size
-
-### Step 3: Sync to cluster and submit
-
-```bash
-# Sync data (conv_memory file) and scripts to cluster
-rsync -avz data/synthetic_train_conv_memory.jsonl nus-student-cluster:~/projects/mindmate/data/
-rsync -avz finetuning/ nus-student-cluster:~/projects/mindmate/finetuning/
-
-# Submit
-ssh nus-student-cluster "sbatch ~/projects/mindmate/finetuning/run_sft_v5.slurm"
-```
+**Job 616892** submitted 2026-05-19, PENDING on A100-80. This is the early run using the data available now (13,988 examples). Conv-memory new-pool shards and biometric shards 3–5 are still generating — a full v5 re-run will incorporate those once they finish (~31h from 2026-05-19).
 
 ### Step 4: Benchmark on v4 suite
 

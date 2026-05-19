@@ -121,14 +121,35 @@ Defined in `finetuning/build_dataset.py` → `DATA_MIX_PRESETS`. Each key maps t
 # Total: ~10,065 | Steps: 1600 | Goldilocks zone: ck200
 ```
 
-### v5 — planned (not yet in DATA_MIX_PRESETS)
+### v5 — early run (job 616892, PENDING on A100-80, 2026-05-19)
 
-See [[Next Steps]] for exact proposed mix. Key additions:
-- `synthetic_train_conv_memory_qwen_merged.jsonl` (~15%) — cross-session memory, Qwen3-30B teacher
-- `synthetic_train_biometric_qwen.jsonl` (~15%) — biometric context handling, 4-mode (relevant/irrelevant/adjacent/trend), Qwen3-30B teacher
-- Drop `synthetic_train_biometric.jsonl` — replaced by the Qwen version above
+Early genzv5 training with currently available data. Full v5 (with finished conv-memory new-pool shards and biometric shards 3–5) will be a follow-up run.
 
-Must add v5 preset to `build_dataset.py` before running. Wait for jobs 611377/611379–611381 (conv-memory) and 612894–612896 (biometric) to finish first.
+```python
+"v5": {
+    "synthetic_train_targeted_fix.jsonl":        4000,   # 29%  weight=2.0
+    "synthetic_train_friend_1.jsonl":            2000,   # 14%
+    "synthetic_train_transition.jsonl":          1500,   # 11%
+    "synthetic_train_biometric.jsonl":           1500,   # 11%  weight=1.5  (Gemma4, keep until Qwen shards done)
+    "synthetic_train_conv_memory.jsonl":          167,   #  1%  weight=1.5
+    "synthetic_train_conv_memory_qwen.jsonl":     299,   #  2%  weight=1.5
+    "synthetic_train_conv_memory_qwen_s0.jsonl":  335,   #  2%  weight=1.5
+    "synthetic_train_conv_memory_qwen_s1.jsonl":  316,   #  2%  weight=1.5
+    "synthetic_train_conv_memory_qwen_s2.jsonl":  324,   #  2%  weight=1.5
+    "synthetic_train_biometric_qwen_s0.jsonl":    993,   #  7%  weight=1.5
+    "synthetic_train_biometric_qwen_s1.jsonl":     80,   #  1%  weight=1.5
+    "synthetic_train_biometric_qwen_s2.jsonl":     78,   #  1%  weight=1.5
+    "synthetic_train_casual.jsonl":              1000,   #  7%
+    "synthetic_train_therapist_.jsonl":           800,   #  6%
+    "synthetic_train.jsonl":                      300,   #  2%  (grief)
+    "synthetic_train_targeted_fixes.jsonl":       181,   #  1%  weight=3.0  (gold)
+    "synthetic_train_help_mode_qwen.jsonl":        115,  #  1%  weight=3.0
+}
+# Total: ~13,988 examples
+# Steps: 2000 (~1 epoch; checkpoints every 200)
+```
+
+Note: SLURM script uses `data/conversations_raw_v5` and `data/conversations_cleaned_v5`. Near-dedup flag NOT included (not available on cluster's `clean_dataset.py`). CUDA guard in `CUDA_train_qlora.py` removed in commit `16ad500` — needed because PyTorch cu130 reports `cuda.is_available()=False` on driver 12090 even though `device_map="auto"` works fine.
 
 ### Older presets (kept for reference, do not reuse)
 
@@ -198,17 +219,21 @@ cp finetuning/run_sft_v4.slurm finetuning/run_sft_v5.slurm
 # Also add v5 to DATA_MIX_PRESETS in finetuning/build_dataset.py first
 ```
 
-### SLURM submission checklist
+### SLURM submission checklist (genzv5 early run — 2026-05-19)
 
-- [ ] Jobs 611377/611379–611381 (conv-memory) finished and merged → `data/synthetic_train_conv_memory_qwen_merged.jsonl`
-- [ ] Jobs 612894–612896 (biometric) finished and merged → `data/synthetic_train_biometric_qwen.jsonl`
-- [ ] Both merged files rsync'd to cluster
-- [ ] `v5` preset added to `finetuning/build_dataset.py DATA_MIX_PRESETS` (see [[Next Steps]])
-- [ ] SLURM script `run_sft_v5.slurm` created (copy v4, update version, paths, `--iters`)
-- [ ] Partition: `gpu-long`
-- [ ] GPU: `--gres=gpu:a100-80:1` in `#SBATCH` header (not just `--export`)
-- [ ] Log path: `/home/a/aryanj/logs/` (note the `/a/` subdirectory)
-- [ ] Submit with `sbatch finetuning/run_sft_v5.slurm` (no `--export` needed for SFT)
+- [x] `v5` preset added to `finetuning/build_dataset.py DATA_MIX_PRESETS`
+- [x] SLURM script `finetuning/run_sft_v5.slurm` created
+- [x] CUDA guard in trainer replaced with warning (commit `16ad500`)
+- [x] Scripts rsync'd to cluster
+- [x] Job 616892 submitted → PENDING on A100-80
+- [ ] Wait for jobs 615485–615490 (conv-memory new-pool) + 615491–615493 (biometric shards 3–5) — both finish ~72h from 2026-05-17 (~31h remaining)
+- [ ] Merge shards + rsync to cluster → full v5 data (re-run build+clean+train with complete files)
+
+**Checklist for any future v5+ job:**
+- Partition: `gpu-long`
+- GPU: `--gres=gpu:a100-80:1` in `#SBATCH` header (not `--export`)
+- Log path: `/home/a/aryanj/logs/` (note the `/a/` subdirectory)
+- `PYTHONUNBUFFERED=1` in SLURM script for visible print output
 
 ---
 
