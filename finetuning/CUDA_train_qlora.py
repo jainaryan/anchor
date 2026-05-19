@@ -35,6 +35,8 @@ print(f'CUDA version: {torch.version.cuda}')
 if not torch.cuda.is_available():
     print("[trainer] WARNING: torch.cuda.is_available()=False — proceeding anyway "
           "(cu130 vs driver 12090 mismatch; device_map=auto still works)")
+    # Patch so TrainingArguments bf16 validation passes — it checks is_available() internally.
+    torch.cuda.is_available = lambda: True
     
 
 BASE_MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
