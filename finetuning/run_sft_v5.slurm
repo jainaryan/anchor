@@ -19,14 +19,28 @@ export PYTHONUNBUFFERED=1
 # torch 2.11.0+cu130 requires CUDA driver ≥ 13.0. Not all cluster nodes have this
 # (e.g. xgph6 has an older driver). Install cu126 (CUDA 12.6 runtime) which works
 # on any node with a driver supporting CUDA ≥ 12.6 — covers all current cluster nodes.
-# Belt-and-suspenders: even if pip install of cu126 fails or pip leaves cu130 in place,
-# the comprehensive Python-level CUDA shim in CUDA_train_qlora.py will let training proceed.
-echo "[setup] Uninstalling existing torch..."
-pip uninstall -y torch 2>&1 | tail -2 || true
-echo "[setup] Installing PyTorch cu126..."
-pip install -q --index-url https://download.pytorch.org/whl/cu126 torch
+#
+# CRITICAL: use `python -m pip`, NOT bare `pip`. Even after `source mindmatenv/bin/activate`,
+# bare `pip` resolves to miniconda3's pip (/home/a/aryanj/miniconda3/bin/pip), which installs
+# to miniconda3's site-packages instead of the venv. This caused 4 jobs (617977, 618080, 618086,
+# 618200) to fail: pip said cu126 installed, but venv's Python kept loading the original cu130.
+# `python -m pip` forces pip to use the venv's site-packages.
+echo "[setup] Verifying pip is venv pip:"
+python -c "import pip; print('  pip location:', pip.__file__)"
+echo "[setup] Uninstalling existing torch from venv..."
+python -m pip uninstall -y torch 2>&1 | tail -3 || true
+# Belt-and-suspenders: nuke any leftover torch directory in venv (--force-reinstall
+# is known to leave dist-info but not always replace package files cleanly).
+VENV_SITE=$(python -c "import site; print(site.getsitepackages()[0])")
+echo "[setup] Wiping any remnant torch dirs in $VENV_SITE..."
+rm -rf "$VENV_SITE/torch" "$VENV_SITE"/torch-*.dist-info 2>/dev/null || true
+echo "[setup] Installing PyTorch cu126 into venv..."
+python -m pip install -q --index-url https://download.pytorch.org/whl/cu126 torch
 # Run from /tmp to avoid logging.py in project root shadowing stdlib logging module
-echo "[setup] torch version: $(cd /tmp && python -c 'import torch; print(torch.__version__)' 2>&1)"
+echo "[setup] torch version (must be cu126):"
+cd /tmp && python -c 'import torch; print("  version:", torch.__version__); print("  cuda:", torch.version.cuda); print("  file:", torch.__file__)' && cd ~/projects/mindmate
+# Fail fast if cu126 didn't actually install
+python -c 'import torch; assert "cu126" in torch.__version__, f"Expected cu126, got {torch.__version__}"' || { echo "[setup] FATAL: cu126 install failed"; exit 1; }
 
 echo "=========================================="
 echo "  MindMate SFT v5 — Llama 3.2 3B (fresh)"
