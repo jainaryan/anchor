@@ -125,16 +125,27 @@ DATA_MIX_PRESETS = {
         "synthetic_train_therapist_.jsonl":           800,
         "synthetic_train.jsonl":                      300,
         "synthetic_train_targeted_fixes.jsonl":       181,
-        # Conv-memory (all available shards — 1,441 total, loss_weight=1.5 via prefix)
+        # Conv-memory (all available shards — 1,617 total, loss_weight=1.5 via prefix)
+        # s3-s8 added 2026-05-21 from new-pool PROFILE_SET (jobs 615485-615490, 176 ex total)
         "synthetic_train_conv_memory.jsonl":          167,
         "synthetic_train_conv_memory_qwen.jsonl":     299,
         "synthetic_train_conv_memory_qwen_s0.jsonl":  335,
         "synthetic_train_conv_memory_qwen_s1.jsonl":  316,
         "synthetic_train_conv_memory_qwen_s2.jsonl":  324,
-        # Biometric (Qwen shards s0–s2 + old Gemma4 capped, loss_weight=1.5 via prefix)
+        "synthetic_train_conv_memory_qwen_s3.jsonl":   44,
+        "synthetic_train_conv_memory_qwen_s4.jsonl":   28,
+        "synthetic_train_conv_memory_qwen_s5.jsonl":   21,
+        "synthetic_train_conv_memory_qwen_s6.jsonl":   24,
+        "synthetic_train_conv_memory_qwen_s7.jsonl":   33,
+        "synthetic_train_conv_memory_qwen_s8.jsonl":   26,
+        # Biometric (Qwen shards s0–s5 + old Gemma4 capped, loss_weight=1.5 via prefix)
+        # s3-s5 added 2026-05-21 from jobs 615491-615493 (209 ex total)
         "synthetic_train_biometric_qwen_s0.jsonl":    993,
         "synthetic_train_biometric_qwen_s1.jsonl":     80,
         "synthetic_train_biometric_qwen_s2.jsonl":     78,
+        "synthetic_train_biometric_qwen_s3.jsonl":     91,
+        "synthetic_train_biometric_qwen_s4.jsonl":     57,
+        "synthetic_train_biometric_qwen_s5.jsonl":     61,
         "synthetic_train_biometric.jsonl":            1500,
         # Help-mode (loss_weight=3.0 via exact key match)
         "synthetic_train_help_mode_qwen.jsonl":        115,
