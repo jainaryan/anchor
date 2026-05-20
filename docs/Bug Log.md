@@ -10,6 +10,54 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-21
 
+### 🎯 ROOT CAUSE of all CUDA-driver failures — `pip` ≠ `python -m pip` on this cluster (4 wasted jobs)
+- **Discovery:** After job 618200 failed at `model._apply` → `t.to(device)` (a NEW failure point past every patched shim), SSH'd in to investigate the venv state:
+  ```
+  $ source ~/projects/mindmate/mindmatenv/bin/activate
+  $ which python  →  /home/a/aryanj/projects/mindmate/mindmatenv/bin/python  ✓ (venv)
+  $ which pip     →  /home/a/aryanj/miniconda3/bin/pip                       ✗ (miniconda)
+  $ pip show torch        →  Version: 2.12.0+cu126   (miniconda3's torch)
+  $ python -c 'import torch; print(torch.__version__)'  →  2.11.0+cu130       (venv's torch, untouched since 2026-04-09)
+  $ ls $venv/torch-*.dist-info  →  torch-2.11.0.dist-info       (cu130 still in venv)
+  ```
+- **The real bug:** On this cluster, **`source mindmatenv/bin/activate` does NOT change which `pip` is resolved**. Bare `pip` keeps resolving to miniconda3's pip (presumably because PATH ordering or a shell alias puts miniconda3/bin before the venv's bin). Every `pip install ...` for the last 4 jobs (617977, 618080, 618086, 618200) installed cu126 into **miniconda3's site-packages**, not the venv. The venv's torch (cu130) was never touched.
+- **Why the symptoms were so confusing:**
+  - pip stderr always said `you have torch 2.12.0+cu126` ← miniconda's view
+  - Training script always printed `Version: 2.11.0+cu130` ← venv's torch
+  - The same SLURM script saw both states "simultaneously" — they were just looking at different site-packages.
+- **Why the shim made it look like progress:** each job got further than the last because the Python-level patches were genuinely closing legitimate gaps in `_lazy_init`. But the underlying cu130 was still loaded, so any direct C++ runtime call (`set_device`, `manual_seed_all` callback, `t.to(device)`) hit the driver wall sooner or later. The shim was treating symptoms.
+- **Fix (commit `f75fcf8`):** Use `python -m pip` everywhere in SLURM scripts. This guarantees pip targets the active Python's site-packages.
+  ```bash
+  # CRITICAL: use `python -m pip`, NOT bare `pip`. Even after `source activate`,
+  # bare `pip` may resolve to a system/conda pip that installs to the WRONG env.
+  python -m pip uninstall -y torch
+  VENV_SITE=$(python -c "import site; print(site.getsitepackages()[0])")
+  rm -rf "$VENV_SITE/torch" "$VENV_SITE"/torch-*.dist-info  # --force-reinstall leaves stale files
+  python -m pip install --index-url https://download.pytorch.org/whl/cu126 torch
+  # Fail fast if cu126 didn't actually land:
+  python -c 'import torch; assert "cu126" in torch.__version__, torch.__version__'
+  ```
+- **Resubmitted as job 618207** (A100-80, gpu-long, 24h).
+- **General lesson:** any script that does `source venv/activate && pip install ...` on a cluster shared with conda/system Python should use `python -m pip` to bind pip to the active interpreter. Add this to invariants in `Home.md`.
+
+### CUDA shim cascade #3 — comprehensive audit before resubmit (job 618200)
+- **What was checked:** Every CUDA touchpoint in `Trainer.train()` lifecycle:
+  - `set_seed` ✅ patched (618086 fix)
+  - **Gradient checkpointing** (`torch.utils.checkpoint` with `preserve_rng_state=True`) → calls `torch.cuda.get_rng_state()` → indexes empty `default_generators` → **patched** (`get_rng_state`/`set_rng_state` + `_all` variants return/accept dummy uint8 tensor).
+  - **Checkpoint saving** (`save_steps=200`) → `Trainer._save_rng_state` calls `torch.cuda.random.get_rng_state_all()` → **patched** (mirror all rng patches onto `torch.cuda.random` submodule).
+  - `empty_cache`, `reset_peak_memory_stats`, `reset_max_memory_allocated` → no-ops (bnb optimizer paths).
+  - `default_generators` → `(_FakeCUDAGenerator(),)` fake tuple so any third-party indexing gets safe no-op.
+  - `TrainingArguments` → added `gradient_checkpointing_kwargs={"use_reentrant": False}` (cleaner RNG semantics), `dataloader_num_workers=0` explicit (no worker subprocess CUDA init).
+- **Result:** job 618200 got past every previous failure point — preflight ✅, collator ✅, set_seed ✅, model load ✅, but crashed at `nn.Module._apply` → `t.to(device)`. This C++ call goes through libcudart, which is cu130 in the venv → hits driver wall.
+- **The shim is necessary but not sufficient:** with cu126 actually loaded (root cause fix above), `.to(device)` should work and the shim becomes defense-in-depth.
+
+### v5 preset expanded — conv-memory s3-s8 + biometric s3-s5 shards merged (385 ex)
+- All 9 data-gen jobs (615485–615493) completed.
+- Conv-memory new-pool: s3=44, s4=28, s5=21, s6=24, s7=33, s8=26 → 176 total.
+- Biometric: s3=91, s4=57, s5=61 → 209 total.
+- Yields lower per shard than s0–s2 (HF backend sequential + new-pool's 47 facts × 28 profiles), as predicted in 2026-05-20 note. Worth including as additive signal.
+- `build_dataset.py` v5 preset and `run_sft_v5.slurm` banner updated. v5 total now 14,373 ex (was 13,988). Commit `1a6a977`. Full mix documented in `docs/Data.md`.
+
 ### CUDA shim cascade #2 — _lazy_call fires immediately when _initialized=True (job 618086)
 - **Symptom:** Job 618086 (set_device no-op + cu126 force-reinstall) got past `TrainingArguments` and weight loading, then crashed at `Trainer.__init__` → `set_seed(args.seed)` → `torch.manual_seed(seed)` → callback in `torch/cuda/random.py:125` → `torch.cuda.default_generators[i]` → `IndexError: tuple index out of range`.
 - **Root cause:** Subtle interaction between two parts of our shim:
