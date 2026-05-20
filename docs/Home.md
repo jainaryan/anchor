@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-20 (H200 confirmed incompatible with cu130 — CUDA 12.9 vs runtime 13.0; A100-80 has CUDA 13.0 driver and is compatible; genzv5 SFT job 617977 on A100-80 PENDING with full CUDA shim. See Bug Log 2026-05-20.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-20 (GPU compatibility matrix established: A100-80 driver 580/CUDA 13.0 ✓, H200 driver 575/CUDA 12.9 ✗ for cu130; full 4-patch CUDA shim in trainer; genzv5 SFT job 617977 PENDING on A100-80; help_mode ✅ 200 examples done; crisis heuristic blocking all output — only 5/511 pass; conv-memory+biometric new shards finishing ~4h with low yield. See Bug Log 2026-05-20.)
 
 ---
 
@@ -27,8 +27,9 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05 — matches `defaultCompletionParams` in the app). v3 stays available for legacy comparisons. See [[Benchmarks]]. |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
-| **Active cluster jobs** | 615485–615490 — conv-memory new-pool shards 3–8 (72h, ~24h left) · 615491–615493 — biometric shards 3–5 (72h, ~24h left) · **615518** — help_mode (48h, xgpi2) · **616643** — crisis (48h, xgpi17 H100-47) · **617977** — genzv5 SFT (24h, A100-80 gpu-long, PENDING — full CUDA shim, compatible driver) |
-| **Next milestone** | genzv5 SFT — job 617977 on A100-80 (gpu-long, PENDING); then benchmark on v4 suite |
+| **Active cluster jobs** | 615485–615490 — conv-memory new-pool shards 3–8 (finishing ~4h, 166 ex so far) · 615491–615493 — biometric shards 3–5 (finishing ~4h, 199 ex so far) · **616643** — crisis (running, ⚠️ only 5/511 pass heuristic) · **617977** — genzv5 SFT (PENDING, A100-80) |
+| **Completed jobs** | ✅ **615518** help_mode — 200 examples total |
+| **Next milestone** | genzv5 SFT 617977 start on A100-80 → checkpoints every 200 steps → v4 benchmark |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
 ---

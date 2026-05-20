@@ -60,7 +60,13 @@ What this changes for genzv5:
 
 Note: vLLM is incompatible with the cluster's CUDA driver (12.0.90). All data-gen jobs use HF backend (`USE_VLLM=0`). Crisis stall bug fixed — Qwen3 was refusing SI content with the generic datagen system message; now uses `_CRISIS_DATAGEN_SYSTEM` research-context override. See Bug Log 2026-05-19.
 
-⚠️ **Crisis heuristic issue (job 616643):** After the safety-refusal fix, Qwen3 is generating conversations but 0/60+ pass the strict heuristic checks (no clinical words, must acknowledge directly, must not open with deflection, etc.). The conversations generate fine — the heuristic may be too strict for Qwen3's output style, or the prompt framing needs adjustment. Check log once job has run longer. If still 0 kept, loosen the heuristic or adjust Phase 2 prompt.
+⚠️ **Crisis heuristic issue (job 616643) — 511+ attempts, only 5 examples pass (2026-05-20):** The heuristic is blocking virtually all output. The conversations generate fine (safety-refusal fix works) but fail checks for: clinical language absence, direct acknowledgement, not opening with deflection. Qwen3's style likely doesn't match the expected patterns. **Action needed:** loosen the heuristic thresholds, or inspect a raw failing example to understand what's being rejected. The job has ~16h left — if still ~0% pass rate, cancel and relaunch with a fixed heuristic.
+
+**Conv-memory new-pool shards (615485–615490) — finishing ~4h, very low yield:**
+- s3–s8: 166 total examples (vs 320+/shard for s0–s2). Likely cause: HF backend sequential generation is much slower; `PROFILE_SET=new` uses 28 profiles with 47 facts (more complex). Don't relaunch — merge what we have into v5 mix as additive signal.
+
+**Biometric shards (615491–615493) — finishing ~4h:**
+- s3–s5: 199 total examples (89+52+58). Same throughput issue. Merge as additive to s0–s2.
 
 **On hold (do not include in genzv5 yet):**
 

@@ -10,6 +10,17 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-20
 
+### Crisis heuristic blocks all output — 5/511 examples pass (job 616643)
+- **Symptom:** Job 616643 (crisis pipeline, xgpi17, H100-47) has made 511+ generation attempts and only 5 examples have passed the heuristic. Logs show a continuous stream of `fail heuristic (name)` messages.
+- **Root cause:** The crisis heuristic checks are too strict for Qwen3-30B's generation style. The heuristic requires: (1) no clinical/therapy language, (2) direct acknowledgement of distress without deflection, (3) must not open with a probe question. Qwen3 likely uses slightly different phrasing patterns than what the heuristic expects.
+- **Not yet fixed** — job still running (~16h left). Options: (a) loosen heuristic thresholds, (b) inspect a raw failing example to identify the specific check failing, (c) adjust Phase 2 prompt to match heuristic expectations more closely.
+- **Impact on v5:** With only 5 crisis examples, the crisis data is essentially absent from any v5 re-run. genzv5 will likely still show the CRISIS regression (67%→~48%). Fix heuristic before resubmitting crisis job.
+
+### Conv-memory new-pool shards — low yield (166 examples / 6 shards over 3 days)
+- **Symptom:** Jobs 615485–615490 (conv-memory `PROFILE_SET=new`) are finishing with ~27 examples/shard, vs ~320+/shard for the original s0–s2 shards.
+- **Root cause:** HF backend is sequential (no batch parallelism); new-pool profiles have 47 facts and 28 profiles (more complex → slower generation). The 3-day wall time wasn't enough for high yield with HF backend.
+- **Decision:** Don't relaunch. Merge what was generated (166 examples) into v5 as additive signal alongside s0–s2 (975 examples already). Not worth another 3-day job for marginal gain.
+
 ### H200 (xgpk0) incompatible with PyTorch cu130 — CUDA 12.9 driver, runtime needs 13.0 (job 617959)
 - **Symptom:** After the full CUDA shim (DeferredCudaCallError fixed), `torch.cuda.set_device()` raised `torch.AcceleratorError: CUDA error: CUDA driver version is insufficient for CUDA runtime version (cudaErrorInsufficientDriver)`.
 - **Root cause:** H200 node xgpk0 runs GPU driver 575.57.08 which supports CUDA up to **12.9**. PyTorch cu130 compiled for CUDA **13.0** requires driver support for CUDA 13.0+. The `_lazy_init` shim got past Python-level validation, but the first real CUDA driver call (`_cuda_setDevice`) hit the hard driver-version wall.

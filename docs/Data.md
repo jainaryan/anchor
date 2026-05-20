@@ -6,7 +6,7 @@ tags: [anchor, data]
 
 ← [[Home]]
 
-> **2026-05-19 status:** vLLM is permanently incompatible with all cluster nodes — H100-96 CUDA driver 12090 (12.0.90) too old for `torch.accelerator` used by vLLM V1. HF backend (`USE_VLLM=0`) is the only viable option on this cluster. Crisis (job 616436) and help_mode (job 615518) pipelines are now running with HF backend. See Bug Log 2026-05-19 for full failure history.
+> **2026-05-20 status:** vLLM permanently incompatible with all cluster nodes (HF backend only). Conv-memory new-pool shards (s3–s8) and biometric shards (s3–s5) finishing ~2026-05-20 with low yield (slow HF backend + `PROFILE_SET=new`). Help_mode (615518) completed at 200 examples. Crisis (616643) generating but heuristic blocks everything — only 5 examples after 500+ attempts. Training job 617977 PENDING on A100-80. See Bug Log 2026-05-20.
 
 ---
 
@@ -37,8 +37,13 @@ tags: [anchor, data]
 | `synthetic_train_conv_memory_qwen_s1.jsonl` | Qwen shard 1 — same config, disjoint RNG | job 611380 |
 | `synthetic_train_conv_memory_qwen_s2.jsonl` | Qwen shard 2 — same config, disjoint RNG | job 611381 |
 | `synthetic_train_conv_memory_overref_qwen_s{0,1,2}.jsonl` | **Inspection only** — casual chats where Anchor shoehorned therapy/coping. NOT for training as-is; potential DPO negatives later | same jobs (filter side-channel) |
-| `synthetic_train_conv_memory_qwen_s3.jsonl` | Qwen shard 3 — **new profiles only** (`PROFILE_SET=new`): 18 new clinical + 10 new companion (28 total), 47 facts, 2 new modes. **❌ FAILED** — job 612903 OOM'd during inference after generating only 10 conversations. Ran stuck in OOM loop for 2+ days before cancellation. | job 612903 (cancelled) |
-| `synthetic_train_conv_memory_qwen_s4–s8.jsonl` | Shards 4–8 — same new-profile config. **❌ ALL FAILED** — jobs 612904, 612905, 613115–613117 all OOM-killed at weight loading (~55% through 531 shards). Zero data produced. Root cause: new-pool script loads Qwen3-30B differently and uses more RAM than the original shards 0–2. | jobs 612904, 612905, 613115–613117 (OOM-killed) |
+| `synthetic_train_conv_memory_qwen_s3.jsonl` | Qwen shard 3 — new-pool profiles (`PROFILE_SET=new`). Earlier attempt (job 612903) OOM'd; relaunched as job 615485. **🟡 42 examples as of 2026-05-20, job finishing ~4h** | job 615485 |
+| `synthetic_train_conv_memory_qwen_s4.jsonl` | Qwen shard 4 — new-pool. Earlier attempt OOM'd; relaunched as job 615486. **🟡 28 examples, finishing ~4h** | job 615486 |
+| `synthetic_train_conv_memory_qwen_s5.jsonl` | Qwen shard 5 — new-pool. **🟡 19 examples, finishing ~4h** | job 615487 |
+| `synthetic_train_conv_memory_qwen_s6.jsonl` | Qwen shard 6 — new-pool. **🟡 23 examples, finishing ~4h** | job 615488 |
+| `synthetic_train_conv_memory_qwen_s7.jsonl` | Qwen shard 7 — new-pool. **🟡 32 examples, finishing ~4h** | job 615489 |
+| `synthetic_train_conv_memory_qwen_s8.jsonl` | Qwen shard 8 — new-pool. **🟡 22 examples, finishing ~4h** | job 615490 |
+| **Conv-memory new-pool total** | **166 examples across s3–s8 as of 2026-05-20** — much lower yield than s0–s2 (~320+/shard). Likely cause: HF backend is sequential (no batching), `PROFILE_SET=new` profiles may be slower to generate for. | — |
 
 ### Crisis + help_mode SFT data (in progress)
 
@@ -47,8 +52,8 @@ Two-phase teacher-as-Anchor. Crisis: 4 modes (passive_si 30%, humor_deflect 20%,
 
 | File | Role | Origin |
 |---|---|---|
-| `synthetic_train_crisis_qwen.jsonl` | Crisis SFT — Anchor catches passive/active SI, deflection, ambiguous signals | job 616436 🟢 RUNNING |
-| `synthetic_train_help_mode_qwen.jsonl` | Help mode SFT — Anchor gives technique in first turn on explicit help request | job 615518 🟢 RUNNING |
+| `synthetic_train_crisis_qwen.jsonl` | Crisis SFT — Anchor catches passive/active SI, deflection, ambiguous signals | job 616643 ⚠️ RUNNING but heuristic blocks all output — only **5 examples** after 511+ attempts |
+| `synthetic_train_help_mode_qwen.jsonl` | Help mode SFT — Anchor gives technique in first turn on explicit help request | job 615518 ✅ **COMPLETE — 200 examples** (115 from earlier jobs + 85 from this run) |
 
 ### Biometric SFT data (biometric context handling, in progress)
 
@@ -58,10 +63,13 @@ Four weighted modes: `irrelevant` (40% — default is to NOT inject), `adjacent`
 
 | File | Role | Origin |
 |---|---|---|
-| `synthetic_train_biometric_qwen_s0.jsonl` | Biometric shard 0 — **v3 two-phase teacher-as-Anchor**, vLLM, weighted modes (irrel 40/adj 25/rel 25/trend 10) | job 613120 |
-| `synthetic_train_biometric_qwen_s1.jsonl` | Biometric shard 1 — same config, disjoint RNG | job 613121 |
-| `synthetic_train_biometric_qwen_s2.jsonl` | Biometric shard 2 — same config, disjoint RNG | job 613122 |
-| `synthetic_train_biometric_qwen.jsonl` | **Merge target** — `cat s{0,1,2}` after jobs finish | (post-merge) |
+| `synthetic_train_biometric_qwen_s0.jsonl` | Biometric shard 0 — v3 two-phase teacher-as-Anchor, weighted modes (irrel 40/adj 25/rel 25/trend 10) | job 613120 ✅ **993 examples** |
+| `synthetic_train_biometric_qwen_s1.jsonl` | Biometric shard 1 — same config, disjoint RNG | job 613121 ✅ **80 examples** |
+| `synthetic_train_biometric_qwen_s2.jsonl` | Biometric shard 2 — same config, disjoint RNG | job 613122 ✅ **78 examples** |
+| `synthetic_train_biometric_qwen_s3.jsonl` | Biometric shard 3 — relaunched | job 615491 🟡 **89 examples, finishing ~4h** |
+| `synthetic_train_biometric_qwen_s4.jsonl` | Biometric shard 4 — relaunched | job 615492 🟡 **52 examples, finishing ~4h** |
+| `synthetic_train_biometric_qwen_s5.jsonl` | Biometric shard 5 — relaunched | job 615493 🟡 **58 examples, finishing ~4h** |
+| `synthetic_train_biometric_qwen.jsonl` | **Merge target** — `cat s{0,1,2,3,4,5}` after all jobs finish | (post-merge) |
 
 Raw outputs with meta fields (profile name, mode, health_type) live in `synthetic/outputs/biometric_sft_qwen_raw_s{0,1,2}.jsonl` for debugging.
 
