@@ -47,10 +47,22 @@ if not torch.cuda.is_available():
     torch.cuda._initialized = True          # _lazy_init returns immediately hereafter
     if hasattr(torch.cuda, "_queued_calls"):
         torch.cuda._queued_calls.clear()    # drop _check_capability from deferred queue
-    # torch.cuda.set_device() calls torch._C._cuda_setDevice() directly in C++
-    # (bypasses _lazy_init entirely), which also hits the driver wall.
+    # set_device() calls torch._C._cuda_setDevice() directly in C++ (bypasses _lazy_init).
     # device_map="auto" + bitsandbytes handles actual GPU placement; this call is redundant.
     torch.cuda.set_device = lambda *a, **kw: None
+    # With _initialized=True, _lazy_call() executes its callable IMMEDIATELY instead of
+    # queuing it. So torch.cuda.manual_seed_all() triggers a callback that indexes into
+    # torch.cuda.default_generators (empty tuple when CUDA not actually initialized) →
+    # IndexError. Patch these to no-ops; bitsandbytes handles all actual GPU RNG state.
+    torch.cuda.manual_seed = lambda *a, **kw: None
+    torch.cuda.manual_seed_all = lambda *a, **kw: None
+    torch.cuda.device_count = lambda: 1
+    torch.cuda.current_device = lambda: 0
+    torch.cuda.synchronize = lambda *a, **kw: None
+    torch.cuda.get_device_capability = lambda dev=None: (8, 0)  # A100-80
+    torch.cuda.memory_allocated = lambda dev=None: 0
+    torch.cuda.max_memory_allocated = lambda dev=None: 0
+    torch.cuda.memory_reserved = lambda dev=None: 0
 
 
 BASE_MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
