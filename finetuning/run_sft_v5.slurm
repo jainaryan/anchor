@@ -16,6 +16,13 @@ cd ~/projects/mindmate
 source mindmatenv/bin/activate
 export PYTHONUNBUFFERED=1
 
+# torch 2.11.0+cu130 requires CUDA driver ≥ 13.0. Not all cluster nodes have this
+# (e.g. xgph6 has an older driver). Install cu126 (CUDA 12.6 runtime) which works
+# on any node with a driver supporting CUDA ≥ 12.6 — covers all current cluster nodes.
+echo "[setup] Installing compatible PyTorch (cu126)..."
+pip install -q --index-url https://download.pytorch.org/whl/cu126 torch
+echo "[setup] torch version: $(python -c 'import torch; print(torch.__version__)')"
+
 echo "=========================================="
 echo "  MindMate SFT v5 — Llama 3.2 3B (fresh)"
 echo "  Job: $SLURM_JOB_ID | Node: $SLURMD_NODENAME"
