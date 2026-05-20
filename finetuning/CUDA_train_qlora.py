@@ -47,7 +47,11 @@ if not torch.cuda.is_available():
     torch.cuda._initialized = True          # _lazy_init returns immediately hereafter
     if hasattr(torch.cuda, "_queued_calls"):
         torch.cuda._queued_calls.clear()    # drop _check_capability from deferred queue
-    
+    # torch.cuda.set_device() calls torch._C._cuda_setDevice() directly in C++
+    # (bypasses _lazy_init entirely), which also hits the driver wall.
+    # device_map="auto" + bitsandbytes handles actual GPU placement; this call is redundant.
+    torch.cuda.set_device = lambda *a, **kw: None
+
 
 BASE_MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
 DATA_DIR = args_parsed.data_dir
