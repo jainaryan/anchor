@@ -45,11 +45,19 @@ echo "[setup] Wiping any remnant torch dirs in $VENV_SITE..."
 rm -rf "$VENV_SITE/torch" "$VENV_SITE"/torch-*.dist-info 2>/dev/null || true
 echo "[setup] Installing PyTorch cu126 into venv..."
 python -m pip install -q --index-url https://download.pytorch.org/whl/cu126 torch
-# Run from /tmp to avoid logging.py in project root shadowing stdlib logging module
+# Run from /tmp to avoid logging.py in project root shadowing stdlib logging module.
+# IMPORTANT: both the version print AND the assert must run from /tmp — the assert was
+# previously back in ~/projects/mindmate and hit the same logging.py shadow (job 618209).
 echo "[setup] torch version (must be cu126):"
-cd /tmp && python -c 'import torch; print("  version:", torch.__version__); print("  cuda:", torch.version.cuda); print("  file:", torch.__file__)' && cd ~/projects/mindmate
-# Fail fast if cu126 didn't actually install
-python -c 'import torch; assert "cu126" in torch.__version__, f"Expected cu126, got {torch.__version__}"' || { echo "[setup] FATAL: cu126 install failed"; exit 1; }
+cd /tmp && python -c '
+import torch
+print("  version:", torch.__version__)
+print("  cuda:", torch.version.cuda)
+print("  file:", torch.__file__)
+assert "cu126" in torch.__version__, f"Expected cu126, got {torch.__version__}"
+print("  [OK] cu126 confirmed")
+' || { echo "[setup] FATAL: cu126 install failed"; exit 1; }
+cd ~/projects/mindmate
 
 echo "=========================================="
 echo "  MindMate SFT v5 — Llama 3.2 3B (fresh)"
