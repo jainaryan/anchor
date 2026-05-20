@@ -10,10 +10,15 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-20
 
-### TrainingArguments bf16 validation triggers DeferredCudaCallError before model load (jobs 617047, 617237)
-- **Symptom:** Jobs 617047 and 617237 (genzv5 on H200) both died after dataset build/clean with `torch.cuda.DeferredCudaCallError: name '_get_device_properties' is not defined`.
-- **Root cause:** `TrainingArguments(bf16=True)` calls `torch.cuda.is_bf16_supported()` → `torch.cuda.current_device()` → `_lazy_init()` during `__post_init__`. On cu130/driver 12090, `_lazy_init` raises `DeferredCudaCallError`. This fires *before* the model is loaded. Patching `is_available=True` (done in commit `16ad500`) wasn't enough — `is_bf16_supported` bypasses `is_available` and goes directly to `_lazy_init`. Once bitsandbytes loads the model it initialises the CUDA context as a side-effect, after which all CUDA calls work — so the problem is specifically in the narrow window between script start and model load.
-- **Fix:** Also patch `torch.cuda.is_bf16_supported = lambda *a, **kw: True` immediately after patching `is_available`. Commit `466568e`. Resubmitted as job 617247 (H200, PENDING).
+### DeferredCudaCallError cascade — three-step fix required (jobs 617047, 617237, 617247)
+- **Symptom:** Jobs 617047, 617237, 617247 (genzv5 on H200) all died after dataset build/clean with `torch.cuda.DeferredCudaCallError: name '_get_device_properties' is not defined`.
+- **Root cause:** At `import torch`, PyTorch queues `_check_capability` as a deferred call via `_lazy_call`. `_check_capability` calls `get_device_capability(d)` → `_get_device_properties` which is a C++ symbol unregistered on cu130/driver 12090. This queued call fires on the FIRST `_lazy_init()` invocation — which happens inside `TrainingArguments.__post_init__` (device setup, bf16 validation, etc.). bitsandbytes uses its own compiled CUDA extension and never goes through `_lazy_init`, so model loading works fine — but `_lazy_init` has not been triggered yet by the time `TrainingArguments` is created.
+- **Why patching `is_available` + `is_bf16_supported` alone wasn't enough:** `TrainingArguments.__post_init__` at line ~1624 calls a third thing (device setup) that directly invokes `_lazy_init` regardless of those two patches.
+- **Fix (commit `69dd330`):**
+  1. `torch.cuda.is_available = lambda: True` — passes the `if not is_available` guard
+  2. `torch.cuda.is_bf16_supported = lambda *a, **kw: True` — passes bf16 validation
+  3. `torch.cuda._initialized = True` + `torch.cuda._queued_calls.clear()` — `_lazy_init` short-circuits immediately on all subsequent calls; deferred `_check_capability` is dropped. bitsandbytes is unaffected (own CUDA extension).
+- Resubmitted as job 617959 (H200, PENDING).
 
 ## 2026-05-19
 

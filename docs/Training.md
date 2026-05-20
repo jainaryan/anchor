@@ -149,10 +149,14 @@ Early genzv5 training with currently available data. Full v5 (with finished conv
 # Steps: 2000 (~1 epoch; checkpoints every 200)
 ```
 
-Note: SLURM script uses `data/conversations_raw_v5` and `data/conversations_cleaned_v5`. Near-dedup flag NOT included (not available on cluster's `clean_dataset.py`). Three CUDA workarounds applied to `CUDA_train_qlora.py` (all nodes have driver 12090 / PyTorch cu130 mismatch):
-1. Hard CUDA guard replaced with warning (commit `16ad500`)
-2. `torch.cuda.is_available` patched to `True` so `TrainingArguments` accepts bf16 (commit `16ad500`)
-3. `torch.cuda.is_bf16_supported` patched to `True` — it calls `_lazy_init()` directly, triggering `DeferredCudaCallError` before model load (commit `466568e`). Once bitsandbytes loads the model, CUDA context is initialised and all subsequent CUDA calls work normally.
+Note: SLURM script uses `data/conversations_raw_v5` and `data/conversations_cleaned_v5`. Near-dedup flag NOT included (not available on cluster's `clean_dataset.py`). Full CUDA shim applied in `CUDA_train_qlora.py` (all cluster nodes have driver 12090 / PyTorch cu130 mismatch — see Bug Log 2026-05-20):
+```python
+torch.cuda.is_available = lambda: True          # guard + TrainingArguments check
+torch.cuda.is_bf16_supported = lambda *a, **kw: True  # bf16 validation
+torch.cuda._initialized = True                  # _lazy_init short-circuits hereafter
+torch.cuda._queued_calls.clear()                # drop _check_capability from deferred queue
+```
+bitsandbytes uses its own compiled CUDA extension and is unaffected by these patches. Commit `69dd330`.
 
 ### Older presets (kept for reference, do not reuse)
 

@@ -56,7 +56,7 @@ What this changes for genzv5:
 | 615491–615493 | biometric shards 3–5 | ~2,900 (s0 throughput × 3) | ~72h from 2026-05-17 |
 | **615518** | help_mode pipeline (HF backend, xgpi2) | ~205 | 48h from 2026-05-19 |
 | **616643** | crisis pipeline (HF backend, xgpi17 H100-47) | TBD | 48h from 2026-05-19 |
-| **617247** | genzv5 SFT (H200-141, early run, bf16 fix) | adapters/genzv5 | 3h from 2026-05-20 |
+| **617959** | genzv5 SFT (H200-141, early run, full CUDA shim) | adapters/genzv5 | 3h from 2026-05-20 |
 
 Note: vLLM is incompatible with the cluster's CUDA driver (12.0.90). All data-gen jobs use HF backend (`USE_VLLM=0`). Crisis stall bug fixed — Qwen3 was refusing SI content with the generic datagen system message; now uses `_CRISIS_DATAGEN_SYSTEM` research-context override. See Bug Log 2026-05-19.
 
@@ -99,7 +99,7 @@ v5 preset is in `DATA_MIX_PRESETS`. See [[Training]] → "v5" for exact file/cou
 
 ### ✅ Step 3: Sync to cluster and submit — DONE (early run)
 
-**Job 617247** submitted 2026-05-20, PENDING on H200-141 (`gpu` partition, 3h limit, xgpk0). H200 (141GB) is fast enough for 2000-step 3B QLoRA in <3h. This is the early run using the data available now (13,988 examples). Conv-memory new-pool shards and biometric shards 3–5 are still generating — a full v5 re-run will incorporate those once they finish (~24h from 2026-05-20). Three CUDA patches were needed (see Bug Log 2026-05-19–20).
+**Job 617959** submitted 2026-05-20, PENDING on H200-141 (`gpu` partition, 3h limit, xgpk0). H200 (141GB) is fast enough for 2000-step 3B QLoRA in <3h. This is the early run using the data available now (13,988 examples). Conv-memory new-pool shards and biometric shards 3–5 are still generating — a full v5 re-run will incorporate those once they finish (~24h from 2026-05-20). Full CUDA shim applied (see Bug Log 2026-05-20).
 
 ### Step 4: Benchmark on v4 suite
 
