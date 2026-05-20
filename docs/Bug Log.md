@@ -10,6 +10,13 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-20
 
+### H200 (xgpk0) incompatible with PyTorch cu130 — CUDA 12.9 driver, runtime needs 13.0 (job 617959)
+- **Symptom:** After the full CUDA shim (DeferredCudaCallError fixed), `torch.cuda.set_device()` raised `torch.AcceleratorError: CUDA error: CUDA driver version is insufficient for CUDA runtime version (cudaErrorInsufficientDriver)`.
+- **Root cause:** H200 node xgpk0 runs GPU driver 575.57.08 which supports CUDA up to **12.9**. PyTorch cu130 compiled for CUDA **13.0** requires driver support for CUDA 13.0+. The `_lazy_init` shim got past Python-level validation, but the first real CUDA driver call (`_cuda_setDevice`) hit the hard driver-version wall.
+- **A100-80 nodes are compatible:** driver 580.142 supports CUDA **13.0** — exact match for cu130.
+- **Fix:** Reverted `run_sft_v5.slurm` to `--partition=gpu-long --gres=gpu:a100-80:1 --time=24:00:00`. Resubmitted as job 617977 (PENDING). Commit `754d113`.
+- **Note for future jobs:** H200 (xgpk0, `gpu` partition) requires PyTorch cu126 or lower. A100-80 (`gpu-long` partition) is the correct target for cu130.
+
 ### DeferredCudaCallError cascade — three-step fix required (jobs 617047, 617237, 617247)
 - **Symptom:** Jobs 617047, 617237, 617247 (genzv5 on H200) all died after dataset build/clean with `torch.cuda.DeferredCudaCallError: name '_get_device_properties' is not defined`.
 - **Root cause:** At `import torch`, PyTorch queues `_check_capability` as a deferred call via `_lazy_call`. `_check_capability` calls `get_device_capability(d)` → `_get_device_properties` which is a C++ symbol unregistered on cu130/driver 12090. This queued call fires on the FIRST `_lazy_init()` invocation — which happens inside `TrainingArguments.__post_init__` (device setup, bf16 validation, etc.). bitsandbytes uses its own compiled CUDA extension and never goes through `_lazy_init`, so model loading works fine — but `_lazy_init` has not been triggered yet by the time `TrainingArguments` is created.

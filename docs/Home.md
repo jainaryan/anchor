@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-20 (PyTorch cu130/driver 12090 full CUDA shim — _initialized=True + _queued_calls.clear() + is_available + is_bf16_supported patches; genzv5 SFT job 617959 on H200 PENDING. See Bug Log 2026-05-20.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-20 (H200 confirmed incompatible with cu130 — CUDA 12.9 vs runtime 13.0; A100-80 has CUDA 13.0 driver and is compatible; genzv5 SFT job 617977 on A100-80 PENDING with full CUDA shim. See Bug Log 2026-05-20.)
 
 ---
 
@@ -27,8 +27,8 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05 — matches `defaultCompletionParams` in the app). v3 stays available for legacy comparisons. See [[Benchmarks]]. |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
-| **Active cluster jobs** | 615485–615490 — conv-memory new-pool shards 3–8 (72h, ~24h left) · 615491–615493 — biometric shards 3–5 (72h, ~24h left) · **615518** — help_mode (48h, xgpi2) · **616643** — crisis (48h, xgpi17 H100-47) · **617959** — genzv5 SFT (3h, H200-141 xgpk0, PENDING — full CUDA shim applied) |
-| **Next milestone** | genzv5 SFT — job 617247 on H200 once it starts; then benchmark on v4 suite |
+| **Active cluster jobs** | 615485–615490 — conv-memory new-pool shards 3–8 (72h, ~24h left) · 615491–615493 — biometric shards 3–5 (72h, ~24h left) · **615518** — help_mode (48h, xgpi2) · **616643** — crisis (48h, xgpi17 H100-47) · **617977** — genzv5 SFT (24h, A100-80 gpu-long, PENDING — full CUDA shim, compatible driver) |
+| **Next milestone** | genzv5 SFT — job 617977 on A100-80 (gpu-long, PENDING); then benchmark on v4 suite |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
 ---
@@ -41,7 +41,7 @@ These are the non-obvious invariants that burn time if unknown:
 
 2. **Never continued-train.** `PeftModel.from_pretrained` with `is_trainable=True` catastrophically collapses MEMORY_USE to 0/8. Confirmed on `genzv2_continued`. Always start fresh from base.
 
-3. **Always use `--gres=gpu:a100-80:1` explicitly on the cluster.** H100-96 GRES can fall back to ~46GB nodes (seen on jobs 609078–609083), which OOMs the Gemma4 judge at bfloat16 (~52GB).
+3. **Always use `--gres=gpu:a100-80:1` explicitly on the cluster.** H100-96 GRES can fall back to ~46GB nodes (seen on jobs 609078–609083), which OOMs the Gemma4 judge at bfloat16 (~52GB). **H200 (xgpk0, `gpu` partition) is incompatible with PyTorch cu130** — driver 575 supports CUDA 12.9; cu130 needs 13.0. A100-80 (`gpu-long`) has driver 580 / CUDA 13.0 and is the correct target.
 
 4. **`--export` flag must be BEFORE the script path in sbatch.** `sbatch script.slurm --export=MODEL=foo` silently treats it as a script argument. Burned 5 jobs (607691–607695) this way.
 
