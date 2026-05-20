@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-20 (GPU compatibility matrix established: A100-80 driver 580/CUDA 13.0 ✓, H200 driver 575/CUDA 12.9 ✗ for cu130; full 4-patch CUDA shim in trainer; genzv5 SFT job 617977 PENDING on A100-80; help_mode ✅ 200 examples done; crisis heuristic blocking all output — only 5/511 pass; conv-memory+biometric new shards finishing ~4h with low yield. See Bug Log 2026-05-20.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-21 (A100-80 nodes split: xgph6 driver 575 (CUDA 12.9), others 580 (CUDA 13.0) — fixed by pip-installing torch+cu126 at job start; genzv5 SFT job 618080 PENDING; conv-memory+biometric new shards finishing within 1h; crisis heuristic still blocking all output. See Bug Log 2026-05-20.)
 
 ---
 
@@ -27,7 +27,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05 — matches `defaultCompletionParams` in the app). v3 stays available for legacy comparisons. See [[Benchmarks]]. |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
-| **Active cluster jobs** | 615485–615490 — conv-memory new-pool shards 3–8 (finishing ~4h, 166 ex so far) · 615491–615493 — biometric shards 3–5 (finishing ~4h, 199 ex so far) · **616643** — crisis (running, ⚠️ only 5/511 pass heuristic) · **617977** — genzv5 SFT (PENDING, A100-80) |
+| **Active cluster jobs** | 615485–615490 — conv-memory new-pool shards 3–8 (finishing within 1h) · 615491–615493 — biometric shards 3–5 (finishing within 1h) · **616643** — crisis (running, ⚠️ only 5/511 pass heuristic) · **618086** — genzv5 SFT (PENDING, A100-80, set_device no-op fix) |
 | **Completed jobs** | ✅ **615518** help_mode — 200 examples total |
 | **Next milestone** | genzv5 SFT 617977 start on A100-80 → checkpoints every 200 steps → v4 benchmark |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
@@ -42,7 +42,7 @@ These are the non-obvious invariants that burn time if unknown:
 
 2. **Never continued-train.** `PeftModel.from_pretrained` with `is_trainable=True` catastrophically collapses MEMORY_USE to 0/8. Confirmed on `genzv2_continued`. Always start fresh from base.
 
-3. **Always use `--gres=gpu:a100-80:1` explicitly on the cluster.** H100-96 GRES can fall back to ~46GB nodes (seen on jobs 609078–609083), which OOMs the Gemma4 judge at bfloat16 (~52GB). **H200 (xgpk0, `gpu` partition) is incompatible with PyTorch cu130** — driver 575 supports CUDA 12.9; cu130 needs 13.0. A100-80 (`gpu-long`) has driver 580 / CUDA 13.0 and is the correct target.
+3. **Always use `--gres=gpu:a100-80:1` explicitly on the cluster.** H100-96 GRES can fall back to ~46GB nodes (seen on jobs 609078–609083), which OOMs the Gemma4 judge at bfloat16 (~52GB). **A100-80 nodes have mixed drivers** — xgph6 has driver 575 (CUDA 12.9), others have driver 580 (CUDA 13.0). PyTorch cu130 only works on driver 580 nodes. The SFT training script shims around this entirely in Python: `torch.cuda.is_available`, `is_bf16_supported`, `_initialized`, `_queued_calls`, and `set_device` are all patched so `TrainingArguments` succeeds; `device_map="auto"` + bitsandbytes handles actual GPU placement. The SLURM script also force-reinstalls torch+cu126 as a belt-and-suspenders measure. H200 (xgpk0, `gpu` partition) also has driver 575 and is not usable without the cu126 install step.
 
 4. **`--export` flag must be BEFORE the script path in sbatch.** `sbatch script.slurm --export=MODEL=foo` silently treats it as a script argument. Burned 5 jobs (607691–607695) this way.
 

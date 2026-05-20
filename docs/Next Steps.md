@@ -56,7 +56,9 @@ What this changes for genzv5:
 | 615491–615493 | biometric shards 3–5 | ~2,900 (s0 throughput × 3) | ~72h from 2026-05-17 |
 | **615518** | help_mode pipeline (HF backend, xgpi2) | ~205 | 48h from 2026-05-19 |
 | **616643** | crisis pipeline (HF backend, xgpi17 H100-47) | TBD | 48h from 2026-05-19 |
-| **617977** | genzv5 SFT (A100-80, early run, full CUDA shim) | adapters/genzv5 | 24h from 2026-05-20 |
+| ~~617977~~ | genzv5 SFT (A100-80) — FAILED: xgph6 driver 575, cu126 pip install didn't replace cu130 | — | — |
+| ~~618080~~ | genzv5 SFT (A100-80) — FAILED: cu126 force-reinstall fix, but set_device() C++ call still hit driver wall | — | — |
+| **618086** | genzv5 SFT (A100-80, set_device no-op patch + cu126 force-reinstall) | adapters/genzv5 | 24h from 2026-05-21 |
 
 Note: vLLM is incompatible with the cluster's CUDA driver (12.0.90). All data-gen jobs use HF backend (`USE_VLLM=0`). Crisis stall bug fixed — Qwen3 was refusing SI content with the generic datagen system message; now uses `_CRISIS_DATAGEN_SYSTEM` research-context override. See Bug Log 2026-05-19.
 

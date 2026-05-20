@@ -149,14 +149,15 @@ Early genzv5 training with currently available data. Full v5 (with finished conv
 # Steps: 2000 (~1 epoch; checkpoints every 200)
 ```
 
-Note: SLURM script uses `data/conversations_raw_v5` and `data/conversations_cleaned_v5`. Near-dedup flag NOT included (not available on cluster's `clean_dataset.py`). Full CUDA shim applied in `CUDA_train_qlora.py` (all cluster nodes have driver 12090 / PyTorch cu130 mismatch — see Bug Log 2026-05-20):
+Note: SLURM script uses `data/conversations_raw_v5` and `data/conversations_cleaned_v5`. Near-dedup flag NOT included (not available on cluster's `clean_dataset.py`). Full CUDA shim applied in `CUDA_train_qlora.py` (some A100-80 nodes and H200 have driver 575/CUDA 12.9; PyTorch cu130 needs 13.0 — see Bug Log 2026-05-20/21):
 ```python
 torch.cuda.is_available = lambda: True          # guard + TrainingArguments check
 torch.cuda.is_bf16_supported = lambda *a, **kw: True  # bf16 validation
 torch.cuda._initialized = True                  # _lazy_init short-circuits hereafter
 torch.cuda._queued_calls.clear()                # drop _check_capability from deferred queue
+torch.cuda.set_device = lambda *a, **kw: None   # bypasses _lazy_init via direct C++ call; no-op safe with device_map=auto
 ```
-bitsandbytes uses its own compiled CUDA extension and is unaffected by these patches. Commit `69dd330`.
+bitsandbytes uses its own compiled CUDA extension and is unaffected by these patches. `device_map="auto"` handles actual GPU placement. SLURM script also force-reinstalls torch+cu126 as belt-and-suspenders. Commits `69dd330`, `f19ce32`.
 
 ### Older presets (kept for reference, do not reuse)
 

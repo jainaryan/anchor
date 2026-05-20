@@ -10,6 +10,17 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-20
 
+### torch.cuda.set_device() bypasses _lazy_init shim — cudaErrorInsufficientDriver on xgph6 (job 618080)
+- **Symptom:** Job 618080 (cu126 pip install + full _lazy_init shim) still failed on xgph6 (driver 575) with `torch.AcceleratorError: CUDA error: CUDA driver version is insufficient for CUDA runtime version` at `torch.cuda.set_device()`.
+- **Root cause:** `torch.cuda.set_device()` calls `torch._C._cuda_setDevice()` **directly in C++**, completely bypassing `_lazy_init` and the Python-level shim. Even with `torch.cuda._initialized = True` + `_queued_calls.clear()`, this direct C++ call hits the driver wall.
+- **Secondary issue:** The cu126 pip install in the SLURM script ran but was silently ignored — pip saw cu130 already "satisfying" the `torch` requirement and didn't actually replace it. Confirmed: training script still showed `Version: 2.11.0+cu130`.
+- **Tertiary issue:** `echo "[setup] torch version: $(python -c 'import torch; ...')"` was run from `~/projects/mindmate/`, where `logging.py` in the project root shadows stdlib logging. `torch._utils.py` imports `logging.getLogger` → `AttributeError` → blank output. This masked whether the pip install worked.
+- **Fix (commit `f19ce32`):**
+  1. Add `torch.cuda.set_device = lambda *a, **kw: None` to the shim. `device_map="auto"` + bitsandbytes handles actual GPU placement — this call is redundant for 4-bit QLoRA training.
+  2. Add `--force-reinstall` to pip install command so cu130 is actually replaced.
+  3. Run torch version echo from `/tmp` to avoid `logging.py` shadow.
+- **Resubmitted as job 618086** (A100-80, gpu-long, 24h, PENDING).
+
 ### Crisis heuristic blocks all output — 5/511 examples pass (job 616643)
 - **Symptom:** Job 616643 (crisis pipeline, xgpi17, H100-47) has made 511+ generation attempts and only 5 examples have passed the heuristic. Logs show a continuous stream of `fail heuristic (name)` messages.
 - **Root cause:** The crisis heuristic checks are too strict for Qwen3-30B's generation style. The heuristic requires: (1) no clinical/therapy language, (2) direct acknowledgement of distress without deflection, (3) must not open with a probe question. Qwen3 likely uses slightly different phrasing patterns than what the heuristic expects.
@@ -20,6 +31,11 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 - **Symptom:** Jobs 615485–615490 (conv-memory `PROFILE_SET=new`) are finishing with ~27 examples/shard, vs ~320+/shard for the original s0–s2 shards.
 - **Root cause:** HF backend is sequential (no batch parallelism); new-pool profiles have 47 facts and 28 profiles (more complex → slower generation). The 3-day wall time wasn't enough for high yield with HF backend.
 - **Decision:** Don't relaunch. Merge what was generated (166 examples) into v5 as additive signal alongside s0–s2 (975 examples already). Not worth another 3-day job for marginal gain.
+
+### A100-80 nodes not uniformly on driver 580 — xgph6 also has driver 575 (job 617977)
+- **Symptom:** Job 617977 landed on xgph6 (A100-80) and failed with the same `cudaErrorInsufficientDriver` as the H200 jobs. Earlier srun test had shown an A100-80 with driver 580 (CUDA 13.0), but that was a different node.
+- **Root cause:** A100-80 nodes are split across driver versions. xgph6 has driver **575.57.08** (CUDA 12.9 max) — same as H200 xgpk0. Other A100-80 nodes (e.g. xgph7/8/9) have driver **580.142** (CUDA 13.0). Without pinning to a specific nodelist, SLURM may schedule on any A100-80 node.
+- **Fix:** Add `pip install torch --index-url https://download.pytorch.org/whl/cu126` at job start. cu126 runtime (12.6) works on any node with driver ≥ 12.6 — both driver 575 (12.9 ✓) and 580 (13.0 ✓) satisfy this. Adds ~5-10 min overhead. Commit `0bafd70`. Resubmitted as job 618080 (PENDING).
 
 ### H200 (xgpk0) incompatible with PyTorch cu130 — CUDA 12.9 driver, runtime needs 13.0 (job 617959)
 - **Symptom:** After the full CUDA shim (DeferredCudaCallError fixed), `torch.cuda.set_device()` raised `torch.AcceleratorError: CUDA error: CUDA driver version is insufficient for CUDA runtime version (cudaErrorInsufficientDriver)`.
