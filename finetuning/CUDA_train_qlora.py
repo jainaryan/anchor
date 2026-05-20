@@ -25,13 +25,83 @@ parser.add_argument("--adapter-path", type=str, default=None,
                     help="Path to existing LoRA adapter for continued training (skips fresh LoRA init)")
 args_parsed = parser.parse_args()
 
-print(f'Version: {torch.__version__}') 
-print(f'CUDA available: {torch.cuda.is_available()}') 
+print(f'Version: {torch.__version__}')
+print(f'CUDA available: {torch.cuda.is_available()}')
 print(f'CUDA version: {torch.version.cuda}')
 
+# torch.cuda.is_available() returns False on this cluster (PyTorch cu130 vs driver 12090)
+# even though device_map="auto" can still access the GPU. Skip the hard check and let
+# the model load fail naturally if there truly is no GPU.
 if not torch.cuda.is_available():
-    raise RuntimeError("CUDA not available")
-    
+    print("[trainer] WARNING: torch.cuda.is_available()=False — proceeding anyway "
+          "(cu130 vs driver 12090 mismatch; device_map=auto still works)")
+    # ── PyTorch cu130 / driver 12090 compatibility shim ──────────────────────
+    # torch._C._get_device_properties is not registered on this driver, so any
+    # call that triggers _lazy_init (e.g. TrainingArguments device setup,
+    # is_bf16_supported) raises DeferredCudaCallError via _check_capability.
+    # bitsandbytes uses its own compiled CUDA extension and never calls _lazy_init,
+    # so actual GPU operations (model load, forward/backward, optimizer) still work.
+    # Fix: patch the three query functions + short-circuit _lazy_init globally.
+    torch.cuda.is_available = lambda: True
+    torch.cuda.is_bf16_supported = lambda *a, **kw: True
+    torch.cuda._initialized = True          # _lazy_init returns immediately hereafter
+    if hasattr(torch.cuda, "_queued_calls"):
+        torch.cuda._queued_calls.clear()    # drop _check_capability from deferred queue
+    # set_device() calls torch._C._cuda_setDevice() directly in C++ (bypasses _lazy_init).
+    # device_map="auto" + bitsandbytes handles actual GPU placement; this call is redundant.
+    torch.cuda.set_device = lambda *a, **kw: None
+    # Device-query / seed / sync / memory stubs.
+    # With _initialized=True, _lazy_call() executes its callable IMMEDIATELY instead of
+    # queuing it. So torch.cuda.manual_seed_all() triggers a callback that indexes into
+    # torch.cuda.default_generators (empty tuple when CUDA not actually initialized) →
+    # IndexError. Patch these to no-ops; bitsandbytes handles all actual GPU RNG state.
+    torch.cuda.manual_seed = lambda *a, **kw: None
+    torch.cuda.manual_seed_all = lambda *a, **kw: None
+    torch.cuda.device_count = lambda: 1
+    torch.cuda.current_device = lambda: 0
+    torch.cuda.synchronize = lambda *a, **kw: None
+    torch.cuda.get_device_capability = lambda dev=None: (8, 0)  # A100-80
+    torch.cuda.memory_allocated = lambda dev=None: 0
+    torch.cuda.max_memory_allocated = lambda dev=None: 0
+    torch.cuda.memory_reserved = lambda dev=None: 0
+    torch.cuda.empty_cache = lambda: None
+    torch.cuda.reset_peak_memory_stats = lambda *a, **kw: None
+    torch.cuda.reset_max_memory_allocated = lambda *a, **kw: None
+    # RNG state save/restore — used by torch.utils.checkpoint (gradient_checkpointing)
+    # AND by Trainer._save_rng_state during checkpoint saves. Both index default_generators.
+    # Patch to return/accept dummy tensor state.
+    _dummy_rng_state = torch.zeros(16, dtype=torch.uint8)
+    torch.cuda.get_rng_state = lambda *a, **kw: _dummy_rng_state.clone()
+    torch.cuda.set_rng_state = lambda *a, **kw: None
+    torch.cuda.get_rng_state_all = lambda: [_dummy_rng_state.clone()]
+    torch.cuda.set_rng_state_all = lambda *a, **kw: None
+    torch.cuda.initial_seed = lambda: 0
+    torch.cuda.seed = lambda *a, **kw: None
+    torch.cuda.seed_all = lambda *a, **kw: None
+    # Some code paths import torch.cuda.random directly — mirror the patches there too.
+    import torch.cuda.random as _cuda_random
+    _cuda_random.get_rng_state = torch.cuda.get_rng_state
+    _cuda_random.set_rng_state = torch.cuda.set_rng_state
+    _cuda_random.get_rng_state_all = torch.cuda.get_rng_state_all
+    _cuda_random.set_rng_state_all = torch.cuda.set_rng_state_all
+    _cuda_random.manual_seed = torch.cuda.manual_seed
+    _cuda_random.manual_seed_all = torch.cuda.manual_seed_all
+    _cuda_random.initial_seed = torch.cuda.initial_seed
+    _cuda_random.seed = torch.cuda.seed
+    _cuda_random.seed_all = torch.cuda.seed_all
+    # default_generators is a tuple of torch._C.Generator objects (empty when CUDA not
+    # initialized). Replace with a single fake generator so any code that indexes it
+    # (e.g. third-party libs) gets safe no-op behavior instead of IndexError.
+    class _FakeCUDAGenerator:
+        def manual_seed(self, seed): return self
+        def seed(self): return 0
+        def initial_seed(self): return 0
+        def get_state(self): return _dummy_rng_state.clone()
+        def set_state(self, state): pass
+        @property
+        def device(self): return torch.device("cuda:0")
+    torch.cuda.default_generators = (_FakeCUDAGenerator(),)
+
 
 BASE_MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
 DATA_DIR = args_parsed.data_dir
@@ -102,9 +172,10 @@ import re
 def tokenize(batch):
     # This function implements robust "Assistant-Only Loss Masking"
     # using structured 'conversations' and Llama 3 native templates.
-    
+
     formatted_texts = []
     conversations = batch["conversations"]
+    batch_weights = batch.get("loss_weight", [1.0] * len(conversations))
     
     for conv in conversations:
         # conv is already a list of {"role": "...", "content": "..."}
@@ -183,6 +254,7 @@ def tokenize(batch):
         all_labels.append(labels)
         
     tokenized["labels"] = all_labels
+    tokenized["loss_weight"] = [float(w) if w is not None else 1.0 for w in batch_weights]
     del tokenized["offset_mapping"]
     return tokenized
 
@@ -218,19 +290,38 @@ args = TrainingArguments(
     eval_steps=200,
     bf16=True,
     gradient_checkpointing=True,
+    # use_reentrant=False uses the non-legacy checkpointing path which has cleaner
+    # RNG semantics (avoids deep _saved_tensor_hook recursion + fewer CUDA RNG calls).
+    gradient_checkpointing_kwargs={"use_reentrant": False},
+    # Avoid worker subprocesses doing their own torch.cuda init (single process is safe).
+    dataloader_num_workers=0,
     report_to="none",
     warmup_ratio=0.03,
     lr_scheduler_type="cosine",
     optim="paged_adamw_32bit",
 )
 
-collator = DataCollatorForSeq2Seq(
+_base_collator = DataCollatorForSeq2Seq(
     tokenizer=tokenizer,
     model=model,
     padding=True,
     pad_to_multiple_of=8,
     label_pad_token_id=-100,
 )
+
+
+def collator(features):
+    # Pop per-example loss weights before delegating to the seq2seq collator,
+    # which doesn't know how to handle scalar fields.
+    weights = []
+    stripped = []
+    for f in features:
+        w = f.get("loss_weight", 1.0)
+        weights.append(float(w) if w is not None else 1.0)
+        stripped.append({k: v for k, v in f.items() if k != "loss_weight"})
+    batch = _base_collator(stripped)
+    batch["loss_weight"] = torch.tensor(weights, dtype=torch.float32)
+    return batch
 
 # Fail fast before launching Trainer if collation is malformed.
 _smoke = [dataset["train"][j] for j in range(min(4, len(dataset["train"])))]
@@ -246,7 +337,43 @@ if _smoke:
         f"{tuple(smoke_batch['input_ids'].shape)}"
     )
 
-trainer = Trainer(
+class WeightedLossTrainer(Trainer):
+    """Trainer that scales each example's loss by its `loss_weight`.
+
+    Per-example loss = mean cross-entropy over its unmasked (assistant) tokens.
+    Batch loss = sum(w_i * L_i) / sum(w_i)   (weighted mean — keeps gradient scale
+    comparable to unweighted training so the existing LR / cosine schedule still applies).
+    """
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        weights = inputs.pop("loss_weight", None)
+        labels = inputs["labels"]
+        outputs = model(**inputs)
+        logits = outputs.logits
+
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = labels[..., 1:].contiguous()
+
+        loss_fct = torch.nn.CrossEntropyLoss(reduction="none", ignore_index=-100)
+        flat = loss_fct(
+            shift_logits.view(-1, shift_logits.size(-1)),
+            shift_labels.view(-1),
+        ).view(shift_labels.size())
+
+        mask = (shift_labels != -100).float()
+        denom = mask.sum(dim=1).clamp(min=1.0)
+        per_example = (flat * mask).sum(dim=1) / denom
+
+        if weights is not None:
+            w = weights.to(per_example.device).float()
+            loss = (per_example * w).sum() / w.sum().clamp(min=1e-6)
+        else:
+            loss = per_example.mean()
+
+        return (loss, outputs) if return_outputs else loss
+
+
+trainer = WeightedLossTrainer(
     model=model,
     args=args,
     train_dataset=dataset["train"],

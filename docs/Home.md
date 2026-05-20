@@ -5,7 +5,9 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-18 (session 13 cont — audited overref files: 12 false positives held for DPO; submitted crisis (615517) + help_mode (615518) pipeline jobs; genzv5 data mix: conv-memory 1,441 rows done, biometric 3,499 rows done; 11 jobs total active.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-21 (A100-80 nodes split: xgph6 driver 575 (CUDA 12.9), others 580 (CUDA 13.0) — fixed by pip-installing torch+cu126 at job start; genzv5 SFT job 618080 PENDING; conv-memory+biometric new shards finishing within 1h; crisis heuristic still blocking all output. See Bug Log 2026-05-20.
+>
+> **Cleanup (2026-05-21):** freed ~106 GB on cluster, ~40 GB locally. Cluster: deleted exports `mindmate_qwen3_1p7b`, `mindmate_qwen25_dpo_ck200`, `mindmate_llama_dpo_ck200`, `mindmate_gemma4_e2b` (teacher), `mindmate_genz_llama32_3b` (superseded), `mindmate_llama_sft_ck200`, `mindmate_genzv4_ck200`; deleted all DPO adapters (`CUDA_mindmate_llama32b_dpo_ck{200,1600}`, `genz_dpo`, `genz_dpo_ck1600`, `genzv2_dpo_ck1200`, `genzv3_dpo_ck200`, `CUDA_mindmate_qwen25_3b_dpo_ck{200,1600}`) — DPO abandoned. `exports/` 141G→42G, `adapters/` 19G→12G. Local: deleted `mindmate_app/` (superseded by `anchor-app/`, GitHub-backed), `exports.zip` (Jan-24 archive), `models/mlx_base_llama32_3b` (MLX abandoned), `.claude/worktrees`; pruned `adapters/` to keep only `genz/checkpoint-1200` (3.4G→219M); `git gc --aggressive --prune=now` (.git 11G→606M). Disk 5.3 GiB→45 GiB free. All deletions regeneratable via `scripts/export_gguf_cuda.py`.)
 
 ---
 
@@ -17,7 +19,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 
 ---
 
-## Quick Status (2026-05-16)
+## Quick Status (2026-05-19)
 
 | | |
 |---|---|
@@ -27,8 +29,9 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05 — matches `defaultCompletionParams` in the app). v3 stays available for legacy comparisons. See [[Benchmarks]]. |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
-| **Active cluster jobs** | 615485–615490 — conv-memory new-pool shards 3–8 (72h) · 615491–615493 — biometric shards 3–5 (72h) · **615517** — crisis pipeline (48h) · **615518** — help_mode pipeline (48h) |
-| **Next milestone** | genzv5 SFT — first model on the v4 benchmark — once conv-memory + biometric data merge |
+| **Active cluster jobs** | ✅ 615485–615493 conv-memory + biometric shards complete (385 ex added to v5) · **616643** — crisis (running, ⚠️ only 5/511 pass heuristic) · **618199** — genzv5 SFT (A100-80, full CUDA shim + 14,373 ex) |
+| **Completed jobs** | ✅ **615518** help_mode — 200 examples total |
+| **Next milestone** | genzv5 SFT 617977 start on A100-80 → checkpoints every 200 steps → v4 benchmark |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
 ---
@@ -41,7 +44,7 @@ These are the non-obvious invariants that burn time if unknown:
 
 2. **Never continued-train.** `PeftModel.from_pretrained` with `is_trainable=True` catastrophically collapses MEMORY_USE to 0/8. Confirmed on `genzv2_continued`. Always start fresh from base.
 
-3. **Always use `--gres=gpu:a100-80:1` explicitly on the cluster.** H100-96 GRES can fall back to ~46GB nodes (seen on jobs 609078–609083), which OOMs the Gemma4 judge at bfloat16 (~52GB).
+3. **Always use `--gres=gpu:a100-80:1` explicitly on the cluster.** H100-96 GRES can fall back to ~46GB nodes (seen on jobs 609078–609083), which OOMs the Gemma4 judge at bfloat16 (~52GB). **A100-80 nodes have mixed drivers** — xgph6 has driver 575 (CUDA 12.9), others have driver 580 (CUDA 13.0). PyTorch cu130 only works on driver 580 nodes. The SFT training script shims around this entirely in Python: `torch.cuda.is_available`, `is_bf16_supported`, `_initialized`, `_queued_calls`, and `set_device` are all patched so `TrainingArguments` succeeds; `device_map="auto"` + bitsandbytes handles actual GPU placement. The SLURM script also force-reinstalls torch+cu126 as a belt-and-suspenders measure. H200 (xgpk0, `gpu` partition) also has driver 575 and is not usable without the cu126 install step.
 
 4. **`--export` flag must be BEFORE the script path in sbatch.** `sbatch script.slurm --export=MODEL=foo` silently treats it as a script argument. Burned 5 jobs (607691–607695) this way.
 
@@ -50,6 +53,8 @@ These are the non-obvious invariants that burn time if unknown:
 6. **Log path on cluster is `/home/a/aryanj/logs/`** — not `/home/aryanj/logs/` (the latter is a different, wrong path that causes silent SLURM failure).
 
 7. **`finetuning/` has the current scripts. Root-level scripts are legacy.** `CUDA_train_qlora.py`, `build_dataset.py`, etc. at the project root are old duplicates from early development. Always use `finetuning/CUDA_train_qlora.py`, `finetuning/build_dataset.py`, etc.
+
+7b. **Documented v3/v4 sample counts may be wrong.** `extra_paths` drift (fixed 2026-05-19) caused v3/v4 build_dataset.py runs to silently skip 3 of 8 files in SOURCE_CAPS. v4 documented as 21,529 examples may have actually been ~13,000 in git's version; v3 documented as 10,065 may have been ~8,500. Cluster copies may differ. Genzv5+ are unaffected (fix is in). See Bug Log 2026-05-19.
 
 8. **Benchmarks use production sampling — variance is real.** v4 uses the same sampling params as the production chat (temperature=0.7, top_p=0.95, top_k=40, min_p=0.05). This means scores are non-deterministic on every scenario type — 3-run averaging is required for any leaderboard ranking. The rationale: a benchmark with temp=0 measures a model nobody ships. v3 had the same problem; v4 inherits the same fix (`--runs=3` + `benchmarks/diff_results.py`).
 

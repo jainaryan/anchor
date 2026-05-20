@@ -29,10 +29,14 @@ cd $PROJECT_DIR
 export TEACHER_MODEL=30b
 export OUT_LABEL=qwen
 
-# USE_VLLM=0: vLLM fails on H100 nodes (CUDA fork issue — cannot re-init CUDA in forked subprocess).
-# HF backend is proven to work (biometric jobs 613218-613220 ran fine with USE_VLLM=0).
-export USE_VLLM=0
-echo "[Setup] USE_VLLM=$USE_VLLM"
+# vLLM on H100-96 (2026-05-19). vLLM ≥0.6 runs V1 engine only — VLLM_USE_V1 is
+# unrecognized in 0.20.x. CUDA fork fix moved to Python: utils.py forces
+# multiprocessing start method to 'spawn' before LLM() is called.
+# Phase 1 batch size — vLLM processes this many user-simulator prompts in parallel.
+# 8 is conservative for H100-96 with Qwen3-30B-A3B; raise to 16 if throughput allows.
+export USE_VLLM=1
+export PHASE1_BATCH_SIZE=8
+echo "[Setup] USE_VLLM=$USE_VLLM  PHASE1_BATCH_SIZE=$PHASE1_BATCH_SIZE"
 
 # Shard support — pass SHARD_IDX via --export=ALL,SHARD_IDX=N when submitting.
 # Without it, runs as a single unsharded job (writes to *_qwen.jsonl).

@@ -22,6 +22,7 @@ echo "  PIPELINE_MODE: ${PIPELINE_MODE:-crisis}"
 echo "======================================="
 
 source $PROJECT_DIR/mindmatenv/bin/activate
+export PYTHONUNBUFFERED=1
 echo "[Setup] Python: $(which python) -- $(python --version)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 echo ""
@@ -30,10 +31,12 @@ cd $PROJECT_DIR
 export TEACHER_MODEL=30b
 export OUT_LABEL=qwen
 
-# USE_VLLM=0: vLLM fails on H100 nodes (CUDA fork issue).
-# HF backend proven stable on H100-96 (conv-memory jobs 614942-614947 ran with it).
+# vLLM is NOT usable on this cluster — H100-96 nodes run CUDA driver 12090
+# (12.0.90), which is too old for torch.accelerator used by vLLM V1 engine.
+# HF backend (USE_VLLM=0) is the only viable option.
 export USE_VLLM=0
-echo "[Setup] USE_VLLM=$USE_VLLM"
+export PHASE1_BATCH_SIZE=8
+echo "[Setup] USE_VLLM=$USE_VLLM  PHASE1_BATCH_SIZE=$PHASE1_BATCH_SIZE"
 
 # PIPELINE_MODE is passed via --export=ALL,PIPELINE_MODE=crisis (or help_mode).
 # Defaults to 'crisis' if not set.

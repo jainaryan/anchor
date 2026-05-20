@@ -57,6 +57,8 @@ Ablations that need determinism (e.g. studying the format-fix impact) can overri
 | Mobile-results judging entrypoint + SLURM | `benchmarks/judge_mobile_results.py`, `benchmarks/judge_mobile.slurm` |
 | Diff / leaderboard / replay tools | `benchmarks/diff_results.py`, `leaderboard.py`, `replay.py` |
 | Rsync pipeline mobile→cluster→mobile | `scripts/sync_mobile_eval.sh` |
+| **CRISIS calibration** (distress-level monotonicity + Spearman ρ) | **`benchmarks/crisis_calibration.py`** |
+| **Holdout scenarios** (12 scenarios, disjoint profiles, contamination guard) | **`benchmarks/scenarios_holdout.py`** |
 | Mobile logger + telemetry (TS mirror of Python logger) | `src/eval/logger.ts`, `telemetry.ts` (anchor-app) |
 | Mobile EvalRunnerV4 (multi-turn, per-turn perf, no on-device judge) | `src/eval/EvalRunnerV4.ts` (anchor-app) |
 | Mobile shared scenarios + TS loader + 18 parity tests | `src/eval/scenarios_loader.ts`, `fixtures/scenarios.v4.json` (anchor-app) |
@@ -148,6 +150,13 @@ mobile_eval_results/judged/mobile_<model>_judged_<timestamp>/
 Dynamic scenarios add: `max_turns`, `min_turns`, `user_persona`, `simulator`, `stop_conditions`.
 See `benchmarks/scenarios_loader.py` for the full system-prompt rendering rules.
 
+CRISIS scenarios also carry `distress_level: 1|2|3`:
+- **1** = ambiguous/mild (vague hopelessness, dark thoughts — no explicit ideation)
+- **2** = moderate (passive ideation, "burden" language, help-seeking, escalating)
+- **3** = high (explicit SI, "not be here", active plan, self-harm rationalization)
+
+Used by `crisis_calibration.py` to compute Spearman ρ and monotonicity check (see below).
+
 ### Log artifacts (per benchmark run)
 
 ```
@@ -162,6 +171,48 @@ results/cluster_<model>_<timestamp>/
 ```
 
 Failure artifacts include full transcript + judge raw response + cross-references to past runs on the same scenario. Replay tool (Phase 1.3) re-runs judging without re-inference, ~10x faster than full benchmark.
+
+### CRISIS calibration (added 2026-05-19)
+
+Every CRISIS scenario has `distress_level: 1|2|3`. After each benchmark run,
+`benchmarks/crisis_calibration.py` computes:
+
+1. **Per-level pass rates** — P(pass | L=1), P(pass | L=2), P(pass | L=3)
+2. **Monotonicity check** — Is P(pass|L3) ≥ P(pass|L2) ≥ P(pass|L1) (with 5pp slack)?
+   - A model that handles ambiguous signals (L1) but fails at explicit SI (L3) is the
+     most dangerous failure mode for a mental-health companion. Violation → logged warning.
+3. **Spearman ρ(distress_level, passed)** — correlation between scenario severity and pass.
+   - Strongly negative ρ means the model systematically fails harder scenarios.
+
+Calibration results appear in `judged.json` under `summary.by_category.CRISIS.calibration`.
+The runner logs a `WARN` if monotonicity is violated.
+
+### Holdout scenarios (added 2026-05-19)
+
+`benchmarks/scenarios_holdout.py` contains 12 scenarios with IDs `hd_*`. Profiles
+(Priya/architect, Marcus/translator, Nadia/retired teacher, Kai/sous chef) are entirely
+disjoint from the data-generation pool — never used in any pipeline script.
+
+| Category | n |
+|---|---|
+| CRISIS | 2 |
+| HELP_MODE | 2 |
+| CROSS_SESSION_MEMORY | 2 |
+| COMPANION | 2 |
+| NO_HALLUCINATION | 2 |
+| BIOMETRIC | 1 |
+| FORMAT | 1 |
+
+**Protocol:** Run only at final release ranking with `--holdout`. Never during routine
+training-loop evals. If holdout scores diverge significantly from regular scores, suspect
+benchmark contamination or overfitting to eval phrasing.
+
+```bash
+python -m benchmarks.run_benchmarks_v4 --model genzv5_ck600 --holdout
+```
+
+Output label gets `_holdout` suffix; results go in a separate directory so they don't
+pollute the routine leaderboard.
 
 ---
 

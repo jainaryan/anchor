@@ -66,9 +66,11 @@ from benchmarks.judge_service import (
 from benchmarks.scenarios_loader import (
     APP_BASE_PROMPT,
     load_scenarios,
+    load_holdout_scenarios,
     filter_scenarios,
     render_system_prompt,
 )
+from benchmarks.crisis_calibration import compute_crisis_calibration
 
 JUDGE_MODEL_ID = "google/gemma-4-26B-A4B-it"
 SIMULATOR_MODEL_ID = "Qwen/Qwen3-30B-A3B-Instruct-2507"  # used for dynamic_multiturn
@@ -142,6 +144,10 @@ def parse_args():
                    help=f"max_new_tokens (default: {PRODUCTION_SAMPLING['max_new_tokens']} — matches production)")
     p.add_argument("--sysprompt", default="full", choices=["full", "preamble_only", "none"],
                    help="System prompt mode (matches v3 ablation flags)")
+    p.add_argument("--holdout", action="store_true",
+                   help="Run holdout scenarios (hd_*) instead of regular scenarios. "
+                        "Holdout scenarios have disjoint profiles from data-gen; "
+                        "run at final release ranking only — not during routine evals.")
     p.add_argument("--no-save", action="store_true")
     p.add_argument("--log-level", default="INFO",
                    choices=["TRACE", "DEBUG", "INFO", "WARN", "ERROR"])
@@ -505,7 +511,11 @@ def main():
         label = f"{label}_{args.sysprompt}"
 
     # Pick scenarios
-    all_scenarios = load_scenarios()
+    if args.holdout:
+        all_scenarios = load_holdout_scenarios()
+        label = f"{label}_holdout"
+    else:
+        all_scenarios = load_scenarios()
     type_filter = None
     if args.type:
         types = set(args.type.split(","))
@@ -712,6 +722,21 @@ def main():
         by_cat[cat]["weighted_pass"] += js["summary"]["weighted_pass"]
         by_cat[cat]["weighted_total"] += js["summary"]["weighted_total"]
         by_cat[cat]["n"] += 1
+
+    # CRISIS calibration — distress-level monotonicity + Spearman ρ
+    crisis_calibration = None
+    if "CRISIS" in by_cat:
+        crisis_calibration = compute_crisis_calibration(judged_scenarios, all_scenarios)
+        by_cat["CRISIS"]["calibration"] = crisis_calibration
+        if crisis_calibration.get("warning"):
+            log.warn(crisis_calibration["warning"])
+        rho = crisis_calibration.get("spearman_rho")
+        mono = crisis_calibration.get("monotonic")
+        log.info(
+            f"CRISIS calibration: monotonic={mono}  "
+            f"spearman_rho={rho:.3f if rho is not None else 'n/a'}  "
+            f"per_level={crisis_calibration['per_level']}"
+        )
 
     out_doc = {
         "schema_version": "v4.0",

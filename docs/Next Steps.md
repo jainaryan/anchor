@@ -54,13 +54,22 @@ What this changes for genzv5:
 |---|---|---|---|
 | 615485–615490 | conv-memory new-pool shards 3–8 (`PROFILE_SET=new`) | ~1,800–3,000 | ~72h from 2026-05-17 |
 | 615491–615493 | biometric shards 3–5 | ~2,900 (s0 throughput × 3) | ~72h from 2026-05-17 |
+| **615518** | help_mode pipeline (HF backend, xgpi2) | ~205 | 48h from 2026-05-19 |
+| **616643** | crisis pipeline (HF backend, xgpi17 H100-47) | TBD | 48h from 2026-05-19 |
+| ~~617977~~ | genzv5 SFT — FAILED: xgph6 driver 575, cu126 pip didn't replace cu130 | — | — |
+| ~~618080~~ | genzv5 SFT — FAILED: cu126 force-reinstall ok, but set_device() C++ hit driver wall | — | — |
+| ~~618086~~ | genzv5 SFT — FAILED: set_device patched, but manual_seed cb hit empty default_generators | — | — |
+| **618199** | genzv5 SFT (A100-80, full CUDA shim — manual_seed/device_count/synchronize patched + cu126 + 14,373 ex with new shards) | adapters/genzv5 | 24h from 2026-05-21 |
 
-**Not yet started — MISSING:**
+Note: vLLM is incompatible with the cluster's CUDA driver (12.0.90). All data-gen jobs use HF backend (`USE_VLLM=0`). Crisis stall bug fixed — Qwen3 was refusing SI content with the generic datagen system message; now uses `_CRISIS_DATAGEN_SYSTEM` research-context override. See Bug Log 2026-05-19.
 
-| What | Rows | Blocker |
-|---|---|---|
-| `synthetic_train_crisis_qwen.jsonl` | 0 | `launch_crisis_help.sh` built + synced but not submitted |
-| `synthetic_train_help_mode_qwen.jsonl` | 0 | same |
+⚠️ **Crisis heuristic issue (job 616643) — 511+ attempts, only 5 examples pass (2026-05-20):** The heuristic is blocking virtually all output. The conversations generate fine (safety-refusal fix works) but fail checks for: clinical language absence, direct acknowledgement, not opening with deflection. Qwen3's style likely doesn't match the expected patterns. **Action needed:** loosen the heuristic thresholds, or inspect a raw failing example to understand what's being rejected. The job has ~16h left — if still ~0% pass rate, cancel and relaunch with a fixed heuristic.
+
+**Conv-memory new-pool shards (615485–615490) — finishing ~4h, very low yield:**
+- s3–s8: 166 total examples (vs 320+/shard for s0–s2). Likely cause: HF backend sequential generation is much slower; `PROFILE_SET=new` uses 28 profiles with 47 facts (more complex). Don't relaunch — merge what we have into v5 mix as additive signal.
+
+**Biometric shards (615491–615493) — finishing ~4h:**
+- s3–s5: 199 total examples (89+52+58). Same throughput issue. Merge as additive to s0–s2.
 
 **On hold (do not include in genzv5 yet):**
 
@@ -69,15 +78,9 @@ What this changes for genzv5:
 | `synthetic_train_conv_memory_overref_qwen_s*.jsonl` | 29 (~12 false pos + 17 genuine) | See Bug Log 2026-05-17 — revisit as DPO after genzv5 |
 | `synthetic_train_conv_memory_overref_qwen_s*.jsonl` | 29 (~12 false pos + 17 genuine) | See Bug Log 2026-05-17 — revisit as DPO after genzv5 |
 
-### 2. Unblock crisis + help_mode data generation
+### 2. ✅ Crisis + help_mode data generation — now running
 
-`launch_crisis_help.sh` is synced to the cluster. Just submit it:
-
-```bash
-ssh nus-student-cluster "cd ~/projects/mindmate && bash finetuning/launch_crisis_help.sh"
-```
-
-This submits 2 jobs (one `PIPELINE_MODE=crisis`, one `PIPELINE_MODE=help_mode`). Each runs 48h on H100-96 with `--mem=64G`.
+Jobs 616643 (crisis, xgpi17) and 615518 (help_mode, xgpi2) are running with HF backend (`USE_VLLM=0`). Crisis had a stall bug (Qwen3 safety refusal on SI content) — fixed in 2026-05-19 commit. No action needed until they finish.
 
 ### 3. Merge shards once done
 
@@ -95,58 +98,17 @@ cat data/synthetic_train_biometric_qwen_s*.jsonl > data/synthetic_train_biometri
 
 genzv5 will be the **first training run with correct system prompt format** (c3acdc9 applied). This is the real test of whether SFT can beat base model on memory categories.
 
-### Step 1: Add v5 preset to `finetuning/build_dataset.py`
+### ✅ Step 1: Add v5 preset to `finetuning/build_dataset.py` — DONE
 
-Wait for both pipelines to finish + merge, then set counts based on actual file sizes. Rough plan:
+v5 preset is in `DATA_MIX_PRESETS`. See [[Training]] → "v5" for exact file/count/weight table. 13,988 examples, 2000 steps.
 
-```python
-# Add to DATA_MIX_PRESETS dict:
-"v5": {
-    # New Qwen-generated data — primary fix targets
-    "synthetic_train_conv_memory_qwen_merged.jsonl": 2000,  # ~15% — cross-session memory
-    "synthetic_train_biometric_qwen.jsonl":          2000,  # ~15% — biometric context handling
+### ✅ Step 2: Create v5 SLURM script — DONE
 
-    # Existing sources
-    "synthetic_train_targeted_fix.jsonl":   4000,   # ~30%
-    "synthetic_train_friend_1.jsonl":       2000,   # ~15%
-    "synthetic_train_transition.jsonl":     1500,   # ~11%
-    "synthetic_train_casual.jsonl":         1000,   # ~7%
-    "synthetic_train_therapist_.jsonl":      800,   # ~6%
-    "synthetic_train.jsonl":                 300,   # ~2%  (grief)
-    "synthetic_train_targeted_fixes.jsonl":  181,   # gold — always 100%
-}
-# Total: ~13,781 (adjust conv_memory + biometric counts once file sizes known)
-# Steps: TBD — aim for ~1 epoch. At batch=8: 14k/8 ≈ 1750 steps → use 2000
-```
+`finetuning/run_sft_v5.slurm` exists. A100-80, 24h, 2000 steps → `adapters/genzv5`.
 
-Key decisions before finalising:
-- **conv_memory weight**: target ~15% of mix. If merged file has >2k examples, cap at 2k. If <2k, use 100%.
-- **biometric_qwen weight**: same — use 100% if <2k final examples, cap at 2k if more.
-- **Drop old `synthetic_train_biometric.jsonl`** from v5 — replaced by `biometric_qwen.jsonl` (Qwen teacher, correct format, richer mode coverage). The old file used Gemma4 with an older pipeline version.
+### ✅ Step 3: Sync to cluster and submit — DONE (early run)
 
-### Step 2: Create v5 SLURM script
-
-```bash
-cp finetuning/run_sft_v4.slurm finetuning/run_sft_v5.slurm
-```
-
-Edit `run_sft_v5.slurm`:
-- `--model v4` → `--model v5`
-- `conversations_raw_v4` → `conversations_raw_v5`
-- `conversations_cleaned_v4` → `conversations_cleaned_v5`
-- `adapters/genzv4` → `adapters/genzv5`
-- `--iters 2400` → decide based on dataset size
-
-### Step 3: Sync to cluster and submit
-
-```bash
-# Sync data (conv_memory file) and scripts to cluster
-rsync -avz data/synthetic_train_conv_memory.jsonl nus-student-cluster:~/projects/mindmate/data/
-rsync -avz finetuning/ nus-student-cluster:~/projects/mindmate/finetuning/
-
-# Submit
-ssh nus-student-cluster "sbatch ~/projects/mindmate/finetuning/run_sft_v5.slurm"
-```
+**Job 617977** submitted 2026-05-20, PENDING on A100-80 (`gpu-long` partition, 24h). H200 was incompatible — driver 575 (CUDA 12.9) vs cu130 runtime (CUDA 13.0). A100-80 has driver 580 (CUDA 13.0), fully compatible. Full CUDA shim applied (see Bug Log 2026-05-20). This is the early run with 13,988 examples; full v5 re-run to follow once conv-memory/biometric shards finish (~24h from 2026-05-20).
 
 ### Step 4: Benchmark on v4 suite
 

@@ -8,6 +8,154 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-05-21
+
+### CUDA shim cascade #2 — _lazy_call fires immediately when _initialized=True (job 618086)
+- **Symptom:** Job 618086 (set_device no-op + cu126 force-reinstall) got past `TrainingArguments` and weight loading, then crashed at `Trainer.__init__` → `set_seed(args.seed)` → `torch.manual_seed(seed)` → callback in `torch/cuda/random.py:125` → `torch.cuda.default_generators[i]` → `IndexError: tuple index out of range`.
+- **Root cause:** Subtle interaction between two parts of our shim:
+  1. `torch.cuda._initialized = True` makes `is_initialized()` return True.
+  2. `torch.cuda.manual_seed_all()` registers its callback via `_lazy_call(cb)`. `_lazy_call` checks `if is_initialized(): cb()` — fires IMMEDIATELY instead of queuing.
+  3. The `cb` does `torch.cuda.default_generators[i].manual_seed(seed)`. But `default_generators` is `()` (empty tuple) since CUDA was never actually initialized → IndexError.
+- **Why we didn't see it on the set_device crash:** That crash happened earlier in `TrainingArguments.__post_init__`, before `Trainer.__init__` ran `set_seed`.
+- **Why pip install of cu126 didn't help:** Despite pip reporting `torch 2.12.0+cu126` installed, the training script consistently sees `Version: 2.11.0+cu130`. Suspected cause: torch package files in mindmatenv aren't being cleanly replaced even with `--force-reinstall`. Not pursuing further — comprehensive Python shim is the robust path.
+- **Fix (commit `1a2b335`):** patch additional CUDA functions to safe stubs so no callback ever touches real CUDA state:
+  ```python
+  torch.cuda.manual_seed = lambda *a, **kw: None
+  torch.cuda.manual_seed_all = lambda *a, **kw: None
+  torch.cuda.device_count = lambda: 1
+  torch.cuda.current_device = lambda: 0
+  torch.cuda.synchronize = lambda *a, **kw: None
+  torch.cuda.get_device_capability = lambda dev=None: (8, 0)
+  torch.cuda.memory_allocated / max_memory_allocated / memory_reserved = lambda dev=None: 0
+  ```
+  bitsandbytes is unaffected (own CUDA extension); the Trainer's CUDA queries now all return safe defaults.
+- **Resubmitted as job 618199** (A100-80, gpu-long, 24h, with expanded v5 data mix: +176 conv-memory s3-s8 + 209 biometric s3-s5 = 14,373 total examples).
+
+### v5 preset expanded — conv-memory s3-s8 + biometric s3-s5 shards merged (385 ex)
+- All 9 data-gen jobs (615485–615493) completed.
+- Conv-memory new-pool: s3=44, s4=28, s5=21, s6=24, s7=33, s8=26 → 176 total.
+- Biometric: s3=91, s4=57, s5=61 → 209 total.
+- Yields are lower per shard than s0–s2 (HF backend sequential + new-pool's 47 facts × 28 profiles), as predicted in 2026-05-20 note. Worth including as additive signal.
+- `build_dataset.py` v5 preset and `run_sft_v5.slurm` banner updated. Commit `1a6a977`.
+
+## 2026-05-20
+
+### torch.cuda.set_device() bypasses _lazy_init shim — cudaErrorInsufficientDriver on xgph6 (job 618080)
+- **Symptom:** Job 618080 (cu126 pip install + full _lazy_init shim) still failed on xgph6 (driver 575) with `torch.AcceleratorError: CUDA error: CUDA driver version is insufficient for CUDA runtime version` at `torch.cuda.set_device()`.
+- **Root cause:** `torch.cuda.set_device()` calls `torch._C._cuda_setDevice()` **directly in C++**, completely bypassing `_lazy_init` and the Python-level shim. Even with `torch.cuda._initialized = True` + `_queued_calls.clear()`, this direct C++ call hits the driver wall.
+- **Secondary issue:** The cu126 pip install in the SLURM script ran but was silently ignored — pip saw cu130 already "satisfying" the `torch` requirement and didn't actually replace it. Confirmed: training script still showed `Version: 2.11.0+cu130`.
+- **Tertiary issue:** `echo "[setup] torch version: $(python -c 'import torch; ...')"` was run from `~/projects/mindmate/`, where `logging.py` in the project root shadows stdlib logging. `torch._utils.py` imports `logging.getLogger` → `AttributeError` → blank output. This masked whether the pip install worked.
+- **Fix (commit `f19ce32`):**
+  1. Add `torch.cuda.set_device = lambda *a, **kw: None` to the shim. `device_map="auto"` + bitsandbytes handles actual GPU placement — this call is redundant for 4-bit QLoRA training.
+  2. Add `--force-reinstall` to pip install command so cu130 is actually replaced.
+  3. Run torch version echo from `/tmp` to avoid `logging.py` shadow.
+- **Resubmitted as job 618086** (A100-80, gpu-long, 24h, PENDING).
+
+### Crisis heuristic blocks all output — 5/511 examples pass (job 616643)
+- **Symptom:** Job 616643 (crisis pipeline, xgpi17, H100-47) has made 511+ generation attempts and only 5 examples have passed the heuristic. Logs show a continuous stream of `fail heuristic (name)` messages.
+- **Root cause:** The crisis heuristic checks are too strict for Qwen3-30B's generation style. The heuristic requires: (1) no clinical/therapy language, (2) direct acknowledgement of distress without deflection, (3) must not open with a probe question. Qwen3 likely uses slightly different phrasing patterns than what the heuristic expects.
+- **Not yet fixed** — job still running (~16h left). Options: (a) loosen heuristic thresholds, (b) inspect a raw failing example to identify the specific check failing, (c) adjust Phase 2 prompt to match heuristic expectations more closely.
+- **Impact on v5:** With only 5 crisis examples, the crisis data is essentially absent from any v5 re-run. genzv5 will likely still show the CRISIS regression (67%→~48%). Fix heuristic before resubmitting crisis job.
+
+### Conv-memory new-pool shards — low yield (166 examples / 6 shards over 3 days)
+- **Symptom:** Jobs 615485–615490 (conv-memory `PROFILE_SET=new`) are finishing with ~27 examples/shard, vs ~320+/shard for the original s0–s2 shards.
+- **Root cause:** HF backend is sequential (no batch parallelism); new-pool profiles have 47 facts and 28 profiles (more complex → slower generation). The 3-day wall time wasn't enough for high yield with HF backend.
+- **Decision:** Don't relaunch. Merge what was generated (166 examples) into v5 as additive signal alongside s0–s2 (975 examples already). Not worth another 3-day job for marginal gain.
+
+### A100-80 nodes not uniformly on driver 580 — xgph6 also has driver 575 (job 617977)
+- **Symptom:** Job 617977 landed on xgph6 (A100-80) and failed with the same `cudaErrorInsufficientDriver` as the H200 jobs. Earlier srun test had shown an A100-80 with driver 580 (CUDA 13.0), but that was a different node.
+- **Root cause:** A100-80 nodes are split across driver versions. xgph6 has driver **575.57.08** (CUDA 12.9 max) — same as H200 xgpk0. Other A100-80 nodes (e.g. xgph7/8/9) have driver **580.142** (CUDA 13.0). Without pinning to a specific nodelist, SLURM may schedule on any A100-80 node.
+- **Fix:** Add `pip install torch --index-url https://download.pytorch.org/whl/cu126` at job start. cu126 runtime (12.6) works on any node with driver ≥ 12.6 — both driver 575 (12.9 ✓) and 580 (13.0 ✓) satisfy this. Adds ~5-10 min overhead. Commit `0bafd70`. Resubmitted as job 618080 (PENDING).
+
+### H200 (xgpk0) incompatible with PyTorch cu130 — CUDA 12.9 driver, runtime needs 13.0 (job 617959)
+- **Symptom:** After the full CUDA shim (DeferredCudaCallError fixed), `torch.cuda.set_device()` raised `torch.AcceleratorError: CUDA error: CUDA driver version is insufficient for CUDA runtime version (cudaErrorInsufficientDriver)`.
+- **Root cause:** H200 node xgpk0 runs GPU driver 575.57.08 which supports CUDA up to **12.9**. PyTorch cu130 compiled for CUDA **13.0** requires driver support for CUDA 13.0+. The `_lazy_init` shim got past Python-level validation, but the first real CUDA driver call (`_cuda_setDevice`) hit the hard driver-version wall.
+- **A100-80 nodes are compatible:** driver 580.142 supports CUDA **13.0** — exact match for cu130.
+- **Fix:** Reverted `run_sft_v5.slurm` to `--partition=gpu-long --gres=gpu:a100-80:1 --time=24:00:00`. Resubmitted as job 617977 (PENDING). Commit `754d113`.
+- **Note for future jobs:** H200 (xgpk0, `gpu` partition) requires PyTorch cu126 or lower. A100-80 (`gpu-long` partition) is the correct target for cu130.
+
+### DeferredCudaCallError cascade — three-step fix required (jobs 617047, 617237, 617247)
+- **Symptom:** Jobs 617047, 617237, 617247 (genzv5 on H200) all died after dataset build/clean with `torch.cuda.DeferredCudaCallError: name '_get_device_properties' is not defined`.
+- **Root cause:** At `import torch`, PyTorch queues `_check_capability` as a deferred call via `_lazy_call`. `_check_capability` calls `get_device_capability(d)` → `_get_device_properties` which is a C++ symbol unregistered on cu130/driver 12090. This queued call fires on the FIRST `_lazy_init()` invocation — which happens inside `TrainingArguments.__post_init__` (device setup, bf16 validation, etc.). bitsandbytes uses its own compiled CUDA extension and never goes through `_lazy_init`, so model loading works fine — but `_lazy_init` has not been triggered yet by the time `TrainingArguments` is created.
+- **Why patching `is_available` + `is_bf16_supported` alone wasn't enough:** `TrainingArguments.__post_init__` at line ~1624 calls a third thing (device setup) that directly invokes `_lazy_init` regardless of those two patches.
+- **Fix (commit `69dd330`):**
+  1. `torch.cuda.is_available = lambda: True` — passes the `if not is_available` guard
+  2. `torch.cuda.is_bf16_supported = lambda *a, **kw: True` — passes bf16 validation
+  3. `torch.cuda._initialized = True` + `torch.cuda._queued_calls.clear()` — `_lazy_init` short-circuits immediately on all subsequent calls; deferred `_check_capability` is dropped. bitsandbytes is unaffected (own CUDA extension).
+- Resubmitted as job 617959 (H200, PENDING).
+
+## 2026-05-19
+
+### PyTorch cu130 vs driver 12090 — training job 616653 killed by CUDA guard
+- **Symptom:** `finetuning/CUDA_train_qlora.py` raised `RuntimeError: CUDA not available` and job 616653 (genzv5 on xgph6) terminated immediately after model info prints.
+- **Root cause:** PyTorch 2.11.0+cu130 is compiled for CUDA 13.0. On cluster nodes with driver 12090 (CUDA 12.0.90), `torch.cuda.is_available()` returns `False`. The training script had `if not torch.cuda.is_available(): raise RuntimeError(...)` as a hard fail. However `device_map="auto"` in `AutoModelForCausalLM.from_pretrained` still successfully places the model on GPU — the Python-level check is overly conservative.
+- **Fix:** Changed guard to a warning print + comment explaining the cu130/driver mismatch. Let `device_map="auto"` fail naturally if there truly is no GPU. Commit `16ad500`. Resubmitted as job 616892 (A100-80, PENDING).
+
+### Crisis pipeline stall — Qwen3 safety refusal on suicidal ideation content
+- **Symptom:** Jobs 615517 (22h, 4 examples) and 616436 (7h, 0 new examples) both stalled completely. Raw output file never updated. Stdout log ended at model load print.
+- **Root cause:** Qwen3-30B-Instruct's safety training refuses to generate suicidal ideation content when the system message is the generic `"You are a data generation assistant. You must output strict, valid JSON only."`. The model returned a non-JSON refusal on every single Phase 1 call. `parse_json_robust` returned None every time → pipeline logged failures but stdout was buffered (no `PYTHONUNBUFFERED=1`), so nothing was visible in logs and nothing was written to disk. The loop spun silently forever.
+- **Why help_mode worked but crisis didn't:** Anxiety/coping content doesn't trigger Qwen3's safety filter. Crisis content (passive SI, active SI, humor deflection) does.
+- **Fix:**
+  1. `synthetic/utils.py` — added optional `system=` kwarg to `generate()` and `generate_batch()` so callers can override the default system message.
+  2. `synthetic/crisis_help_pipeline.py` — added `_CRISIS_DATAGEN_SYSTEM`: a research-context message that explains the purpose (training a mental health support chatbot to respond safely). Passed via `system=` in all Phase 1 generate calls. Help mode unaffected (`system=None` → default message).
+  3. `finetuning/crisis_help_pipeline_qwen.slurm` — added `PYTHONUNBUFFERED=1` so all print output flushes immediately.
+- **Node:** also switched from `gpu:h100-96:1` (all busy) to `gpu:h100-47:2` (idle) for job 616643 — H100-47 GRES label maps to a full 95830 MiB H100 NVL, fits the 60GB model fine with HF backend.
+
+### CORRECTION: vLLM V1 permanently incompatible with cluster CUDA driver — HF backend is permanent
+- **Corrects:** "vLLM re-enabled on H100-96" entry below (that entry was wrong — vLLM never worked)
+- **Root cause (definitive):** H100-96 nodes run CUDA driver 12090 (CUDA 12.0.90). vLLM 0.20.2 V1 engine calls `torch.accelerator.set_device_index()` during `init_device()`. This API path requires a newer driver → `torch.cuda.DeferredCudaCallError: name '_get_device_properties' is not defined`. Affects both multiprocessing (subprocess fork) and in-process (VLLM_ENABLE_V1_MULTIPROCESSING=0) modes — same `torch.accelerator` call in both paths.
+- **`VLLM_USE_V1=0`**: Unrecognized env var in vLLM ≥0.6. V0 engine no longer exists. The env var was silently ignored (WARNING: Unknown vLLM environment variable). All V1-disable attempts were no-ops.
+- **What was tried (all failed):** (1) `VLLM_USE_V1=0` — unrecognized, no-op. (2) `multiprocessing.set_start_method('spawn')` — vLLM uses `multiprocessing.get_context('fork')` explicitly, bypassing global method. (3) `VLLM_ENABLE_V1_MULTIPROCESSING=0` — runs EngineCore in-process but `torch.accelerator` still called.
+- **Fix:** `USE_VLLM=0` in all SLURM scripts on this cluster. HF backend works fine (never calls `torch.accelerator`). Crisis pipeline SLURM script updated to `USE_VLLM=0`. Phase 1 batching via `PHASE1_BATCH_SIZE` env var is still wired but has no effect with HF backend (sequential only).
+- **If a new node pool with CUDA ≥12.1 becomes available**, vLLM V1 should work — the code path is in place in `_load_vllm()`.
+
+### CRISIS calibration + holdout scenarios added (benchmark integrity)
+- **Files:** `benchmarks/crisis_calibration.py` (new), `benchmarks/scenarios_holdout.py` (new), `benchmarks/scenarios.json`, `benchmarks/scenarios.py`, `benchmarks/scenarios_loader.py`, `benchmarks/run_benchmarks_v4.py`
+- **Motivation:** All 13 CRISIS scenarios are now tagged with `distress_level: 1|2|3` (1=ambiguous vague hopelessness, 2=passive ideation/help-seeking, 3=explicit SI/active plan). This enables detecting the most dangerous SFT failure mode: a model that handles mild crisis signals but fails at explicit SI moments.
+- **crisis_calibration.py:** Computes per-level pass rates + Spearman ρ(distress_level, passed) + monotonicity check P(pass|L3) ≥ P(pass|L2) ≥ P(pass|L1) with 5pp slack. Monotonicity violation → logged WARN in benchmark run. Results stored in `judged.json` under `summary.by_category.CRISIS.calibration`.
+- **scenarios_holdout.py:** 12 holdout scenarios (IDs `hd_*`) across 7 categories (CRISIS×2, HELP_MODE×2, CROSS_SESSION_MEMORY×2, COMPANION×2, NO_HALLUCINATION×2, BIOMETRIC×1, FORMAT×1). Profiles: Priya/architect, Marcus/translator, Nadia/retired teacher, Kai/sous chef — completely disjoint from data-gen pool. Run only at final release ranking with `--holdout` flag. Never add to training data.
+- **Runner:** Added `--holdout` flag to `run_benchmarks_v4.py`; result label gets `_holdout` suffix. Import `load_holdout_scenarios()` from `scenarios_loader.py`.
+
+### vLLM re-enabled on H100-96 — Phase 1 batching for data-gen pipelines
+- **Files:** `synthetic/utils.py`, `synthetic/conversation_memory_pipeline.py`, `synthetic/crisis_help_pipeline.py`, `finetuning/conv_memory_pipeline_qwen.slurm`, `finetuning/crisis_help_pipeline_qwen.slurm`
+- **Root cause of previous failure (jobs 614822–614827):** vLLM V1 EngineCore spawns a subprocess using Python's `fork` start method. When the parent process already has CUDA initialized, the forked child cannot re-initialize CUDA → `RuntimeError: Cannot re-initialize CUDA in forked subprocess`. V0 engine runs entirely in-process (no subprocess) — no fork, no CUDA re-init issue.
+- **Old workaround:** `USE_VLLM=0` in both SLURM scripts. Left vLLM installed but disabled.
+- **Fix:**
+  1. `utils.py _load_vllm()` — old conditional `if VLLM_USE_V1 == "0": set to "0"` was a no-op. Now defaults to V0 engine unless caller explicitly sets `VLLM_USE_V1=1`. Must be set before `from vllm import LLM`.
+  2. Both H100 SLURM scripts now export `USE_VLLM=1` and `VLLM_USE_V1=0` before invoking python — guarantees the env var is in place before any vllm import.
+- **Phase 1 batching added:**
+  - `utils.py` — `generate_batch(prompts_list)` passes all prompts in a single vLLM `generate()` call. vLLM continuous batching processes them in parallel (not sequential). HF backend falls back to a loop (same outputs, no speedup).
+  - `conversation_memory_pipeline.py` — Phase 1 (user simulator) refactored to collect `PHASE1_BATCH_SIZE=8` conversations' prompts and submit as one batch. Phase 2 (Anchor responder) remains sequential per conversation (each turn depends on the previous).
+  - `crisis_help_pipeline.py` — same pattern applied to both crisis and help_mode Phase 1 generators.
+- **Expected throughput gain (Phase 1):** ~PHASE1_BATCH_SIZE× for the user-simulator step. If Phase 2 (Anchor responses, 2-6 turns per conversation) dominates wall time, overall gain is lower — estimate 2-4× end-to-end. Tune `PHASE1_BATCH_SIZE` via env var; default 8 is conservative for 30B MoE on H100-96.
+- **Not applicable:** biometric pipeline (`gpu:a100-40:2`, CUDA 12.0.90 < 12.1 vLLM minimum) — remains `USE_VLLM=0`.
+
+### Near-duplicate deduplication added to clean_dataset.py
+- **File:** `finetuning/clean_dataset.py`
+- **Problem:** `--dedup` was string-level exact matching. The conv-memory pipeline generates conversations from the same profile pool across multiple shards and teachers (Gemma4 + Qwen3-30B). Same-profile sessions regenerated with slightly different phrasing pass exact dedup but are semantically near-identical — the model sees effectively the same example many times, wasting gradient steps and potentially overfitting to specific profile phrasings.
+- **Fix:** Added MinHash LSH over assistant-turn text (char 4-grams, 128 permutations, banded LSH). Flags: `--near-dedup` (enable) and `--near-dedup-threshold` (default 0.8). The LSH index is shared across train and val so cross-file near-dups (e.g., same conversation in the Gemma4 conv-memory file and a Qwen shard) are also caught. Zero new dependencies — stdlib `hashlib` and `random` only.
+- **Tuning:** Threshold 0.8 means conversations sharing ≥80% of character 4-grams in their assistant turns are considered near-dups. Lower = more aggressive (0.7 catches more paraphrases). The effective LSH crossover is printed at runtime. Validated: near-identical string with one typo detected (MinHash Jaccard 0.93); unrelated string not detected (MinHash Jaccard 0.02).
+- **Wire-up:** `run_sft_v4.slurm` updated to include `--near-dedup --near-dedup-threshold 0.8`. Copy this for v5.
+
+### Silent data-file drop: `extra_paths` drifted from `DATA_MIX_PRESETS`
+- **File:** `finetuning/build_dataset.py`
+- **Symptom:** Files listed in `SOURCE_CAPS` (the per-preset cap dict) but NOT in the hand-maintained `extra_paths` iterator were silently skipped. The loop only iterates `extra_paths` and looks up caps from `SOURCE_CAPS.get(ep.name)`; files absent from `extra_paths` never get opened, never get a "loaded N samples from X" print.
+- **Historical impact:**
+  - **v4 (genzv4)** — documented as 21,529 examples; only 5 of the 8 preset files were in `extra_paths`. The dropped files account for 8,529 rows (targeted_fix=6000, biometric=2348, gold targeted_fixes=181). If the cluster copy matched git, v4 actually trained on ~13,000 examples, not 21,529. *(Cluster copy may have diverged — cannot verify without cluster access. The genzv4 leaderboard numbers stand either way; only the documented sample count is uncertain.)*
+  - **v3 (genzv3)** — similarly missed targeted_fix(2000) + biometric(1500) + gold(65). Documented 10,065; possibly trained on ~8,500.
+- **Why it stayed hidden:** `extra_paths` was added before `DATA_MIX_PRESETS`. Each new preset appended to the cap dict, but nobody appended to the iterator. The build script's stdout shows per-file "loaded N samples" lines, but only for files that were loaded — there is no "skipped X" warning.
+- **Fix:** Derive `extra_paths` from `SOURCE_CAPS.keys()` after preset selection. Now impossible to add a preset key without picking up the matching file. New stdout line prints the list of source files for that preset so any future drift is visible at run time.
+- **Implication for genzv5:** Without this fix, the new Qwen-generated files (`conv_memory_qwen*`, `biometric_qwen_*`, `crisis_qwen`, `help_mode_qwen`) would have been silently skipped too, neutering the category-conditional loss weighting (which targets exactly those files).
+
+### Category-conditional loss weighting added to SFT pipeline
+- **Motivation:** Under v2/v3/v4 SFT, CRISIS dropped 67→48%, HELP_MODE 58→25-44%, NO_HALLUCINATION 67→54% vs base. Raw sample-count rebalancing crowds out friend/casual data (which COMPANION 92% depends on). Per-example loss reweighting steers gradients toward safety-critical categories without changing the mix distribution.
+- **Implementation:**
+  - `finetuning/build_dataset.py` — `CATEGORY_WEIGHTS` dict (filename → multiplier), each row tagged with `loss_weight`. Prefix matching handles sharded files (`*_qwen_s0.jsonl`, `*_merged.jsonl`).
+  - `finetuning/clean_dataset.py` — preserves `loss_weight` through dedup / cleaning.
+  - `finetuning/CUDA_train_qlora.py` — `WeightedLossTrainer` subclasses `Trainer.compute_loss` with `sum(w_i * L_i) / sum(w_i)` weighted mean over per-example assistant-token CE losses; wrapped collator pops `loss_weight` into a separate tensor (DataCollatorForSeq2Seq can't handle scalar fields).
+- **Default behaviour preserved:** examples without `loss_weight` get 1.0 — old cleaned datasets still train identically. To disable, set every entry in `CATEGORY_WEIGHTS` to 1.0.
+- **Validate before v5:** smoke-test on a small slice with `print(weights)` in `compute_loss` to confirm the tensor matches expected category counts. Also check that training loss curve is roughly in the same range as unweighted runs (the weighted-mean reduction keeps it comparable).
+
 ## 2026-05-17
 
 ### Over-reference filter: 12 false positives held as future DPO negatives
