@@ -35,11 +35,18 @@ print(f'CUDA version: {torch.version.cuda}')
 if not torch.cuda.is_available():
     print("[trainer] WARNING: torch.cuda.is_available()=False — proceeding anyway "
           "(cu130 vs driver 12090 mismatch; device_map=auto still works)")
-    # Patch is_available + is_bf16_supported so TrainingArguments validation passes.
-    # Both are called before the model loads; after bitsandbytes loads the model it
-    # initialises the CUDA context as a side-effect, so all subsequent CUDA calls work.
+    # ── PyTorch cu130 / driver 12090 compatibility shim ──────────────────────
+    # torch._C._get_device_properties is not registered on this driver, so any
+    # call that triggers _lazy_init (e.g. TrainingArguments device setup,
+    # is_bf16_supported) raises DeferredCudaCallError via _check_capability.
+    # bitsandbytes uses its own compiled CUDA extension and never calls _lazy_init,
+    # so actual GPU operations (model load, forward/backward, optimizer) still work.
+    # Fix: patch the three query functions + short-circuit _lazy_init globally.
     torch.cuda.is_available = lambda: True
     torch.cuda.is_bf16_supported = lambda *a, **kw: True
+    torch.cuda._initialized = True          # _lazy_init returns immediately hereafter
+    if hasattr(torch.cuda, "_queued_calls"):
+        torch.cuda._queued_calls.clear()    # drop _check_capability from deferred queue
     
 
 BASE_MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
