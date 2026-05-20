@@ -25,11 +25,16 @@ export PYTHONUNBUFFERED=1
 # to miniconda3's site-packages instead of the venv. This caused 4 jobs (617977, 618080, 618086,
 # 618200) to fail: pip said cu126 installed, but venv's Python kept loading the original cu130.
 # `python -m pip` forces pip to use the venv's site-packages.
-# The venv was originally created without pip (`python -m venv --without-pip`),
-# so `python -m pip` fails with ModuleNotFoundError. Bootstrap pip first.
-echo "[setup] Bootstrapping pip into venv (if missing)..."
-python -m ensurepip --upgrade 2>&1 | tail -3 || python -m ensurepip 2>&1 | tail -3
-echo "[setup] Verifying pip is now in venv:"
+# The venv was originally created with `uv venv` (without pip). Bootstrap pip if missing.
+# Skip ensurepip if pip is already present (which it is, after a successful bootstrap).
+echo "[setup] Ensuring pip is in venv..."
+if python -c "import pip" 2>/dev/null; then
+    echo "[setup] pip already present in venv"
+else
+    echo "[setup] Installing pip via ensurepip..."
+    python -m ensurepip --upgrade
+fi
+echo "[setup] Verifying pip is in venv:"
 python -c "import pip; print('  pip location:', pip.__file__); print('  pip version:', pip.__version__)"
 echo "[setup] Uninstalling existing torch from venv..."
 python -m pip uninstall -y torch 2>&1 | tail -3 || true
