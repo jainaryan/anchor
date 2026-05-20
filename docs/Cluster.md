@@ -133,6 +133,18 @@ git pull
 
 All current SLURM scripts use `set -euo pipefail`. If any command fails, the job stops immediately. Good for catching issues early. Don't remove this.
 
+### 7. ⚠️ `pip` ≠ `python -m pip` — always use `python -m pip` in SLURM scripts
+
+On this cluster, `source mindmatenv/bin/activate` does NOT redirect `pip` to the venv. Bare `pip` keeps resolving to `/home/a/aryanj/miniconda3/bin/pip`, which installs to miniconda3's site-packages — NOT the venv's. The venv's `python` then imports an entirely different (stale) version.
+
+**Symptom:** `pip show <pkg>` says one version, `python -c "import <pkg>"` says another. Both "correct" — they're looking at different site-packages.
+
+**Always use `python -m pip ...`** — this binds pip to the active Python interpreter's site-packages.
+
+For SFT trainings that need to reinstall torch (cu130 → cu126), also `rm -rf $VENV_SITE/torch $VENV_SITE/torch-*.dist-info` before reinstalling — pip's `--force-reinstall` leaves stale package files.
+
+See Bug Log 2026-05-21 for the 4 failed jobs that diagnosed this.
+
 ---
 
 ## File Sync (local ↔ cluster)
