@@ -61,7 +61,8 @@ What this changes for genzv5:
 | ~~618086~~ | genzv5 SFT — FAILED: shim got further; manual_seed cb hit empty default_generators | — | — |
 | ~~618199~~ | genzv5 SFT — cancelled before audit | — | — |
 | ~~618200~~ | genzv5 SFT — FAILED: comprehensive shim got past Trainer.init, crashed at `model._apply` → `t.to(device)` (cu130 still active — pip bug) | — | — |
-| **618207** | genzv5 SFT — root cause fixed: `python -m pip` + rm venv torch dir + assert cu126 loaded + 14,373 ex | adapters/genzv5 | 24h from 2026-05-21 |
+| ~~618207~~ | genzv5 SFT — FAILED instantly: `import pip` ModuleNotFoundError (venv has no pip!) | — | — |
+| **618208** | genzv5 SFT — added `python -m ensurepip --upgrade` to bootstrap pip into venv first | adapters/genzv5 | 24h from 2026-05-21 |
 
 Note: vLLM is incompatible with the cluster's CUDA driver (12.0.90). All data-gen jobs use HF backend (`USE_VLLM=0`). Crisis stall bug fixed — Qwen3 was refusing SI content with the generic datagen system message; now uses `_CRISIS_DATAGEN_SYSTEM` research-context override. See Bug Log 2026-05-19.
 

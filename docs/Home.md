@@ -29,7 +29,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05 — matches `defaultCompletionParams` in the app). v3 stays available for legacy comparisons. See [[Benchmarks]]. |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
-| **Active cluster jobs** | ✅ 615485–615493 conv-memory + biometric shards complete (385 ex added to v5) · **616643** — crisis (running, ⚠️ only 5/511 pass heuristic) · **618207** — genzv5 SFT (A100-80, `python -m pip` root-cause fix + 14,373 ex) |
+| **Active cluster jobs** | ✅ 615485–615493 conv-memory + biometric shards complete (385 ex added to v5) · **616643** — crisis (running, ⚠️ only 5/511 pass heuristic) · **618208** — genzv5 SFT (A100-80, ensurepip + python -m pip + 14,373 ex) |
 | **Completed jobs** | ✅ **615518** help_mode — 200 examples total |
 | **Next milestone** | genzv5 SFT 617977 start on A100-80 → checkpoints every 200 steps → v4 benchmark |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
