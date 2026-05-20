@@ -10,7 +10,19 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-21
 
-### 🎯 ROOT CAUSE of all CUDA-driver failures — `pip` ≠ `python -m pip` on this cluster (4 wasted jobs)
+### 🎯 ROOT CAUSE of all CUDA-driver failures — venv has no pip module (5 wasted jobs)
+
+**FOLLOW-UP (618207):** When we tried `python -m pip` to fix the misdirected install, the verification step (`python -c "import pip"`) failed instantly with `ModuleNotFoundError: No module named 'pip'`. The venv was originally created with `python -m venv --without-pip` (or pip was removed afterward) — that's the **actual** reason bare `pip` was resolving to miniconda's pip: there was no pip in the venv to resolve to.
+
+**Final fix (commit `cd2f41f`):** bootstrap pip into the venv first:
+```bash
+python -m ensurepip --upgrade
+python -m pip install --index-url https://download.pytorch.org/whl/cu126 torch
+```
+
+Resubmitted as **job 618208**.
+
+
 - **Discovery:** After job 618200 failed at `model._apply` → `t.to(device)` (a NEW failure point past every patched shim), SSH'd in to investigate the venv state:
   ```
   $ source ~/projects/mindmate/mindmatenv/bin/activate
