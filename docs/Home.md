@@ -5,7 +5,9 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-21 (A100-80 nodes split: xgph6 driver 575 (CUDA 12.9), others 580 (CUDA 13.0) — fixed by pip-installing torch+cu126 at job start; genzv5 SFT job 618080 PENDING; conv-memory+biometric new shards finishing within 1h; crisis heuristic still blocking all output. See Bug Log 2026-05-20.)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-21 (A100-80 nodes split: xgph6 driver 575 (CUDA 12.9), others 580 (CUDA 13.0) — fixed by pip-installing torch+cu126 at job start; genzv5 SFT job 618080 PENDING; conv-memory+biometric new shards finishing within 1h; crisis heuristic still blocking all output. See Bug Log 2026-05-20.
+>
+> **Cleanup (2026-05-21):** freed ~106 GB on cluster, ~40 GB locally. Cluster: deleted exports `mindmate_qwen3_1p7b`, `mindmate_qwen25_dpo_ck200`, `mindmate_llama_dpo_ck200`, `mindmate_gemma4_e2b` (teacher), `mindmate_genz_llama32_3b` (superseded), `mindmate_llama_sft_ck200`, `mindmate_genzv4_ck200`; deleted all DPO adapters (`CUDA_mindmate_llama32b_dpo_ck{200,1600}`, `genz_dpo`, `genz_dpo_ck1600`, `genzv2_dpo_ck1200`, `genzv3_dpo_ck200`, `CUDA_mindmate_qwen25_3b_dpo_ck{200,1600}`) — DPO abandoned. `exports/` 141G→42G, `adapters/` 19G→12G. Local: deleted `mindmate_app/` (superseded by `anchor-app/`, GitHub-backed), `exports.zip` (Jan-24 archive), `models/mlx_base_llama32_3b` (MLX abandoned), `.claude/worktrees`; pruned `adapters/` to keep only `genz/checkpoint-1200` (3.4G→219M); `git gc --aggressive --prune=now` (.git 11G→606M). Disk 5.3 GiB→45 GiB free. All deletions regeneratable via `scripts/export_gguf_cuda.py`.)
 
 ---
 
