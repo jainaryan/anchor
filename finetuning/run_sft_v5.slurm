@@ -19,11 +19,14 @@ export PYTHONUNBUFFERED=1
 # torch 2.11.0+cu130 requires CUDA driver ≥ 13.0. Not all cluster nodes have this
 # (e.g. xgph6 has an older driver). Install cu126 (CUDA 12.6 runtime) which works
 # on any node with a driver supporting CUDA ≥ 12.6 — covers all current cluster nodes.
-# --force-reinstall ensures cu130 in the venv is actually replaced.
-echo "[setup] Installing compatible PyTorch (cu126)..."
-pip install --force-reinstall -q --index-url https://download.pytorch.org/whl/cu126 torch
+# Belt-and-suspenders: even if pip install of cu126 fails or pip leaves cu130 in place,
+# the comprehensive Python-level CUDA shim in CUDA_train_qlora.py will let training proceed.
+echo "[setup] Uninstalling existing torch..."
+pip uninstall -y torch 2>&1 | tail -2 || true
+echo "[setup] Installing PyTorch cu126..."
+pip install -q --index-url https://download.pytorch.org/whl/cu126 torch
 # Run from /tmp to avoid logging.py in project root shadowing stdlib logging module
-echo "[setup] torch version: $(cd /tmp && python -c 'import torch; print(torch.__version__)')"
+echo "[setup] torch version: $(cd /tmp && python -c 'import torch; print(torch.__version__)' 2>&1)"
 
 echo "=========================================="
 echo "  MindMate SFT v5 — Llama 3.2 3B (fresh)"

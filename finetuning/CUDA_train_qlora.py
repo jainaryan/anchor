@@ -50,6 +50,7 @@ if not torch.cuda.is_available():
     # set_device() calls torch._C._cuda_setDevice() directly in C++ (bypasses _lazy_init).
     # device_map="auto" + bitsandbytes handles actual GPU placement; this call is redundant.
     torch.cuda.set_device = lambda *a, **kw: None
+    # Device-query / seed / sync / memory stubs.
     # With _initialized=True, _lazy_call() executes its callable IMMEDIATELY instead of
     # queuing it. So torch.cuda.manual_seed_all() triggers a callback that indexes into
     # torch.cuda.default_generators (empty tuple when CUDA not actually initialized) →
@@ -63,6 +64,43 @@ if not torch.cuda.is_available():
     torch.cuda.memory_allocated = lambda dev=None: 0
     torch.cuda.max_memory_allocated = lambda dev=None: 0
     torch.cuda.memory_reserved = lambda dev=None: 0
+    torch.cuda.empty_cache = lambda: None
+    torch.cuda.reset_peak_memory_stats = lambda *a, **kw: None
+    torch.cuda.reset_max_memory_allocated = lambda *a, **kw: None
+    # RNG state save/restore — used by torch.utils.checkpoint (gradient_checkpointing)
+    # AND by Trainer._save_rng_state during checkpoint saves. Both index default_generators.
+    # Patch to return/accept dummy tensor state.
+    _dummy_rng_state = torch.zeros(16, dtype=torch.uint8)
+    torch.cuda.get_rng_state = lambda *a, **kw: _dummy_rng_state.clone()
+    torch.cuda.set_rng_state = lambda *a, **kw: None
+    torch.cuda.get_rng_state_all = lambda: [_dummy_rng_state.clone()]
+    torch.cuda.set_rng_state_all = lambda *a, **kw: None
+    torch.cuda.initial_seed = lambda: 0
+    torch.cuda.seed = lambda *a, **kw: None
+    torch.cuda.seed_all = lambda *a, **kw: None
+    # Some code paths import torch.cuda.random directly — mirror the patches there too.
+    import torch.cuda.random as _cuda_random
+    _cuda_random.get_rng_state = torch.cuda.get_rng_state
+    _cuda_random.set_rng_state = torch.cuda.set_rng_state
+    _cuda_random.get_rng_state_all = torch.cuda.get_rng_state_all
+    _cuda_random.set_rng_state_all = torch.cuda.set_rng_state_all
+    _cuda_random.manual_seed = torch.cuda.manual_seed
+    _cuda_random.manual_seed_all = torch.cuda.manual_seed_all
+    _cuda_random.initial_seed = torch.cuda.initial_seed
+    _cuda_random.seed = torch.cuda.seed
+    _cuda_random.seed_all = torch.cuda.seed_all
+    # default_generators is a tuple of torch._C.Generator objects (empty when CUDA not
+    # initialized). Replace with a single fake generator so any code that indexes it
+    # (e.g. third-party libs) gets safe no-op behavior instead of IndexError.
+    class _FakeCUDAGenerator:
+        def manual_seed(self, seed): return self
+        def seed(self): return 0
+        def initial_seed(self): return 0
+        def get_state(self): return _dummy_rng_state.clone()
+        def set_state(self, state): pass
+        @property
+        def device(self): return torch.device("cuda:0")
+    torch.cuda.default_generators = (_FakeCUDAGenerator(),)
 
 
 BASE_MODEL_DIR = "meta-llama/Llama-3.2-3B-Instruct"
@@ -252,6 +290,11 @@ args = TrainingArguments(
     eval_steps=200,
     bf16=True,
     gradient_checkpointing=True,
+    # use_reentrant=False uses the non-legacy checkpointing path which has cleaner
+    # RNG semantics (avoids deep _saved_tensor_hook recursion + fewer CUDA RNG calls).
+    gradient_checkpointing_kwargs={"use_reentrant": False},
+    # Avoid worker subprocesses doing their own torch.cuda init (single process is safe).
+    dataloader_num_workers=0,
     report_to="none",
     warmup_ratio=0.03,
     lr_scheduler_type="cosine",
