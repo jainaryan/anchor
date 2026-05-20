@@ -8,6 +8,36 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-05-21
+
+### CUDA shim cascade #2 — _lazy_call fires immediately when _initialized=True (job 618086)
+- **Symptom:** Job 618086 (set_device no-op + cu126 force-reinstall) got past `TrainingArguments` and weight loading, then crashed at `Trainer.__init__` → `set_seed(args.seed)` → `torch.manual_seed(seed)` → callback in `torch/cuda/random.py:125` → `torch.cuda.default_generators[i]` → `IndexError: tuple index out of range`.
+- **Root cause:** Subtle interaction between two parts of our shim:
+  1. `torch.cuda._initialized = True` makes `is_initialized()` return True.
+  2. `torch.cuda.manual_seed_all()` registers its callback via `_lazy_call(cb)`. `_lazy_call` checks `if is_initialized(): cb()` — fires IMMEDIATELY instead of queuing.
+  3. The `cb` does `torch.cuda.default_generators[i].manual_seed(seed)`. But `default_generators` is `()` (empty tuple) since CUDA was never actually initialized → IndexError.
+- **Why we didn't see it on the set_device crash:** That crash happened earlier in `TrainingArguments.__post_init__`, before `Trainer.__init__` ran `set_seed`.
+- **Why pip install of cu126 didn't help:** Despite pip reporting `torch 2.12.0+cu126` installed, the training script consistently sees `Version: 2.11.0+cu130`. Suspected cause: torch package files in mindmatenv aren't being cleanly replaced even with `--force-reinstall`. Not pursuing further — comprehensive Python shim is the robust path.
+- **Fix (commit `1a2b335`):** patch additional CUDA functions to safe stubs so no callback ever touches real CUDA state:
+  ```python
+  torch.cuda.manual_seed = lambda *a, **kw: None
+  torch.cuda.manual_seed_all = lambda *a, **kw: None
+  torch.cuda.device_count = lambda: 1
+  torch.cuda.current_device = lambda: 0
+  torch.cuda.synchronize = lambda *a, **kw: None
+  torch.cuda.get_device_capability = lambda dev=None: (8, 0)
+  torch.cuda.memory_allocated / max_memory_allocated / memory_reserved = lambda dev=None: 0
+  ```
+  bitsandbytes is unaffected (own CUDA extension); the Trainer's CUDA queries now all return safe defaults.
+- **Resubmitted as job 618199** (A100-80, gpu-long, 24h, with expanded v5 data mix: +176 conv-memory s3-s8 + 209 biometric s3-s5 = 14,373 total examples).
+
+### v5 preset expanded — conv-memory s3-s8 + biometric s3-s5 shards merged (385 ex)
+- All 9 data-gen jobs (615485–615493) completed.
+- Conv-memory new-pool: s3=44, s4=28, s5=21, s6=24, s7=33, s8=26 → 176 total.
+- Biometric: s3=91, s4=57, s5=61 → 209 total.
+- Yields are lower per shard than s0–s2 (HF backend sequential + new-pool's 47 facts × 28 profiles), as predicted in 2026-05-20 note. Worth including as additive signal.
+- `build_dataset.py` v5 preset and `run_sft_v5.slurm` banner updated. Commit `1a6a977`.
+
 ## 2026-05-20
 
 ### torch.cuda.set_device() bypasses _lazy_init shim — cudaErrorInsufficientDriver on xgph6 (job 618080)
