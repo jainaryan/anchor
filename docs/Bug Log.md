@@ -10,6 +10,12 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-21
 
+### logging.py CWD shadow in benchmark slurm — all 30 benchmark jobs fail instantly (jobs 618457–618486)
+
+`run_benchmarks_v4.slurm` did `cd $PROJECT_DIR` before running Python. This put `~/projects/mindmate` as the CWD, and `benchmarks/run_benchmarks_v4.py` calls `load_nf4_eval` which does `import torch` → `torch._utils.py` → `logging.getLogger()` → hits local `logging.py` → `AttributeError`. All 30 jobs failed in 0–1 seconds. **Fix:** replace `cd $PROJECT_DIR` with `cd /tmp` and set `PYTHONPATH=$PROJECT_DIR` so `python -m benchmarks.run_benchmarks_v4` can find the package without making mindmate the CWD (commit below). Resubmitted as 618536–618567.
+
+---
+
 ### torchvision==0.26.0 incompatible with torch 2.12.0+cu126 — crashes transformers import (job 618371)
 
 `torchvision 0.26.0` was compiled for `torch==2.11.0`. After upgrading torch to `2.12.0+cu126`, torchvision's `_meta_registrations.py` attempts `@torch.library.register_fake("torchvision::nms")` at import time, which fails with `RuntimeError: operator torchvision::nms does not exist` (the op registration API changed in torch 2.12). Transformers' `image_utils.py` imports `torchvision.io` at module level; the crash propagates through the lazy-loader and appears as `ModuleNotFoundError: Could not import module 'TrainingArguments'` — masking the real root cause. **Fix:** add `torchvision` to the pip install command alongside `torch`, wipe `torchvision-*.dist-info` before reinstalling (commit `881c8af`). Resubmitted as **618377**.
