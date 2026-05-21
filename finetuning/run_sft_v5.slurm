@@ -80,27 +80,37 @@ echo "  gold (fixed)     181   1%  weight=3.0"
 echo "  Steps: 2000 (~1 epoch, checkpoints every 200)"
 echo ""
 
-# Step 1: Build dataset
-echo "[Step 1] Building dataset (v5 mix)..."
-python -u finetuning/build_dataset.py --model v5
+# There is a logging.py in ~/projects/mindmate/ that shadows stdlib's logging.
+# Python adds '' (CWD) to sys.path for -c and -u invocations, which causes
+# `import logging` inside transformers/torch to resolve to the local file instead
+# of stdlib, producing AttributeError / ModuleNotFoundError cascades.
+# WORKAROUND: run all python steps from /tmp with absolute paths so that
+# ~/projects/mindmate is never the CWD when Python imports stdlib.
+PROJ=~/projects/mindmate
 
-# Step 2: Clean dataset
+# Step 1: Build dataset (run from /tmp to avoid logging.py shadow)
+echo "[Step 1] Building dataset (v5 mix)..."
+cd /tmp && python -u $PROJ/finetuning/build_dataset.py --model v5
+cd ~/projects/mindmate
+
+# Step 2: Clean dataset (run from /tmp)
 echo "[Step 2] Cleaning dataset..."
-python -u finetuning/clean_dataset.py \
-    --train-in  data/conversations_raw_v5/mindmate_train.jsonl \
-    --val-in    data/conversations_raw_v5/mindmate_val.jsonl \
-    --train-out data/conversations_cleaned_v5/mindmate_train.jsonl \
-    --val-out   data/conversations_cleaned_v5/mindmate_val.jsonl \
+cd /tmp && python -u $PROJ/finetuning/clean_dataset.py \
+    --train-in  $PROJ/data/conversations_raw_v5/mindmate_train.jsonl \
+    --val-in    $PROJ/data/conversations_raw_v5/mindmate_val.jsonl \
+    --train-out $PROJ/data/conversations_cleaned_v5/mindmate_train.jsonl \
+    --val-out   $PROJ/data/conversations_cleaned_v5/mindmate_val.jsonl \
     --ensure-assistant-last \
     --drop-min-turns 4 \
     --dedup
+cd ~/projects/mindmate
 
-# Step 3: Train
+# Step 3: Train (run from /tmp — same reason)
 echo "[Step 3] Training (2000 steps, fresh LoRA from base)..."
-python -u finetuning/CUDA_train_qlora.py \
+cd /tmp && python -u $PROJ/finetuning/CUDA_train_qlora.py \
     --iters    2000 \
-    --data-dir data/conversations_cleaned_v5 \
-    --out-dir  adapters/genzv5
+    --data-dir $PROJ/data/conversations_cleaned_v5 \
+    --out-dir  $PROJ/adapters/genzv5
 
 echo ""
 echo "=========================================="
