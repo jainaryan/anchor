@@ -293,7 +293,12 @@ def load_gguf_eval(gguf_path: Path, *, top_k: int, top_p: float,
 
 
 def load_judge():
-    """Gemma4 26B at bfloat16 on GPU 0. Returns (generate_fn, tokenizer)."""
+    """Gemma4 26B at bfloat16 on GPU 0. Returns (generate_fn, model, tokenizer).
+
+    Also used as the simulator (see build_sim_fn_from_judge) to avoid loading
+    a second large model. Qwen3-30B doesn't fit on A100-80 alongside Gemma4 +
+    eval model even in 4-bit (seen on jobs 618656-619022).
+    """
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -325,67 +330,66 @@ def load_judge():
             )
         return tokenizer.decode(out[0][inputs_ids.shape[-1]:], skip_special_tokens=True)
 
-    return generate_fn, tokenizer
+    return generate_fn, model, tokenizer
 
 
-def load_simulator():
+def build_sim_fn_from_judge(model, tokenizer):
     """
-    Qwen3-30B for dynamic_multiturn user simulation.
-    Loaded in 4-bit NF4 (~15GB) so it fits alongside the judge (~52GB) and
-    eval model (~2GB) on the A100-80. bfloat16 needs ~60GB and gets CPU-offloaded
-    by device_map="auto", making inference impossibly slow (seen on jobs 618656-618657).
+    Build a sim_fn using the already-loaded Gemma4 judge model.
+    Reusing the judge avoids loading Qwen3-30B (doesn't fit on A100-80 alongside
+    Gemma4 + eval model). The judge evaluates Anchor's outputs, not the simulator's,
+    so using Gemma4 for both roles creates no circular dependency.
     """
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    from transformers import BitsAndBytesConfig
 
-    print(f"[Load] Simulator: {SIMULATOR_MODEL_ID} (4-bit NF4)")
-    t0 = time.time()
-    tokenizer = AutoTokenizer.from_pretrained(SIMULATOR_MODEL_ID)
-    bnb = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
-    )
-    model = AutoModelForCausalLM.from_pretrained(
-        SIMULATOR_MODEL_ID,
-        device_map="auto",
-        quantization_config=bnb,
-        low_cpu_mem_usage=True,
-    )
-    model.eval()
-    print(f"  Ready in {time.time() - t0:.1f}s")
+    device = next(model.parameters()).device
 
     def sim_fn(persona: str, conversation: list[dict], *, seed: int = 0,
                temperature: float = 0.7, max_tokens: int = 80) -> str:
-        # Flip roles for the simulator: the eval model's outputs become "user"
-        # input to the simulator (they're what the simulator-as-user is reacting to).
-        sim_history = [{"role": "system", "content": persona}]
+        # Flip roles: Anchor's replies become "user" turns; user turns become "assistant".
+        # Prepend persona as a user instruction, then let Gemma4 continue as the user.
+        flipped = []
         for turn in conversation:
             if turn["role"] == "user":
-                sim_history.append({"role": "assistant", "content": turn["content"]})
+                flipped.append({"role": "assistant", "content": turn["content"]})
             elif turn["role"] == "assistant":
-                sim_history.append({"role": "user", "content": turn["content"]})
+                flipped.append({"role": "user", "content": turn["content"]})
+
+        if flipped:
+            # Inject persona into the first user turn
+            first_user = next((t for t in flipped if t["role"] == "user"), None)
+            if first_user:
+                first_user["content"] = (
+                    f"[Persona: {persona}]\n\n{first_user['content']}"
+                )
+        else:
+            # Conversation is empty — generate the opening user message
+            flipped = [{"role": "user", "content": f"[Persona: {persona}]\n\nStart the conversation."}]
+
+        input_ids = tokenizer.apply_chat_template(
+            flipped, return_tensors="pt", add_generation_prompt=True
+        ).to(device)
         if seed:
             torch.manual_seed(seed)
-        prompt = tokenizer.apply_chat_template(
-            sim_history, tokenize=False, add_generation_prompt=True
-        )
-        inputs = tokenizer(prompt, return_tensors="pt").to(next(model.parameters()).device)
         with torch.no_grad():
             out = model.generate(
-                **inputs,
+                input_ids,
                 max_new_tokens=max_tokens,
                 temperature=temperature,
                 do_sample=True,
                 top_p=0.9,
                 pad_token_id=tokenizer.eos_token_id,
             )
-        new_tokens = out[0][inputs["input_ids"].shape[1]:]
+        new_tokens = out[0][input_ids.shape[1]:]
         return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
     return sim_fn
+
+
+def load_simulator():
+    # No longer used — Qwen3-30B doesn't fit on A100-80 alongside Gemma4 + eval model.
+    # Simulator is now built from the already-loaded judge (see build_sim_fn_from_judge).
+    raise RuntimeError("load_simulator() is deprecated; use build_sim_fn_from_judge() instead")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -590,12 +594,14 @@ def main():
                 repetition_penalty=args.repetition_penalty,
             )
 
-        judge_fn, judge_tok = load_judge()
+        judge_fn, judge_model, judge_tok = load_judge()
 
-        # Simulator only loaded if we have dynamic scenarios
+        # Reuse Gemma4 as the simulator — Qwen3-30B doesn't fit on A100-80
+        # alongside Gemma4 + eval model (tried bfloat16 and 4-bit NF4, both OOM).
         sim_fn = None
         if n_dyn > 0:
-            sim_fn = load_simulator()
+            print("[Load] Simulator: reusing Gemma4 judge model (no extra VRAM)")
+            sim_fn = build_sim_fn_from_judge(judge_model, judge_tok)
 
     judge = JudgeService(generate_fn=judge_fn, logger=log, tokenizer=judge_tok)
 
