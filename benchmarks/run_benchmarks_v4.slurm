@@ -57,7 +57,13 @@ echo "[Setup] Python: $(which python) -- $(python --version)"
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
 echo ""
 
-cd $PROJECT_DIR
+# Do NOT cd into $PROJECT_DIR — logging.py in that directory shadows stdlib's logging
+# module when Python uses CWD=mindmate ('' in sys.path finds the local file first),
+# causing `import torch` to fail with AttributeError: module 'logging' has no attribute 'getLogger'.
+# WORKAROUND: stay in /tmp and pass PROJECT_DIR via PYTHONPATH so `python -m benchmarks.*`
+# can find the package without making mindmate the CWD.
+cd /tmp
+export PYTHONPATH="$PROJECT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 if [ -z "${HF_TOKEN:-}" ] && [ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
     export HF_TOKEN="${HUGGING_FACE_HUB_TOKEN}"
