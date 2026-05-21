@@ -36,27 +36,33 @@ else
 fi
 echo "[setup] Verifying pip is in venv:"
 python -c "import pip; print('  pip location:', pip.__file__); print('  pip version:', pip.__version__)"
-echo "[setup] Uninstalling existing torch from venv..."
-python -m pip uninstall -y torch 2>&1 | tail -3 || true
-# Belt-and-suspenders: nuke any leftover torch directory in venv (--force-reinstall
-# is known to leave dist-info but not always replace package files cleanly).
+echo "[setup] Uninstalling existing torch + torchvision from venv..."
+python -m pip uninstall -y torch torchvision 2>&1 | tail -5 || true
+# Belt-and-suspenders: nuke any leftover package directories in venv.
+# torchvision 0.26.0 compiled for torch 2.11.0 crashes on torch 2.12 with
+# "operator torchvision::nms does not exist" (job 618371).
 VENV_SITE=$(python -c "import site; print(site.getsitepackages()[0])")
-echo "[setup] Wiping any remnant torch dirs in $VENV_SITE..."
+echo "[setup] Wiping any remnant torch/torchvision dirs in $VENV_SITE..."
 rm -rf "$VENV_SITE/torch" "$VENV_SITE"/torch-*.dist-info 2>/dev/null || true
-echo "[setup] Installing PyTorch cu126 into venv..."
-python -m pip install -q --index-url https://download.pytorch.org/whl/cu126 torch
+rm -rf "$VENV_SITE/torchvision" "$VENV_SITE"/torchvision-*.dist-info 2>/dev/null || true
+echo "[setup] Installing PyTorch cu126 + torchvision into venv..."
+# torchvision must be upgraded alongside torch — torchvision 0.26.0 (compiled for
+# torch 2.11.0) fails on torch 2.12 with "operator torchvision::nms does not exist"
+# which cascades through transformers' lazy loader as ModuleNotFoundError (job 618371).
+python -m pip install -q --index-url https://download.pytorch.org/whl/cu126 torch torchvision
 # Run from /tmp to avoid logging.py in project root shadowing stdlib logging module.
 # IMPORTANT: both the version print AND the assert must run from /tmp — the assert was
 # previously back in ~/projects/mindmate and hit the same logging.py shadow (job 618209).
 echo "[setup] torch version (must be cu126):"
 cd /tmp && python -c '
-import torch
-print("  version:", torch.__version__)
+import torch, torchvision
+print("  torch version:", torch.__version__)
 print("  cuda:", torch.version.cuda)
-print("  file:", torch.__file__)
+print("  torch file:", torch.__file__)
+print("  torchvision version:", torchvision.__version__)
 assert "cu126" in torch.__version__, f"Expected cu126, got {torch.__version__}"
 print("  [OK] cu126 confirmed")
-' || { echo "[setup] FATAL: cu126 install failed"; exit 1; }
+' || { echo "[setup] FATAL: cu126/torchvision install failed"; exit 1; }
 cd ~/projects/mindmate
 
 echo "=========================================="
