@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-21 (🎯 **ROOT CAUSE of 4 failed SFT jobs:** bare `pip` on cluster resolves to miniconda's pip, not venv's pip — every cu126 install went to the wrong env. Use `python -m pip` instead. Fix in commit `f75fcf8`. Resubmitted as job 618207 with expanded v5 mix (14,373 ex incl. new shards). See Bug Log 2026-05-21.
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-21 (🟢 **genzv5 SFT RUNNING** as job 618377 — loss 5.7→3.5 at step 190. Full bug trail: bare pip→miniconda, ensurepip, logging.py CWD shadow, torchvision/torch version mismatch. All fixed. See Bug Log 2026-05-21.
 >
 > **Cleanup (2026-05-21):** freed ~106 GB on cluster, ~40 GB locally. Cluster: deleted exports `mindmate_qwen3_1p7b`, `mindmate_qwen25_dpo_ck200`, `mindmate_llama_dpo_ck200`, `mindmate_gemma4_e2b` (teacher), `mindmate_genz_llama32_3b` (superseded), `mindmate_llama_sft_ck200`, `mindmate_genzv4_ck200`; deleted all DPO adapters (`CUDA_mindmate_llama32b_dpo_ck{200,1600}`, `genz_dpo`, `genz_dpo_ck1600`, `genzv2_dpo_ck1200`, `genzv3_dpo_ck200`, `CUDA_mindmate_qwen25_3b_dpo_ck{200,1600}`) — DPO abandoned. `exports/` 141G→42G, `adapters/` 19G→12G. Local: deleted `mindmate_app/` (superseded by `anchor-app/`, GitHub-backed), `exports.zip` (Jan-24 archive), `models/mlx_base_llama32_3b` (MLX abandoned), `.claude/worktrees`; pruned `adapters/` to keep only `genz/checkpoint-1200` (3.4G→219M); `git gc --aggressive --prune=now` (.git 11G→606M). Disk 5.3 GiB→45 GiB free. All deletions regeneratable via `scripts/export_gguf_cuda.py`.)
 
@@ -29,7 +29,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
 | **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05 — matches `defaultCompletionParams` in the app). v3 stays available for legacy comparisons. See [[Benchmarks]]. |
 | **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
-| **Active cluster jobs** | ✅ 615485–615493 conv-memory + biometric shards complete (385 ex added to v5) · **616643** — crisis (running, ⚠️ only 5/511 pass heuristic) · **618208** — genzv5 SFT (A100-80, ensurepip + python -m pip + 14,373 ex) |
+| **Active cluster jobs** | ✅ 615485–615493 conv-memory + biometric shards complete (385 ex added to v5) · **616643** — crisis (running, ⚠️ only 5/511 pass heuristic) · **618377** — genzv5 SFT 🟢 **TRAINING** (A100-80, cu126+torchvision fix, loss 5.7→3.5 at step 190, ~1.8s/step, ETA ~22h) |
 | **Completed jobs** | ✅ **615518** help_mode — 200 examples total |
 | **Next milestone** | genzv5 SFT 617977 start on A100-80 → checkpoints every 200 steps → v4 benchmark |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
