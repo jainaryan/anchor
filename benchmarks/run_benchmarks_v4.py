@@ -331,19 +331,27 @@ def load_judge():
 def load_simulator():
     """
     Qwen3-30B for dynamic_multiturn user simulation.
-    Reuses Gemma4 if available? No — we need a different model for adversarial
-    realism. But it's heavy. If skipped, dynamic scenarios get skipped too.
+    Loaded in 4-bit NF4 (~15GB) so it fits alongside the judge (~52GB) and
+    eval model (~2GB) on the A100-80. bfloat16 needs ~60GB and gets CPU-offloaded
+    by device_map="auto", making inference impossibly slow (seen on jobs 618656-618657).
     """
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import BitsAndBytesConfig
 
-    print(f"[Load] Simulator: {SIMULATOR_MODEL_ID}")
+    print(f"[Load] Simulator: {SIMULATOR_MODEL_ID} (4-bit NF4)")
     t0 = time.time()
     tokenizer = AutoTokenizer.from_pretrained(SIMULATOR_MODEL_ID)
+    bnb = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_use_double_quant=True,
+    )
     model = AutoModelForCausalLM.from_pretrained(
         SIMULATOR_MODEL_ID,
         device_map="auto",
-        torch_dtype=torch.bfloat16,
+        quantization_config=bnb,
         low_cpu_mem_usage=True,
     )
     model.eval()
