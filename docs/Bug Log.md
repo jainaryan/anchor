@@ -10,6 +10,22 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-21
 
+### torchvision==0.26.0 incompatible with torch 2.12.0+cu126 — crashes transformers import (job 618371)
+
+`torchvision 0.26.0` was compiled for `torch==2.11.0`. After upgrading torch to `2.12.0+cu126`, torchvision's `_meta_registrations.py` attempts `@torch.library.register_fake("torchvision::nms")` at import time, which fails with `RuntimeError: operator torchvision::nms does not exist` (the op registration API changed in torch 2.12). Transformers' `image_utils.py` imports `torchvision.io` at module level; the crash propagates through the lazy-loader and appears as `ModuleNotFoundError: Could not import module 'TrainingArguments'` — masking the real root cause. **Fix:** add `torchvision` to the pip install command alongside `torch`, wipe `torchvision-*.dist-info` before reinstalling (commit `881c8af`). Resubmitted as **618377**.
+
+---
+
+### logging.py in project root shadows stdlib logging — crashes transformers import (jobs 618209, 618210)
+
+**Background:** `~/projects/mindmate/logging.py` exists on the cluster (also `benchmarks/logging.py`). Python adds `''` (CWD) to `sys.path` when running with `-c` or if the script's directory matches the CWD. When any Python step runs from CWD=`~/projects/mindmate`, `import logging` inside torch/transformers/peft resolves to the local file instead of stdlib.
+
+**Job 618209:** The cu126 assert (`python -c 'import torch; assert ...'`) ran from `~/projects/mindmate` (after `cd` back from `/tmp`). `import torch` → `torch._utils.py` → `logging.getLogger(__name__)` → `AttributeError: module 'logging' has no attribute 'getLogger'`. The `||` branch fired and printed "FATAL: cu126 install failed" — but cu126 had actually installed correctly (`2.12.0+cu126` was confirmed on the `/tmp` print). The assert just couldn't verify it. **Fix:** merge the version-print and assert into a single `/tmp` block (commit `49fd638`). Resubmitted as **618210**.
+
+**Job 618210:** cu126 assert passed. Steps 1+2 (build/clean dataset) completed fine because `build_dataset.py` and `clean_dataset.py` don't import transformers at module level. Step 3 (`CUDA_train_qlora.py`) runs from CWD=`~/projects/mindmate` and does `from transformers import TrainingArguments`. Import chain: `training_args.py` → `trainer_utils.py` → `from peft import PeftMixedModel` → `peft/utils/other.py` → `from transformers import PreTrainedModel` → `transformers/modeling_utils.py` → `import logging` → hits local `logging.py` → `AttributeError`. Transformers' lazy loader wraps it as: `ModuleNotFoundError: Could not import module 'TrainingArguments'`. **Fix:** run ALL three steps from `/tmp` with `$PROJ` absolute paths (commit `aca8866`). Resubmitted as **618371**.
+
+---
+
 ### 🎯 ROOT CAUSE of all CUDA-driver failures — venv has no pip module (5 wasted jobs)
 
 **FOLLOW-UP (618207):** When we tried `python -m pip` to fix the misdirected install, the verification step (`python -c "import pip"`) failed instantly with `ModuleNotFoundError: No module named 'pip'`. The venv was originally created with `python -m venv --without-pip` (or pip was removed afterward) — that's the **actual** reason bare `pip` was resolving to miniconda's pip: there was no pip in the venv to resolve to.
