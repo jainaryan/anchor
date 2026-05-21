@@ -317,18 +317,25 @@ def load_judge():
 
     def generate_fn(prompt: str, max_new_tokens: int, temperature: float) -> str:
         msgs = [{"role": "user", "content": prompt}]
-        inputs_ids = tokenizer.apply_chat_template(
+        # apply_chat_template returns BatchEncoding (dict-like) in newer transformers,
+        # not a raw tensor. Extract input_ids explicitly to avoid AttributeError when
+        # model.generate() tries to access .shape on the BatchEncoding object.
+        enc = tokenizer.apply_chat_template(
             msgs, return_tensors="pt", add_generation_prompt=True
-        ).to(device)
+        )
+        if hasattr(enc, "input_ids"):
+            input_ids = enc.input_ids.to(device)
+        else:
+            input_ids = enc.to(device)
         with torch.no_grad():
             out = model.generate(
-                inputs_ids,
+                input_ids,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
                 do_sample=temperature > 0,
                 pad_token_id=tokenizer.eos_token_id,
             )
-        return tokenizer.decode(out[0][inputs_ids.shape[-1]:], skip_special_tokens=True)
+        return tokenizer.decode(out[0][input_ids.shape[-1]:], skip_special_tokens=True)
 
     return generate_fn, model, tokenizer
 
@@ -366,9 +373,10 @@ def build_sim_fn_from_judge(model, tokenizer):
             # Conversation is empty — generate the opening user message
             flipped = [{"role": "user", "content": f"[Persona: {persona}]\n\nStart the conversation."}]
 
-        input_ids = tokenizer.apply_chat_template(
+        enc = tokenizer.apply_chat_template(
             flipped, return_tensors="pt", add_generation_prompt=True
-        ).to(device)
+        )
+        input_ids = enc.input_ids.to(device) if hasattr(enc, "input_ids") else enc.to(device)
         if seed:
             torch.manual_seed(seed)
         with torch.no_grad():
@@ -721,8 +729,11 @@ def main():
                 weighted_total=score["weighted_total"],
             )
         except Exception as e:
-            log.error(f"scenario {s['id']} threw: {type(e).__name__}: {e}",
-                      scenario_id=s["id"])
+            import traceback as _tb
+            log.error(
+                f"scenario {s['id']} threw: {type(e).__name__}: {e}\n{_tb.format_exc()}",
+                scenario_id=s["id"],
+            )
             failed_scenarios += 1
             # Continue with next scenario
             continue
