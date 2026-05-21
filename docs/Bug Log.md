@@ -10,9 +10,9 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-21
 
-### logging.py CWD shadow in benchmark slurm — all 30 benchmark jobs fail instantly (jobs 618457–618486)
+### Stale root-level logging.py shadows stdlib — all 60 benchmark jobs fail instantly (jobs 618457–618686)
 
-`run_benchmarks_v4.slurm` did `cd $PROJECT_DIR` before running Python. This put `~/projects/mindmate` as the CWD, and `benchmarks/run_benchmarks_v4.py` calls `load_nf4_eval` which does `import torch` → `torch._utils.py` → `logging.getLogger()` → hits local `logging.py` → `AttributeError`. All 30 jobs failed in 0–1 seconds. **Fix:** replace `cd $PROJECT_DIR` with `cd /tmp` and set `PYTHONPATH=$PROJECT_DIR` so `python -m benchmarks.run_benchmarks_v4` can find the package without making mindmate the CWD (commit below). Resubmitted as 618536–618567.
+`~/projects/mindmate/logging.py` was an exact duplicate of `benchmarks/logging.py` that had no business being in the project root. Whenever the project root ended up in sys.path (via CWD or PYTHONPATH), `import logging` inside `torch._utils.py` hit this file instead of stdlib's `logging`, producing `AttributeError: module 'logging' has no attribute 'getLogger'`. This killed all 30 first-batch jobs (618457–618486, CWD=`$PROJECT_DIR`) and all 30 second-batch jobs (618536–618567, PYTHONPATH=$PROJECT_DIR set by the "fix"). **Root fix:** deleted `logging.py` from the project root on cluster. `benchmarks/logging.py` is the real module and is only accessed as `from benchmarks.logging import EvalLogger` — no conflict with stdlib's `logging`. Resubmitted as 618656–618687. The SFT training `/tmp` workaround is now defense-in-depth rather than the only thing keeping it alive.
 
 ---
 
