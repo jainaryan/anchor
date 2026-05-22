@@ -12,7 +12,13 @@ tags: [anchor, next-steps]
 
 ✅ **v4 benchmark complete** for all models (genzv2–genzv5, llama_base). Results in [[Bug Log]] → 2026-05-22. Key finding: genzv3_ck200 (61.5%) beats llama_base (57.4%) — SFT can beat base. But genzv5 peaks at 53.5%, well below genzv3. Root causes fully diagnosed via data quality audit — see [[Data]] → "Data Quality Audit".
 
-✅ **Data quality audit complete** — 4 files flagged for dropping, biometric_qwen_s0 has critical system prompt bug (missing Anchor preamble, 993 examples). See [[Data]] and [[Bug Log]] 2026-05-22.
+✅ **Data quality audit complete** — all Qwen pipeline data dropped (uniformly too long: 529–800 char avg vs 100–250 target). v6 preset defined. See [[Data]] → "v6 data mix".
+
+✅ **genzv6 SFT submitted** — job 619894, A100-80, 2000 steps, 12,729 examples. v3 base proportions + help_mode_qwen (markdown-stripped). Crisis slots in preset, waiting on jobs 619781–619783.
+
+✅ **Crisis heuristic fixed** — 3 shards running (619781–619783). Previous job produced only 5 examples from 48h; fix unlocks ~hundreds per shard. See [[Bug Log]] 2026-05-22.
+
+✅ **llama_base v4 benchmark 3-run average** — runs 2+3 submitted (619895–619896). 1 run already complete (57.4%). Proper average needed before ranking vs genzv6.
 
 ---
 

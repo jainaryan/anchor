@@ -30,8 +30,8 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05). v3 available for legacy. See [[Benchmarks]]. |
 | **v4 leaderboard** | genzv3_ck200 **61.5%** > llama_base 57.4% > genzv4_ck200 58.3% > genzv5_ck1400 53.5% > … See [[Bug Log]] 2026-05-22 |
 | **genzv5 outcome** | Peaks at ck1400 (53.5%) — below genzv3. Root causes: biometric_qwen_s0 missing preamble (993 ex), biometric_qwen_s1/s2 800-char responses, conv_memory_gemma4 therapy-speak, zero crisis training data. Full audit in [[Data]] |
-| **Active cluster jobs** | 619781–619783 — crisis datagen shards (H100-96, 48h each) |
-| **Next milestone** | Collect crisis data from 619781–619783 → add to v6 preset → train genzv6 → benchmark |
+| **Active cluster jobs** | 619781–619783 crisis datagen; 619894 genzv6 SFT; 619895–619896 llama_base v4 benchmark runs 2+3 |
+| **Next milestone** | genzv6 checkpoints → benchmark ck200 first → add crisis data → genzv6+crisis |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
 ---
