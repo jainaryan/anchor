@@ -104,6 +104,16 @@ MODEL_SHORTCUTS = {
     "genzv5_ck1600":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-1600"),
     "genzv5_ck1800":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-1800"),
     "genzv5_ck2000":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-2000"),
+    "genzv6_ck200":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv6/checkpoint-200"),
+    "genzv6_ck400":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv6/checkpoint-400"),
+    "genzv6_ck600":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv6/checkpoint-600"),
+    "genzv6_ck800":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv6/checkpoint-800"),
+    "genzv6_ck1000":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv6/checkpoint-1000"),
+    "genzv6_ck1200":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv6/checkpoint-1200"),
+    "genzv6_ck1400":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv6/checkpoint-1400"),
+    "genzv6_ck1600":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv6/checkpoint-1600"),
+    "genzv6_ck1800":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv6/checkpoint-1800"),
+    "genzv6_ck2000":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv6/checkpoint-2000"),
 }
 
 
