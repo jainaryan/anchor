@@ -6,7 +6,7 @@ tags: [anchor, data]
 
 ← [[Home]]
 
-> **2026-05-21 status:** All 9 data-gen jobs (615485–615493) **complete**. Conv-memory new-pool s3–s8 totalled 176 examples; biometric s3–s5 totalled 209. Merged into v5 preset (`build_dataset.py`). Help_mode completed at 200. Crisis (616643) still blocked — 5 examples after 511+ attempts. genzv5 SFT in progress (job 618xxx series — see Bug Log 2026-05-20/21 for the CUDA shim cascade fixes).
+> **2026-05-22 status:** v6 data mix finalised. All Qwen pipeline data dropped (uniformly too long — 529–800 char avg). v6 = v3 base + help_mode_qwen (markdown-stripped) + crisis data (jobs 619781–619783, pending). Preset defined in `build_dataset.py DATA_MIX_PRESETS["v6"]`. See audit below.
 
 ---
 
@@ -106,21 +106,32 @@ Full scrutiny of every v5 training file. Conducted after genzv5 underperformed g
 | FORMAT | 85% | 62% | biometric_qwen_s1/s2 train 800–1000 char responses; conv_memory_gemma4 uses markdown |
 | BIOMETRIC | 50% | 78% | genzv5 wins here — biometric data did help this category |
 
-### v6 data mix recommendations
+### v6 data mix — FINAL (2026-05-22)
 
-**Drop entirely:**
-- `synthetic_train_conv_memory.jsonl` (Gemma4) — extreme therapy-speak
-- `synthetic_train_biometric_qwen_s0.jsonl` — missing Anchor preamble
-- `synthetic_train_biometric_qwen_s1.jsonl` — 800 char responses
-- `synthetic_train_biometric_qwen_s2.jsonl` — 771 char responses + therapy-speak
+**v6 preset is defined in `finetuning/build_dataset.py DATA_MIX_PRESETS["v6"]`.**
 
-**Fix before including:**
-- `synthetic_train_help_mode_qwen.jsonl` — strip markdown from responses
-- `synthetic_train_conv_memory_qwen_*.jsonl` — curate examples where memory is referenced naturally, drop "you mentioned earlier" style references
+| Source | Count | Weight | Status |
+|---|---:|---:|---|
+| `synthetic_train_targeted_fix.jsonl` | 3,500 | 2.0 | ✅ keep |
+| `synthetic_train_friend_1.jsonl` | 2,000 | 1.0 | ✅ keep |
+| `synthetic_train_transition.jsonl` | 2,000 | 1.0 | ✅ keep |
+| `synthetic_train_biometric.jsonl` (Gemma4) | 2,348 | 1.5 | ✅ keep (full file) |
+| `synthetic_train_casual.jsonl` | 1,000 | 1.0 | ✅ keep |
+| `synthetic_train_therapist_.jsonl` | 1,000 | 1.0 | ✅ keep |
+| `synthetic_train.jsonl` (grief) | 500 | 1.0 | ✅ keep |
+| `synthetic_train_targeted_fixes.jsonl` | 181 | 3.0 | ✅ keep (gold) |
+| `synthetic_train_help_mode_qwen.jsonl` | 200 | 3.0 | ✅ markdown-stripped 2026-05-22 |
+| `synthetic_train_crisis_qwen_s{0,1,2}.jsonl` | TBD | 4.0 | ⏳ pending jobs 619781–619783 |
+| **Total (without crisis)** | **12,729** | | |
 
-**Add:**
-- Proper crisis examples (at least 50–100) — fix the crisis datagen heuristic that's blocking 99%+ of output
-- Possibly go back to genzv3 data mix (transition/targeted_fix/therapist/biometric_gemma4/friend/casual) as base and add only curated conv_memory
+**Dropped from v5 (all Qwen pipeline output — uniformly too long):**
+- All `biometric_qwen_s*` (s0–s5) — s0 missing preamble; s1–s5 avg 750–800 chars (target: 100–250)
+- All `conv_memory_qwen_*` (10 shards, 1,450 ex) — 529 char avg, 0% survive 350-char filter, 66% clunky refs
+- `conv_memory.jsonl` (Gemma4) — extreme therapy-speak (16 hits/10 samples)
+
+**Key insight from audit:** The entire Qwen datagen pipeline (both biometric and conv_memory runs) produces responses 3–6× too long. Need to add a strict `MAX_RESPONSE_CHARS` guard to the pipeline before any future Qwen data generation.
+
+**Next after crisis data arrives:** uncomment the three `crisis_qwen_s*` lines in the v6 preset, rsync the merged file, rerun build+clean+train.
 
 ---
 
