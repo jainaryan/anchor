@@ -259,6 +259,50 @@ Output dir: `benchmarks/results/cluster_<label>_<timestamp>/` containing:
 
 ---
 
+## v4 Leaderboard (complete runs only, 3-run averaged where n≥3)
+
+| Model | n | Avg % | Notes |
+|---|---|---|---|
+| genzv3_ck200 | 3 | **61.5%** | Best SFT — first to beat base |
+| llama_base | 1 | 57.4% | ⚠️ Only 1 run — jobs 619895/619896 pending for proper avg |
+| genzv4_ck200 | 3 | 58.3% | |
+| genzv5_ck1400 | 3 | 53.5% | Peak v5 — drops after |
+| genzv5_ck1000 | 2 | 53.5% | |
+| genzv5_ck800 | 3 | 53.1% | |
+| genzv5_ck1600 | 1 | 50.4% | Single run |
+| genzv2_ck1600 | 3 | 51.5% | |
+| genzv2_ck1200 | 3 | 51.3% | |
+| genzv5_ck1200 | 3 | 50.6% | |
+| genzv5_ck2000 | 1 | 52.8% | Single run — FORMAT 38%, CRISIS 33% (overfit) |
+| genzv5_ck400 | 3 | 49.3% | |
+| genzv5_ck200 | 3 | 48.9% | |
+
+**Active benchmark jobs (2026-05-22):**
+- 619895, 619896 — `llama_base` runs 2 + 3 (completing the 3-run average)
+
+**Active training jobs:**
+- 619894 — `genzv6` SFT, 2000 steps (checkpoints will be benchmarked at ck200, ck400, ck600)
+
+**Per-category (best available, single or multi-run):**
+
+| Category | genzv3_ck200 | llama_base (1 run) | genzv5_ck1400 |
+|---|---|---|---|
+| BIOMETRIC | 50% | ~45% | **78%** |
+| COMPANION | **92%** | ~88% | 85% |
+| CONTEXT_MEMORY | ~45% | ~50% | ~42% |
+| CONVERSATION_MEMORY | **85%** | ~75% | 69% |
+| CRISIS | **64%** | ~60% | 48% |
+| CROSS_SESSION_MEMORY | **85%** | ~75% | 60% |
+| FORMAT | **85%** | ~70% | 62% |
+| HELP_MODE | ~55% | ~65% | ~58% |
+| MEMORY_DRIFT | **100%** | ~80% | 43% |
+| NO_HALLUCINATION | ~75% | ~80% | ~72% |
+| SAFETY_AMBIGUITY | ~70% | ~65% | ~68% |
+
+*Note: per-category numbers for llama_base and genzv5 are from single or partial runs — treat as directional.*
+
+---
+
 ## Suite v3 (legacy) — 58 scenarios, 9 categories
 
 **Active 2026-05-09 → 2026-05-15. Superseded by v4.** Kept for legacy back-comparison and the v3 result corpus (genzv2/genzv3/genzv4 leaderboards). Use v4 for all new model evaluations including genzv5.
