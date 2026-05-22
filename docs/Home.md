@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-21 (✅ **genzv5 SFT COMPLETE** job 618377 — all 10 checkpoints ck200–ck2000 saved. v4 benchmarks: 32 jobs queued (618536–618567), 3 runs each for all 5 baselines + genzv5_ck200–ck1200(×2). 13 more (genzv5_ck1200 run3, ck1400–ck2000 ×3) pending job limit — submit once queue drains. Real fix: deleted stale root-level logging.py (exact duplicate of benchmarks/logging.py) from cluster — it shadowed stdlib logging whenever project root was in sys.path. 32 jobs now queued (618656–618687); 13 more (genzv5_ck1200 r3, ck1400–ck2000 ×3) pending job limit. A100-80 nodes draining — will start when they cycle. See Bug Log 2026-05-21.
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-22 (✅ **v4 benchmarks COMPLETE**. Best model: genzv3_ck200 at 61.5% — first SFT to beat base (57.4%). genzv5 peaks at 53.5% (ck1400) — underperforms due to data quality bugs (see Bug Log + Data docs). Full data quality audit complete: 4 files flagged for dropping (biometric_qwen_s0 critical bug, biometric_qwen_s1/s2 verbosity, conv_memory_gemma4 therapy-speak). See Bug Log 2026-05-22.
 >
 > **Cleanup (2026-05-21):** freed ~106 GB on cluster, ~40 GB locally. Cluster: deleted exports `mindmate_qwen3_1p7b`, `mindmate_qwen25_dpo_ck200`, `mindmate_llama_dpo_ck200`, `mindmate_gemma4_e2b` (teacher), `mindmate_genz_llama32_3b` (superseded), `mindmate_llama_sft_ck200`, `mindmate_genzv4_ck200`; deleted all DPO adapters (`CUDA_mindmate_llama32b_dpo_ck{200,1600}`, `genz_dpo`, `genz_dpo_ck1600`, `genzv2_dpo_ck1200`, `genzv3_dpo_ck200`, `CUDA_mindmate_qwen25_3b_dpo_ck{200,1600}`) — DPO abandoned. `exports/` 141G→42G, `adapters/` 19G→12G. Local: deleted `mindmate_app/` (superseded by `anchor-app/`, GitHub-backed), `exports.zip` (Jan-24 archive), `models/mlx_base_llama32_3b` (MLX abandoned), `.claude/worktrees`; pruned `adapters/` to keep only `genz/checkpoint-1200` (3.4G→219M); `git gc --aggressive --prune=now` (.git 11G→606M). Disk 5.3 GiB→45 GiB free. All deletions regeneratable via `scripts/export_gguf_cuda.py`.)
 
@@ -19,19 +19,19 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 
 ---
 
-## Quick Status (2026-05-21)
+## Quick Status (2026-05-22)
 
 | | |
 |---|---|
-| **Best SFT checkpoint** | `genzv2_ck1200` — `adapters/genz/checkpoint-1200`, **44%** on v3 benchmark (still best SFT pending genzv5 v4 results) |
-| **Best on v3 overall** | `llama_base` — base model, no fine-tuning, **51%** on v3 benchmark |
-| **Best SFT GGUF** | `exports/mindmate_genzv2_ck1200_q4_k_m.gguf` |
-| **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv2_ck1200 |
-| **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05 — matches `defaultCompletionParams` in the app). v3 stays available for legacy comparisons. See [[Benchmarks]]. |
-| **Root cause fixed** | ✅ commit c3acdc9 — all 42,038 training examples now use production system prompt format |
-| **Active cluster jobs** | **618377** — genzv5 SFT 🟢 **TRAINING** (A100-80, epoch ~1.33, loss ~2.7, ck200–ck1400 saved) · **618457–618486** — v4 benchmarks 🟡 **PENDING** (30 jobs: 3 runs each for llama_base, genzv2_ck1200/ck1600, genzv3_ck200, genzv4_ck200, genzv5_ck200–ck1000) · **616643** — crisis datagen (running) |
-| **Completed jobs** | ✅ **615518** help_mode · ✅ **615485–615493** conv-memory + biometric shards |
-| **Next milestone** | genzv5 SFT complete → submit genzv5_ck1200/ck1400/ck1600/ck1800/ck2000 benchmarks → `average_results.py` → new leaderboard |
+| **Best model overall (v4)** | `genzv3_ck200` — **61.5%** on v4 benchmark — first SFT to beat base model |
+| **Best base** | `llama_base` — **57.4%** on v4 benchmark |
+| **Best SFT GGUF** | `exports/mindmate_genzv2_ck1200_q4_k_m.gguf` (pending re-export of genzv3_ck200) |
+| **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv3_ck200 GGUF |
+| **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05). v3 available for legacy. See [[Benchmarks]]. |
+| **v4 leaderboard** | genzv3_ck200 **61.5%** > llama_base 57.4% > genzv4_ck200 58.3% > genzv5_ck1400 53.5% > … See [[Bug Log]] 2026-05-22 |
+| **genzv5 outcome** | Peaks at ck1400 (53.5%) — below genzv3. Root causes: biometric_qwen_s0 missing preamble (993 ex), biometric_qwen_s1/s2 800-char responses, conv_memory_gemma4 therapy-speak, zero crisis training data. Full audit in [[Data]] |
+| **Active cluster jobs** | None — all v4 benchmarks complete |
+| **Next milestone** | Design genzv6 data mix (fix data bugs, add crisis data) → train → benchmark |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
 ---

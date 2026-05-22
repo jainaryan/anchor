@@ -8,6 +8,14 @@ tags: [anchor, next-steps]
 
 ---
 
+## What just landed (2026-05-22)
+
+✅ **v4 benchmark complete** for all models (genzv2–genzv5, llama_base). Results in [[Bug Log]] → 2026-05-22. Key finding: genzv3_ck200 (61.5%) beats llama_base (57.4%) — SFT can beat base. But genzv5 peaks at 53.5%, well below genzv3. Root causes fully diagnosed via data quality audit — see [[Data]] → "Data Quality Audit".
+
+✅ **Data quality audit complete** — 4 files flagged for dropping, biometric_qwen_s0 has critical system prompt bug (missing Anchor preamble, 993 examples). See [[Data]] and [[Bug Log]] 2026-05-22.
+
+---
+
 ## What just landed (2026-05-16)
 
 ✅ **v4 benchmark infrastructure complete** across both repos. Outstanding work is now data + training, not infrastructure. See [[Benchmarks]] → "Suite v4".
