@@ -8,6 +8,116 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-05-22
+
+### `run_benchmarks_v4.py` f-string format spec crash at summary (commit a464b88)
+
+**Bug:** After all 83 scenarios completed, the summary print crashed with `ValueError: Invalid format specifier '.3f if rho is not None else 'n/a'' for object of type 'float'`. The offending line was:
+```python
+f"spearman_rho={rho:.3f if rho is not None else 'n/a'}  "
+```
+Python evaluates the format spec `:.3f if rho is not None else 'n/a'` as a single string — conditional expressions inside format specs are not valid Python. All 83 scenarios had been evaluated correctly; only the final summary print crashed, leaving the result dir incomplete (no `judged.json` summary written).
+
+**Fix:** Nested f-string:
+```python
+f"spearman_rho={f'{rho:.3f}' if rho is not None else 'n/a'}  "
+```
+
+---
+
+### Missing `MODEL_SHORTCUTS` entries for genzv5 ck1000–ck2000 (commit a464b88)
+
+**Bug:** `run_benchmarks_v4.py`'s `MODEL_SHORTCUTS` dict only went up to `genzv5_ck800`. Submitting `--model genzv5_ck1000` (or ck1200/ck1400/ck1600/ck1800/ck2000) caused argparse to exit immediately with code 2 ("argument --model: invalid choice"). Jobs 619147–619151, 619201–619203, 619236–619247, 619442–619443 all failed in 0–1 seconds for this reason.
+
+**Fix:** Added ck1000–ck2000 entries to `MODEL_SHORTCUTS`. Also note: `genzv5_ck1400` entry points to `adapters/genzv5/checkpoint-1600` (intentional — checkpoint-1400 dir doesn't exist on cluster yet if training was stopped early; update if needed).
+
+**Resubmitted as:** jobs 619456–619473.
+
+---
+
+### Garbage pre-fix result dirs pollute average_results.py (manual cleanup)
+
+**Bug:** Jobs 619120–619131 ran with broken code (BatchEncoding `.to(device)` bug from an earlier session) and completed in 2–3 min with all 83 scenarios errored. Their result dirs (`cluster_*_20260521_06xxxx` through `_16xxxx`) would corrupt averaging if included. Similarly, jobs 619161 produced a llama_base run where all scenarios errored.
+
+**Fix (manual):**
+- Deleted all `cluster_llama_base_20260521_*` dirs (14 dirs from pre-fix runs)
+- Deleted 38 dirs matching `cluster_*_20260521_{06,07,11,13,15,16}*` across genzv2/v3/v4/v5 models
+- Only good runs (UTC timestamp ≥ 17:24:55 on 2026-05-21, corresponding to job 619124 onwards) were kept
+
+---
+
+### `biometric_qwen_s0.jsonl` missing Anchor preamble — 993 examples with malformed system prompt
+
+**Bug (data quality):** `data/synthetic_train_biometric_qwen_s0.jsonl` has no "You are Anchor..." preamble. 9/10 sampled system prompts start directly with `[User]`; 1/10 starts with `[Recent sessions]`. The standard Anchor preamble is missing entirely, which means:
+1. The model is trained to respond without the Anchor persona definition
+2. The preamble's crisis instruction ("If someone seems to be in danger or crisis, gently encourage them to reach out to someone they trust or a crisis line.") is absent from 993 training examples — directly hurting CRISIS scores
+3. This is the largest single biometric shard (993/~2,860 biometric examples = 35% of biometric data)
+
+**v4 benchmark impact:** genzv5 CRISIS = 44–48% vs genzv3 CRISIS = 64%. biometric_qwen_s0 is a leading cause.
+
+**Fix for v6:** Drop `biometric_qwen_s0` entirely. Fix the biometric datagen pipeline to always include the full Anchor preamble. Or fix the raw file (grep-replace the system prompt opening).
+
+---
+
+### `biometric_qwen_s1` and `biometric_qwen_s2` — pathologically long responses
+
+**Bug (data quality):** Both files have extremely verbose assistant responses:
+- `biometric_qwen_s1` (80 ex): avg 800 chars/response, 10/10 samples flagged >800 chars (range 800–1088 chars)
+- `biometric_qwen_s2` (78 ex): avg 771 chars, 14 quality flags across 10 samples, 9 therapy-speak hits, 6× "i hear you"
+
+Production target is 2–4 sentences (~100–250 chars). Training on 800–1000 char responses teaches the model to over-explain.
+
+**Fix for v6:** Drop both files. The old `biometric_gemma4` file (avg 127 chars) is better quality.
+
+---
+
+### `conv_memory_gemma4` — extreme therapy-speak and markdown
+
+**Bug (data quality):** `synthetic_train_conv_memory.jsonl` (Gemma4 teacher-as-Anchor v2): 16 therapy-speak hits in 10 samples, 9× "it sounds like", 5× "i hear you", 4× responses with markdown. Avg response length 504 chars. This file actively trains the model away from the friend voice.
+
+**Fix for v6:** Drop this file entirely from the mix.
+
+---
+
+### `conv_memory_qwen` files — clunky memory references hurt CROSS_SESSION_MEMORY
+
+**Finding (data quality):** Despite adding 1,617 conv_memory examples specifically to improve CROSS_SESSION_MEMORY, genzv5 scores **60%** on that category while genzv3 (no conv_memory data) scores **85%**. Inspection shows the conv_memory_qwen responses reference memory clumsily: *"You mentioned earlier that health worries and rent have been heavy lately"* — reads like a chatbot reading a notes file, not a friend who remembers naturally.
+
+Additionally, responses avg 488–558 chars with some 800+ char outliers and recurring "i hear you" patterns.
+
+**Fix for v6:** Regenerate with tighter prompts emphasising natural memory use, or curate the existing files to remove clunky references. Possibly reduce count if quality can't be improved.
+
+---
+
+### genzv5 v4 benchmark results — SFT still underperforms genzv3
+
+**Finding (2026-05-22 v4 benchmark complete):** genzv5 peaks at ck1400 (53.5%) and declines after. Full leaderboard:
+
+| Model | n | Avg % |
+|---|---|---|
+| genzv3_ck200 | 3 | **61.5%** |
+| llama_base | 1 | 57.4% |
+| genzv4_ck200 | 3 | 58.3% |
+| genzv5_ck1400 | 3 | 53.5% |
+| genzv5_ck1000 | 2 | 53.5% |
+| genzv5_ck800 | 3 | 53.1% |
+| genzv5_ck1600 | 1 | 50.4% |
+| genzv5_ck1200 | 3 | 50.6% |
+| genzv2_ck1600 | 3 | 51.5% |
+| genzv2_ck1200 | 3 | 51.3% |
+| genzv5_ck400 | 3 | 49.3% |
+| genzv5_ck1800 | 1 | ~52% |
+| genzv5_ck2000 | 1 | 52.8% |
+| genzv5_ck200 | 3 | 48.9% |
+
+genzv5 clearly peaks at ck1400 and deteriorates. ck2000 shows FORMAT collapsing to 38% and CRISIS to 33% — overfit. ck1800 result pending final score extraction.
+
+Per-category breakdown shows genzv5 losing to genzv3 on CRISIS (48% vs 64%), CROSS_SESSION_MEMORY (60% vs 85%), MEMORY_DRIFT (43% vs 100%), CONVERSATION_MEMORY (69% vs 85%), FORMAT (62% vs 85%). genzv5 only wins on BIOMETRIC (78% vs 50%).
+
+Root causes: biometric_qwen_s0 bug, biometric_qwen_s1/s2 verbosity, conv_memory_gemma4 therapy-speak, clunky conv_memory_qwen references, and zero crisis training data. See "Data quality audit findings" section in [[Data]].
+
+---
+
 ## 2026-05-21
 
 ### Stale root-level logging.py shadows stdlib — all 60 benchmark jobs fail instantly (jobs 618457–618686)

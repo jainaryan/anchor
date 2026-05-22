@@ -68,6 +68,62 @@ tags: [anchor, data]
 
 ---
 
+## Data Quality Audit — 2026-05-22
+
+Full scrutiny of every v5 training file. Conducted after genzv5 underperformed genzv3 on v4 benchmark (53.5% vs 61.5%). Sampled 8–10 examples per file and checked: system prompt format, response length, therapy-speak, markdown, crisis handling, memory reference quality.
+
+### Per-file ratings
+
+| File | Rating | Key issues | v6 action |
+|---|---|---|---|
+| `synthetic_train_targeted_fix.jsonl` | 🟡 OK | OLD system prompt format; all have memory context; short (145 chars avg); 0 crisis in sample | Keep |
+| `synthetic_train_friend_1.jsonl` | 🟢 Good | SHORT (310 chars), great friend-tone, no therapy-speak | Keep |
+| `synthetic_train_transition.jsonl` | 🟢 Good | SHORT (88 chars), good pivot tone, low therapy-speak | Keep |
+| `synthetic_train_casual.jsonl` | 🟢 Good | SHORT (106 chars), friend voice, clean | Keep |
+| `synthetic_train_therapist_.jsonl` | 🟡 OK | 255 chars, minor therapy-speak, no memory context | Keep but cap |
+| `synthetic_train.jsonl` (grief) | 🟢 Good | 292 chars, friend voice, natural | Keep |
+| `synthetic_train_targeted_fixes.jsonl` | 🟢 Gold | 77 chars avg, direct, gold standard | Keep all 181 |
+| `synthetic_train_conv_memory.jsonl` (Gemma4) | 🔴 Drop | **504 chars avg, 16 therapy-speak/10 samples, 9× "it sounds like", 5× "i hear you", 4× markdown** | **DROP** |
+| `synthetic_train_conv_memory_qwen.jsonl` (pre-shard) | 🟡 Mixed | 544 chars, some 800–900 char outliers, clunky memory refs ("You mentioned earlier that...") | Curate or reduce |
+| `synthetic_train_conv_memory_qwen_s0.jsonl` | 🟡 Mixed | 512 chars, 4× "i hear you", memory refs feel chatbot-y | Curate or reduce |
+| `synthetic_train_conv_memory_qwen_s1.jsonl` | 🟡 Mixed | 558 chars, 3× "i hear you" | Curate or reduce |
+| `synthetic_train_conv_memory_qwen_s2.jsonl` | 🟡 Mixed | 488 chars, 2× "i hear you" | Curate or reduce |
+| `synthetic_train_biometric_qwen_s0.jsonl` | 🔴 **CRITICAL BUG** | **Missing Anchor preamble entirely** — 9/10 samples start with `[User]` directly, no crisis instruction in system prompt | **DROP** |
+| `synthetic_train_biometric_qwen_s1.jsonl` | 🔴 Drop | **Avg 800 chars, 10/10 samples >800 chars (800–1088), 1× "i hear you"** | **DROP** |
+| `synthetic_train_biometric_qwen_s2.jsonl` | 🔴 Drop | **Avg 771 chars, 14 issue flags/10 samples, 9 therapy-speak, 6× "i hear you", markdown** | **DROP** |
+| `synthetic_train_biometric.jsonl` (Gemma4) | 🟢 Good | SHORT (127 chars), clean, correct format | Keep |
+| `synthetic_train_help_mode_qwen.jsonl` | 🟡 Mixed | 459 chars, 3× markdown (italic asterisks), 2× "i hear you" | Keep but fix |
+| `synthetic_train_crisis_qwen.jsonl` | 🟡 Not used | 5 examples only; OLD format; 598 chars avg, 3× "i hear you" — not in v5 | Fix + expand for v6 |
+
+### What this explains about genzv5 failures
+
+| Benchmark category | genzv3 | genzv5_ck1400 | Root cause in data |
+|---|---|---|---|
+| CRISIS | 64% | 48% | biometric_qwen_s0 removes crisis instruction from 993 examples; zero crisis training data total |
+| CROSS_SESSION_MEMORY | 85% | 60% | conv_memory_qwen references memory clumsily ("You mentioned earlier...") — counterproductively |
+| MEMORY_DRIFT | 100% | 43% | unclear — genzv3's early checkpoint may be undertrained enough to not hallucinate |
+| CONVERSATION_MEMORY | 85% | 69% | conv_memory_gemma4 therapy-speak corrupts style; clunky qwen references |
+| FORMAT | 85% | 62% | biometric_qwen_s1/s2 train 800–1000 char responses; conv_memory_gemma4 uses markdown |
+| BIOMETRIC | 50% | 78% | genzv5 wins here — biometric data did help this category |
+
+### v6 data mix recommendations
+
+**Drop entirely:**
+- `synthetic_train_conv_memory.jsonl` (Gemma4) — extreme therapy-speak
+- `synthetic_train_biometric_qwen_s0.jsonl` — missing Anchor preamble
+- `synthetic_train_biometric_qwen_s1.jsonl` — 800 char responses
+- `synthetic_train_biometric_qwen_s2.jsonl` — 771 char responses + therapy-speak
+
+**Fix before including:**
+- `synthetic_train_help_mode_qwen.jsonl` — strip markdown from responses
+- `synthetic_train_conv_memory_qwen_*.jsonl` — curate examples where memory is referenced naturally, drop "you mentioned earlier" style references
+
+**Add:**
+- Proper crisis examples (at least 50–100) — fix the crisis datagen heuristic that's blocking 99%+ of output
+- Possibly go back to genzv3 data mix (transition/targeted_fix/therapist/biometric_gemma4/friend/casual) as base and add only curated conv_memory
+
+---
+
 ## File Index — What Each `.jsonl` Is For
 
 **At-a-glance map of every `.jsonl` in `data/`.** Detailed tables further down.
