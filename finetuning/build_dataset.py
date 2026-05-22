@@ -151,6 +151,42 @@ DATA_MIX_PRESETS = {
         "synthetic_train_help_mode_qwen.jsonl":        115,
         # Crisis skipped — only 4 examples, insufficient signal
     },
+    # v6 (2026-05-22): clean mix — drop all bad Qwen files, go back to v3 base + targeted additions.
+    # Root cause of genzv5 underperformance: ALL Qwen biometric shards (s0-s5) have 750-800 char
+    # avg responses (target: 100-250); ALL conv_memory files too long (529 char avg, 0% survive
+    # 350-char filter); conv_memory_gemma4 extreme therapy-speak. Dropped everything.
+    #
+    # v6 = v3 proportions (best model, 61.5% v4 benchmark) + help_mode_qwen (markdown-stripped)
+    #      + crisis data once jobs 619781-619783 complete.
+    #
+    # Key changes vs v5:
+    #   - Dropped: all biometric_qwen s0-s5, all conv_memory files (gemma4 + all 10 qwen shards)
+    #   - Fixed: help_mode_qwen.jsonl markdown-stripped (2026-05-22)
+    #   - Raised biometric.jsonl cap to 2348 (full file — best biometric quality available)
+    #   - Crisis data: add synthetic_train_crisis_qwen_s{0,1,2}.jsonl once 619781-783 finish
+    #     (loss_weight=4.0 via CATEGORY_WEIGHTS prefix match)
+    #
+    # Loss weights: crisis=4.0, gold/help_mode=3.0, targeted_fix=2.0, biometric=1.5, default=1.0
+    # Total without crisis: ~11,930. Estimate ~1,491 steps/epoch at batch=8 → run 2000 steps.
+    "v6": {
+        # Core voice (v3 proportions — proven best mix)
+        "synthetic_train_targeted_fix.jsonl":   3500,   # 29%  w=2.0
+        "synthetic_train_friend_1.jsonl":       2000,   # 17%
+        "synthetic_train_transition.jsonl":     2000,   # 17%
+        "synthetic_train_casual.jsonl":         1000,   #  8%
+        "synthetic_train_therapist_.jsonl":     1000,   #  8%
+        "synthetic_train.jsonl":                 500,   #  4%  (grief)
+        # Biometric — Gemma4 only (128 char avg, clean format; all Qwen shards dropped)
+        "synthetic_train_biometric.jsonl":      2348,   # 20%  w=1.5  (full file)
+        # Gold — always 100%
+        "synthetic_train_targeted_fixes.jsonl":  181,   #  2%  w=3.0
+        # Help mode — markdown-stripped 2026-05-22
+        "synthetic_train_help_mode_qwen.jsonl":  200,   #  2%  w=3.0
+        # Crisis — add once jobs 619781-619783 complete:
+        # "synthetic_train_crisis_qwen_s0.jsonl": TBD,  # w=4.0
+        # "synthetic_train_crisis_qwen_s1.jsonl": TBD,  # w=4.0
+        # "synthetic_train_crisis_qwen_s2.jsonl": TBD,  # w=4.0
+    },
     # v2_continued (2026-04-29): continued training from genzv2 ck1600
     # Base model already knows: casual tone, pivot, CRISIS, FORMAT, NO_HALLUCINATION
     # Only fixing: MEMORY_USE, BIOMETRIC, HELP_MODE
@@ -206,7 +242,7 @@ def _weight_for(filename: str) -> float:
 
 import argparse as _argparse
 _preset_parser = _argparse.ArgumentParser(add_help=False)
-_preset_parser.add_argument("--model", type=str, default="v2", choices=list(DATA_MIX_PRESETS.keys()))  # v5 is latest
+_preset_parser.add_argument("--model", type=str, default="v2", choices=list(DATA_MIX_PRESETS.keys()))  # v6 is latest
 _preset_args, _ = _preset_parser.parse_known_args()
 
 SOURCE_CAPS = DATA_MIX_PRESETS[_preset_args.model]

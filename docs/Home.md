@@ -31,7 +31,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **v4 leaderboard** | genzv3_ck200 **61.5%** > llama_base 57.4% > genzv4_ck200 58.3% > genzv5_ck1400 53.5% > … See [[Bug Log]] 2026-05-22 |
 | **genzv5 outcome** | Peaks at ck1400 (53.5%) — below genzv3. Root causes: biometric_qwen_s0 missing preamble (993 ex), biometric_qwen_s1/s2 800-char responses, conv_memory_gemma4 therapy-speak, zero crisis training data. Full audit in [[Data]] |
 | **Active cluster jobs** | 619781–619783 — crisis datagen shards (H100-96, 48h each) |
-| **Next milestone** | Collect crisis data from 619781–619783 → design genzv6 data mix → train → benchmark |
+| **Next milestone** | Collect crisis data from 619781–619783 → add to v6 preset → train genzv6 → benchmark |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
 ---
