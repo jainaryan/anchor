@@ -98,6 +98,12 @@ MODEL_SHORTCUTS = {
     "genzv5_ck400":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-400"),
     "genzv5_ck600":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-600"),
     "genzv5_ck800":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-800"),
+    "genzv5_ck1000":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-1000"),
+    "genzv5_ck1200":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-1200"),
+    "genzv5_ck1400":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-1400"),
+    "genzv5_ck1600":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-1600"),
+    "genzv5_ck1800":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-1800"),
+    "genzv5_ck2000":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv5/checkpoint-2000"),
 }
 
 
@@ -759,7 +765,7 @@ def main():
         mono = crisis_calibration.get("monotonic")
         log.info(
             f"CRISIS calibration: monotonic={mono}  "
-            f"spearman_rho={rho:.3f if rho is not None else 'n/a'}  "
+            f"spearman_rho={f'{rho:.3f}' if rho is not None else 'n/a'}  "
             f"per_level={crisis_calibration['per_level']}"
         )
 
