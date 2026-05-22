@@ -89,6 +89,29 @@ Additionally, responses avg 488–558 chars with some 800+ char outliers and rec
 
 ---
 
+### Crisis heuristic blocking 99%+ of output — 5 examples from 48h run (commit 1288c7d)
+
+**Bug:** `heuristic_crisis()` in `synthetic/crisis_help_pipeline.py` was so strict that job 616643 ran for 48 hours and produced only **5 valid examples** out of 500+ generation attempts.
+
+Root causes:
+1. **`active_si` checked only the FIRST assistant turn** for reach-out words (crisis line, not alone, etc.). Qwen3's natural pattern is empathy first, resources later — the first turn never contained reach-out words, so every active_si attempt failed.
+2. **`CRISIS_SIGNAL_WORDS` too narrow** — missing phrases Qwen3 actually uses: "heavy", "hollow", "fading", "numb", "ache", "hurting", "carrying", "exhausted of", "disappearing".
+3. **`DEFLECTION_OPENERS` too broad** — "i hear you" and "that sounds really tough" are normal empathy, not deflection. Flagging them as deflection caused many good responses to fail.
+4. **`passive_si` `acknowledge_words` too narrow** — same problem; many valid empathetic responses didn't match the short list.
+5. **Word limit 80** — Qwen3's responses tend to run ~90–100 words for this content; limit was too low.
+
+**Fixes (commit 1288c7d):**
+- `active_si`: scan `all_assistant` (joined all assistant turns) instead of just `first`
+- Expanded `CRISIS_SIGNAL_WORDS` with Qwen3's actual vocabulary
+- Removed "i hear you" and "that sounds really tough" from `DEFLECTION_OPENERS`
+- Expanded `passive_si` `acknowledge_words`
+- Word limit raised 80 → 100
+- `clinical_words` check also moved to `all_assistant`
+
+**Resubmitted as:** jobs 619781–619783 (3 shards, H100-96, 48h each).
+
+---
+
 ### genzv5 v4 benchmark results — SFT still underperforms genzv3
 
 **Finding (2026-05-22 v4 benchmark complete):** genzv5 peaks at ck1400 (53.5%) and declines after. Full leaderboard:

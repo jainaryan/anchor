@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-22 (✅ **v4 benchmarks COMPLETE**. Best model: genzv3_ck200 at 61.5% — first SFT to beat base (57.4%). genzv5 peaks at 53.5% (ck1400) — underperforms due to data quality bugs (see Bug Log + Data docs). Full data quality audit complete: 4 files flagged for dropping (biometric_qwen_s0 critical bug, biometric_qwen_s1/s2 verbosity, conv_memory_gemma4 therapy-speak). See Bug Log 2026-05-22.
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-22 (✅ **v4 benchmarks COMPLETE**. Crisis datagen shards 619781–619783 now running with fixed heuristic. Best model: genzv3_ck200 at 61.5% — first SFT to beat base (57.4%). genzv5 peaks at 53.5% (ck1400) — underperforms due to data quality bugs (see Bug Log + Data docs). Full data quality audit complete: 4 files flagged for dropping (biometric_qwen_s0 critical bug, biometric_qwen_s1/s2 verbosity, conv_memory_gemma4 therapy-speak). See Bug Log 2026-05-22.
 >
 > **Cleanup (2026-05-21):** freed ~106 GB on cluster, ~40 GB locally. Cluster: deleted exports `mindmate_qwen3_1p7b`, `mindmate_qwen25_dpo_ck200`, `mindmate_llama_dpo_ck200`, `mindmate_gemma4_e2b` (teacher), `mindmate_genz_llama32_3b` (superseded), `mindmate_llama_sft_ck200`, `mindmate_genzv4_ck200`; deleted all DPO adapters (`CUDA_mindmate_llama32b_dpo_ck{200,1600}`, `genz_dpo`, `genz_dpo_ck1600`, `genzv2_dpo_ck1200`, `genzv3_dpo_ck200`, `CUDA_mindmate_qwen25_3b_dpo_ck{200,1600}`) — DPO abandoned. `exports/` 141G→42G, `adapters/` 19G→12G. Local: deleted `mindmate_app/` (superseded by `anchor-app/`, GitHub-backed), `exports.zip` (Jan-24 archive), `models/mlx_base_llama32_3b` (MLX abandoned), `.claude/worktrees`; pruned `adapters/` to keep only `genz/checkpoint-1200` (3.4G→219M); `git gc --aggressive --prune=now` (.git 11G→606M). Disk 5.3 GiB→45 GiB free. All deletions regeneratable via `scripts/export_gguf_cuda.py`.)
 
@@ -30,8 +30,8 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05). v3 available for legacy. See [[Benchmarks]]. |
 | **v4 leaderboard** | genzv3_ck200 **61.5%** > llama_base 57.4% > genzv4_ck200 58.3% > genzv5_ck1400 53.5% > … See [[Bug Log]] 2026-05-22 |
 | **genzv5 outcome** | Peaks at ck1400 (53.5%) — below genzv3. Root causes: biometric_qwen_s0 missing preamble (993 ex), biometric_qwen_s1/s2 800-char responses, conv_memory_gemma4 therapy-speak, zero crisis training data. Full audit in [[Data]] |
-| **Active cluster jobs** | None — all v4 benchmarks complete |
-| **Next milestone** | Design genzv6 data mix (fix data bugs, add crisis data) → train → benchmark |
+| **Active cluster jobs** | 619781–619783 — crisis datagen shards (H100-96, 48h each) |
+| **Next milestone** | Collect crisis data from 619781–619783 → design genzv6 data mix → train → benchmark |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
 ---
