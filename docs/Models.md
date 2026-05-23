@@ -12,12 +12,29 @@ tags: [anchor, models]
 
 | Term | Model | Why |
 |---|---|---|
+| **Best overall (v4)** | `genzv3_ck200` | 61.5% on v4 — first SFT to beat base |
+| **Best base (v4)** | `llama_base` | 57.4% on v4 (single run) |
+| **Best genzv6 (v4)** | `genzv6_ck1600` | 56.7% on v4 — single run, below base/genzv3 |
 | **Best overall (v3)** | `llama_base` | 51% on v3 — base instruction model, no fine-tuning |
-| **Best SFT checkpoint** | `genzv2_ck1200` | 44% v3, 71% v1 — best fine-tuned model so far |
-| **Currently deployed** | `genzv2_ck1600` | ⚠️ outdated — should upgrade to genzv2_ck1200 |
+| **Best SFT (v3)** | `genzv2_ck1200` | 44% v3, 71% v1 — best fine-tuned model (v3 era) |
+| **Currently deployed** | `genzv2_ck1600` | ⚠️ outdated — should upgrade to genzv3_ck200 GGUF |
 | **Android app default** | `genzv2_ck1200` | `ModelStore.ts` `lastUsedModelId` points here |
 
-Base beats all SFT on v3 because training data used wrong system prompt format (fixed c3acdc9). genzv5 is the first run with correct format — expect memory categories to recover.
+genzv3_ck200 is the best SFT on v4. genzv6 improves on genzv5 (+3.2pp) but doesn't yet beat genzv3 or base. Crisis data (jobs 619781–619783) expected to help — genzv6+crisis is the next training run.
+
+---
+
+## Leaderboard (v4 benchmark, 2026-05-23)
+
+| Model | n | % | Notes |
+|---|---|---|---|
+| **genzv3_ck200** | 3 | **61.5%** | Best SFT overall |
+| llama_base | 1 | 57.4% | ⚠️ 1-run only |
+| genzv4_ck200 | 3 | 58.3% | |
+| **genzv6_ck1600** | **1** | **56.7%** | **Best genzv6 — 1-run only** |
+| genzv5_ck1400 | 3 | 53.5% | Peak v5 |
+| genzv2_ck1600 | 3 | 51.5% | |
+| genzv2_ck1200 | 3 | 51.3% | |
 
 ---
 
@@ -105,6 +122,34 @@ Base beats all SFT on v3 because training data used wrong system prompt format (
 - **v3 avg:** 51% ±1.9 (n=3) — **best on v3, beats all SFT**
 - Strong on CROSS_SESSION (83%), CRISIS (67%), HELP_MODE (58%), BIOMETRIC (60%)
 - Weak on COMPANION (44%), FORMAT (33%), CONV_MEMORY (13%)
+
+---
+
+### genzv6_ck1600 — Best genzv6
+
+- **Adapter (cluster):** `adapters/genzv6/checkpoint-1600`
+- **GGUF:** not yet exported
+- **Training:** v6 data mix (data quality fixes: dropped biometric_qwen_s0 missing preamble 993ex, biometric_qwen_s1/s2 800-char verbosity, conv_memory_gemma4 therapy-speak; no crisis data in mix), 2000 steps
+- **v4 result:** 56.7% (32/83) — single run 2026-05-23
+- **Status vs prior best:** +3.2pp over genzv5 peak (53.5%), still below llama_base (57.4%) and genzv3_ck200 (61.5%)
+- **Next step:** 3-run average on ck1600; add crisis data → genzv6+crisis SFT
+
+**genzv6 full checkpoint sweep (v4 benchmark, single runs, 2026-05-23):**
+
+| Checkpoint | Pass/Total | % |
+|---|---|---|
+| genzv6_ck200 | 31/83 | 53.2% |
+| genzv6_ck400 | 22/83 | 47.5% |
+| genzv6_ck600 | 25/83 | 50.0% |
+| genzv6_ck800 | 25/83 | 49.3% |
+| genzv6_ck1000 | 26/83 | 49.6% |
+| genzv6_ck1200 | 32/83 | 54.6% |
+| genzv6_ck1400 | 29/83 | 53.9% |
+| **genzv6_ck1600** | **32/83** | **56.7%** ← best |
+| genzv6_ck1800 | 31/83 | 55.7% |
+| genzv6_ck2000 | 30/83 | 55.0% |
+
+Pattern: performance dips at ck400 (possible early instability), recovers by ck1200, peaks ck1600, then slowly decays — same Goldilocks behavior as genzv3/genzv4/genzv5.
 
 ---
 
