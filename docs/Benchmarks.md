@@ -266,22 +266,50 @@ Output dir: `benchmarks/results/cluster_<label>_<timestamp>/` containing:
 | genzv3_ck200 | 3 | **61.5%** | Best SFT — first to beat base |
 | llama_base | 1 | 57.4% | ⚠️ Only 1 run — jobs 619895/619896 pending for proper avg |
 | genzv4_ck200 | 3 | 58.3% | |
+| **genzv6_ck1600** | **1** | **56.7%** | **Best genzv6 — single run, 3-run avg pending** |
+| genzv6_ck1800 | 1 | 55.7% | Single run |
+| genzv6_ck2000 | 1 | 55.0% | Single run |
+| genzv6_ck1200 | 1 | 54.6% | Single run |
+| genzv6_ck1400 | 1 | 53.9% | Single run |
+| genzv6_ck200 | 1 | 53.2% | Single run |
 | genzv5_ck1400 | 3 | 53.5% | Peak v5 — drops after |
 | genzv5_ck1000 | 2 | 53.5% | |
+| genzv6_ck600 | 1 | 50.0% | Single run |
 | genzv5_ck800 | 3 | 53.1% | |
+| genzv5_ck2000 | 1 | 52.8% | Single run — FORMAT 38%, CRISIS 33% (overfit) |
+| genzv6_ck1000 | 1 | 49.6% | Single run |
+| genzv6_ck800 | 1 | 49.3% | Single run |
 | genzv5_ck1600 | 1 | 50.4% | Single run |
 | genzv2_ck1600 | 3 | 51.5% | |
 | genzv2_ck1200 | 3 | 51.3% | |
 | genzv5_ck1200 | 3 | 50.6% | |
-| genzv5_ck2000 | 1 | 52.8% | Single run — FORMAT 38%, CRISIS 33% (overfit) |
 | genzv5_ck400 | 3 | 49.3% | |
+| genzv6_ck400 | 1 | 47.5% | Single run — worst genzv6 checkpoint |
 | genzv5_ck200 | 3 | 48.9% | |
 
-**Active benchmark jobs (2026-05-22):**
-- 619895, 619896 — `llama_base` runs 2 + 3 (completing the 3-run average)
+**genzv6 checkpoint sweep (single runs, v4 benchmark, 2026-05-23):**
 
-**Active training jobs:**
-- 619894 — `genzv6` SFT, 2000 steps (checkpoints will be benchmarked at ck200, ck400, ck600)
+| Checkpoint | Pass/Total | % | Notes |
+|---|---|---|---|
+| genzv6_ck200 | 31/83 | 53.2% | |
+| genzv6_ck400 | 22/83 | 47.5% | Worst — possible early instability |
+| genzv6_ck600 | 25/83 | 50.0% | |
+| genzv6_ck800 | 25/83 | 49.3% | |
+| genzv6_ck1000 | 26/83 | 49.6% | |
+| genzv6_ck1200 | 32/83 | 54.6% | |
+| genzv6_ck1400 | 29/83 | 53.9% | |
+| **genzv6_ck1600** | **32/83** | **56.7%** | ← **Best genzv6** |
+| genzv6_ck1800 | 31/83 | 55.7% | |
+| genzv6_ck2000 | 30/83 | 55.0% | |
+
+**genzv6 outcome:** Best at ck1600 (56.7%), still below llama_base (57.4%) and genzv3_ck200 (61.5%). Beats genzv5 peak (53.5%) meaningfully (+3.2pp). Full 3-run average on ck1600 needed before committing to ranking.
+
+**Active benchmark jobs (2026-05-24):**
+- 619895, 619896 — `llama_base` runs 2 + 3 (completing the 3-run average)
+- Next: 3-run average on genzv6_ck1600; genzv6+crisis SFT once crisis datagen (619781–619783) completes
+
+**Active training/datagen jobs (2026-05-24):**
+- 619781–619783 — crisis datagen shards (still running, ~32–33h of 72h at 2026-05-23)
 
 **Per-category (best available, single or multi-run):**
 
