@@ -3,17 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Anchor</title>
+  <title>Anchor · your private mental wellness companion</title>
+  <meta name="description" content="Anchor is a private, on-device AI mental wellness companion. Built to listen, remember, and respond with care. No cloud. No judgment." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app">
 
-    <!-- Sidebar -->
-    <aside id="sidebar">
+    <!-- Sidebar (chat only) -->
+    <aside id="sidebar" class="collapsed">
       <div class="sidebar-header">
         <div class="sidebar-brand">
           <img src="anchor_logo.png" alt="Anchor" class="sidebar-logo" />
@@ -45,34 +46,316 @@
     <!-- Main -->
     <div id="main">
 
-      <!-- Header -->
+      <!-- Header (top nav) -->
       <header>
-        <button id="sidebar-toggle" aria-label="Toggle sidebar">
+        <button id="sidebar-toggle" aria-label="Toggle sidebar" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
           </svg>
         </button>
+        <a class="brand" data-tab-link="home">
+          <img src="anchor.svg" alt="Anchor logo" class="brand-logo" />
+          <span class="brand-text">Anchor</span>
+        </a>
+
+        <!-- Top-level tabs -->
+        <nav class="tab-bar" role="tablist">
+          <button class="tab-btn active" data-tab="home" role="tab" aria-selected="true">Home</button>
+          <button class="tab-btn" data-tab="chat" role="tab" aria-selected="false">Chat</button>
+          <button class="tab-btn" data-tab="about" role="tab" aria-selected="false">Team</button>
+        </nav>
+
         <div class="header-right">
           <button id="feedback-btn" onclick="window.open('https://forms.gle/cQUBm2MouLGobn2h8','_blank','noopener')">Feedback</button>
           <div class="model-select-wrap" id="model-select-wrap">
             <label for="model-select">Model</label>
             <select id="model-select"></select>
           </div>
+          <button class="header-cta" data-tab-link="chat">Try Anchor</button>
         </div>
       </header>
 
-      <!-- Tab bar -->
-      <nav class="tab-bar" role="tablist">
-        <button class="tab-btn active" data-tab="chat" role="tab" aria-selected="true">Chat</button>
-        <button class="tab-btn" data-tab="profile" role="tab" aria-selected="false">Profile</button>
-        <button class="tab-btn" data-tab="insights" role="tab" aria-selected="false">Insights</button>
-        <button class="tab-btn" data-tab="about" role="tab" aria-selected="false">About</button>
-      </nav>
+      <!-- ============================================================ -->
+      <!-- Panel: Home (landing)                                          -->
+      <!-- ============================================================ -->
+      <div id="panel-home" class="tab-panel active" role="tabpanel">
+        <div class="landing-scroll">
 
-      <!-- Panel: Chat -->
-      <div id="panel-chat" class="tab-panel active" role="tabpanel">
+          <!-- Hero -->
+          <section class="hero">
+            <div class="grid-overlay"></div>
+            <div class="hero-top">
+              <div class="hero-inner">
+                <span class="eyebrow">
+                  <span class="eyebrow-dot"></span>
+                  Private beta · Coming soon
+                </span>
+                <h1 class="hero-title">
+                  The AI that<br/>
+                  actually <em>listens.</em>
+                </h1>
+                <p class="hero-sub">
+                  Anchor is a private mental wellness companion built to listen without judgment, remember what matters, and respond like someone who actually gets it.
+                </p>
+                <div class="hero-ctas">
+                  <button class="btn btn-primary" data-tab-link="chat">
+                    Start a conversation
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                  </button>
+                  <a class="btn btn-ghost" href="#how-it-works">How it works</a>
+                </div>
+              </div>
+
+              <!-- Chat preview card -->
+              <div class="hero-preview">
+                <div class="preview-card">
+                  <div class="preview-head">
+                    <div class="preview-dots"><span></span><span></span><span></span></div>
+                    <div class="preview-title">Anchor · Today</div>
+                  </div>
+                  <div class="preview-body">
+                    <div class="preview-msg user">i couldn't sleep again last night. brain just wouldn't shut up</div>
+                    <div class="preview-msg bot">ugh that specific kind of tired hits different. what's your brain stuck on?</div>
+                    <div class="preview-msg user">work stuff. big review friday</div>
+                    <div class="preview-msg bot typing"><span></span><span></span><span></span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="hero-bottom">
+              <div class="hero-meta">
+                <div class="meta-pill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Runs on your phone
+                </div>
+                <div class="meta-pill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  End-to-end private
+                </div>
+                <div class="meta-pill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/><path d="M12 7v5l3 2"/></svg>
+                  Free to start
+                </div>
+              </div>
+            </div>
+          </section>
+
+
+          <!-- Features -->
+          <section class="section">
+            <div class="section-head">
+              <span class="section-tag">Features</span>
+              <h2>Designed around how people actually talk.</h2>
+              <p>Anchor isn't a chatbot dressed up in therapy clothes. It's built for the way real conversations actually move. From the small stuff to the heavy stuff.</p>
+            </div>
+
+            <div class="feature-grid">
+              <div class="feature-card">
+                <div class="feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M3 11a9 9 0 1 1 18 0v5a3 3 0 0 1-3 3h-1v-7h4"/><path d="M3 11v5a3 3 0 0 0 3 3h1v-7H3"/></svg>
+                </div>
+                <h3>Listens, doesn't lecture</h3>
+                <p>No instant pep talks, no scripted "I hear you." Anchor reads tone and meets you where you actually are.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <h3>Remembers what matters</h3>
+                <p>Your name, the people in your life, what actually helps. Carried across conversations and stored only on your device.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </div>
+                <h3>Lives on your phone</h3>
+                <p>The full model runs locally on iOS and Android. No internet required, no conversation logs sent anywhere.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                </div>
+                <h3>Safe by default</h3>
+                <p>Trained to catch crisis cues and point you to real help. Anchor knows when to step aside.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                </div>
+                <h3>Checks in on you</h3>
+                <p>Anchor doesn't wait for you to start. It follows up on the hard conversation, the review on Friday, how you slept. It remembers so you don't have to re-explain.</p>
+              </div>
+
+              <div class="feature-card">
+                <div class="feature-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M20 7L9 18l-5-5"/></svg>
+                </div>
+                <h3>Built to be honest</h3>
+                <p>Not a replacement for therapy, and Anchor will be upfront about that. A companion, not a clinician.</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- How it works -->
+          <section class="section" id="how-it-works">
+            <div class="section-head">
+              <span class="section-tag">How it works</span>
+              <h2>From your phone, on your terms.</h2>
+            </div>
+
+            <div class="steps">
+              <div class="step">
+                <div class="step-num">01</div>
+                <h3>Tell Anchor about you</h3>
+                <p>Tell it your name, what actually helps you, who's in your life. Saved on your device, used as context.</p>
+              </div>
+              <div class="step">
+                <div class="step-num">02</div>
+                <h3>Talk like you would to a friend</h3>
+                <p>Vent, think out loud, or ask for a strategy. Anchor reads where you're at and meets you there.</p>
+              </div>
+              <div class="step">
+                <div class="step-num">03</div>
+                <h3>It checks in before you have to</h3>
+                <p>Anchor reads your health metrics (sleep, heart rate, HRV) and reaches out when it spots stress. You don't have to open the app first.</p>
+              </div>
+              <div class="step">
+                <div class="step-num">04</div>
+                <h3>Come back whenever</h3>
+                <p>Anchor picks up where you left off. Nothing leaves your device, no cloud round-trip, no re-explaining yourself.</p>
+              </div>
+            </div>
+          </section>
+
+          <!-- Proactivity highlight -->
+          <section class="section proactive-section">
+            <div class="proactive-card">
+              <div class="proactive-left">
+                <span class="section-tag">Proactive</span>
+                <h2>Notices before<br/>you have to say it.</h2>
+                <p>Anchor reads your health data and checks in when something looks off. Sleep tanked? HR spiked? It notices, and it asks. Not a push notification. An actual conversation.</p>
+                <div class="metric-pills">
+                  <div class="metric-pill">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+                    Sleep
+                  </div>
+                  <div class="metric-pill">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    Heart rate
+                  </div>
+                  <div class="metric-pill">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    HRV
+                  </div>
+                  <div class="metric-pill">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    Activity
+                  </div>
+                </div>
+              </div>
+              <div class="proactive-right">
+                <div class="proactive-thread">
+                  <div class="metric-context">
+                    <div class="metric-row">
+                      <span class="metric-label">Sleep last night</span>
+                      <span class="metric-val bad">4h 12m</span>
+                    </div>
+                    <div class="metric-row">
+                      <span class="metric-label">Resting HR</span>
+                      <span class="metric-val bad">↑ 78 bpm</span>
+                    </div>
+                    <div class="metric-row">
+                      <span class="metric-label">HRV</span>
+                      <span class="metric-val bad">↓ 32 ms</span>
+                    </div>
+                  </div>
+                  <div class="preview-msg bot">yo your sleep was rough last night. you good?</div>
+                  <div class="preview-msg user">not really. brain just wouldn't stop</div>
+                  <div class="preview-msg bot">ugh that tracks. what was it stuck on?</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- FAQ -->
+          <section class="section">
+            <div class="section-head">
+              <span class="section-tag">Questions</span>
+              <h2>Things people ask.</h2>
+            </div>
+            <div class="faq">
+              <details>
+                <summary>Is Anchor a therapist?</summary>
+                <p>No. Anchor is a companion. It listens and responds thoughtfully, but it isn't a clinician, can't diagnose, and isn't a substitute for professional care. If you're in crisis, it will point you to real resources.</p>
+              </details>
+              <details>
+                <summary>Where do my conversations go?</summary>
+                <p>On the iOS and Android app, conversations never leave your device. On this web preview, messages pass through our server to generate responses and are logged in anonymised form only to improve the model. Never sold, never shared.</p>
+              </details>
+              <details>
+                <summary>How is this different from ChatGPT?</summary>
+                <p>Anchor is a small model fine-tuned specifically for wellness conversations, built to run on your phone. Purpose-built. Warmer by design. Fully private.</p>
+              </details>
+              <details>
+                <summary>How much does it cost?</summary>
+                <p>The web preview is free. The app will have a free tier at launch, with a subscription for advanced features down the line. No surprise paywalls.</p>
+              </details>
+              <details>
+                <summary>When is the app available?</summary>
+                <p>iOS and Android beta is rolling out now. Drop your email via the feedback link to get early access.</p>
+              </details>
+            </div>
+          </section>
+
+          <!-- CTA -->
+          <section class="cta">
+            <div class="cta-card">
+              <div class="cta-left">
+                <h2>Ready when you are.</h2>
+                <p>Try the web preview now. No signup, no credit card. iOS and Android beta rolling out now.</p>
+              </div>
+              <div class="hero-ctas">
+                <button class="btn btn-primary" data-tab-link="chat">
+                  Start a conversation
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                </button>
+                <a class="btn btn-ghost" href="https://forms.gle/cQUBm2MouLGobn2h8" target="_blank" rel="noopener">Join the beta</a>
+              </div>
+            </div>
+          </section>
+
+          <!-- Footer -->
+          <footer class="site-footer">
+            <div class="footer-inner">
+              <div class="footer-brand">
+                <img src="anchor.svg" alt="Anchor" class="footer-logo" />
+                <span>Anchor</span>
+              </div>
+              <div class="footer-links">
+                <button data-tab-link="chat">Chat</button>
+                <button data-tab-link="about">Team</button>
+                <a href="https://forms.gle/cQUBm2MouLGobn2h8" target="_blank" rel="noopener">Feedback</a>
+                <a href="mailto:aryanjain@u.nus.edu">Contact</a>
+              </div>
+              <div class="footer-meta">
+                © 2026 Anchor. Not a substitute for professional care. If you're in crisis, please reach out to a licensed professional.
+              </div>
+            </div>
+          </footer>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- Panel: Chat                                                    -->
+      <!-- ============================================================ -->
+      <div id="panel-chat" class="tab-panel" role="tabpanel">
         <main id="messages" aria-live="polite"></main>
-        <footer>
+        <footer class="chat-footer">
           <div class="input-wrap">
             <textarea id="input" placeholder="Message Anchor…" rows="1" maxlength="2000" aria-label="Message input"></textarea>
             <button id="send-btn" aria-label="Send">
@@ -85,126 +368,59 @@
         </footer>
       </div>
 
-      <!-- Panel: Profile -->
-      <div id="panel-profile" class="tab-panel" role="tabpanel">
-        <div class="panel-scroll">
-          <div class="panel-content">
-            <div class="panel-header">
-              <h2>My Profile</h2>
-              <p class="panel-sub">Anchor uses this to personalise your conversations. Everything stays in your browser — nothing is sent to a server.</p>
-            </div>
 
-            <div class="profile-form">
-              <div class="form-group">
-                <label for="profile-name">Your name</label>
-                <input type="text" id="profile-name" placeholder="What should Anchor call you?" maxlength="60" />
-              </div>
-
-              <div class="form-group">
-                <label for="profile-about">About you</label>
-                <textarea id="profile-about" rows="3" placeholder="Your role, life situation, or anything you'd want Anchor to know…" maxlength="600"></textarea>
-                <span class="field-hint">e.g. "I'm a grad student in Singapore, dealing with burnout and thesis stress."</span>
-              </div>
-
-              <div class="form-group">
-                <label for="profile-helps">What helps you</label>
-                <textarea id="profile-helps" rows="3" placeholder="Coping strategies or activities that work for you…" maxlength="400"></textarea>
-                <span class="field-hint">e.g. "Going for walks, journaling, breathing exercises, talking to my sister."</span>
-              </div>
-
-              <div class="form-group">
-                <label for="profile-people">People in your life</label>
-                <textarea id="profile-people" rows="3" placeholder="Key people and how they're connected to you…" maxlength="400"></textarea>
-                <span class="field-hint">e.g. "Arjun (partner), Mom, Priya (best friend), Dr. Sharma (therapist)."</span>
-              </div>
-
-              <div class="form-group">
-                <label>When I come to Anchor, I usually want to…</label>
-                <div class="radio-group">
-                  <label class="radio-option">
-                    <input type="radio" name="interaction-style" value="vent" />
-                    <span class="radio-body">
-                      <strong>Vent and be heard</strong>
-                      <small>I want to talk it out — not get advice</small>
-                    </span>
-                  </label>
-                  <label class="radio-option">
-                    <input type="radio" name="interaction-style" value="help" />
-                    <span class="radio-body">
-                      <strong>Get practical help</strong>
-                      <small>Give me strategies and concrete next steps</small>
-                    </span>
-                  </label>
-                  <label class="radio-option">
-                    <input type="radio" name="interaction-style" value="both" />
-                    <span class="radio-body">
-                      <strong>Mix of both</strong>
-                      <small>Read the room and adapt to what I need</small>
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div class="form-actions">
-                <button id="profile-save-btn">Save profile</button>
-                <span id="profile-saved-msg" class="saved-msg" aria-live="polite"></span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Panel: Insights -->
-      <div id="panel-insights" class="tab-panel" role="tabpanel">
-        <div class="panel-scroll">
-          <div class="panel-content">
-            <div class="panel-header">
-              <h2>Insights</h2>
-              <p class="panel-sub">A look back at your conversations with Anchor.</p>
-            </div>
-            <div id="insights-list"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Panel: About -->
+      <!-- Panel: Team -->
       <div id="panel-about" class="tab-panel" role="tabpanel">
         <div class="panel-scroll">
           <div class="panel-content">
             <div class="panel-header">
-              <h2>About Anchor</h2>
+              <h2>The team</h2>
+              <p class="panel-sub">Two people who wanted something like Anchor to exist, so they built it.</p>
             </div>
-            <div class="about-sections">
+            <div class="team-intro">
+              <p>We're Gen Z founders navigating the same stress we're building for. High performers don't open meditation apps. They push through until they break. Anchor is the safety net we needed and couldn't find.</p>
+            </div>
 
-              <div class="about-block">
-                <h3>What is Anchor?</h3>
-                <p>Anchor is a private AI mental wellness companion built to give you a safe space to talk through what's on your mind. It's not a replacement for therapy — it's a thoughtful presence that listens, remembers, and responds with care.</p>
-                <p>This is an early web preview. The full version runs entirely on your phone with no internet connection required, so your conversations never leave your device.</p>
+            <div class="team-grid">
+
+              <div class="team-card">
+                <div class="team-avatar">AJ</div>
+                <div class="team-info">
+                  <h3>Aryan Jain</h3>
+                  <span class="team-role">Founder · CEO</span>
+                  <p>Masters at NUS, doing research at the CVML lab across multimodal LLMs, reinforcement learning, and agents. Collaborating with Stanford postdocs on DL optimization. Also a chess player. Was top 3 in his age category in state, FIDE 1629.</p>
+                  <div class="team-links">
+                    <a href="https://www.linkedin.com/in/aryan-jain-4a58b9230/" target="_blank" rel="noopener">LinkedIn</a>
+                    <a href="mailto:aryanjain@u.nus.edu">Email</a>
+                  </div>
+                </div>
               </div>
 
-              <div class="about-block">
-                <h3>How memory works</h3>
-                <p>When you fill in your Profile tab, that information is saved to your browser's local storage and included as context when you chat, so Anchor can respond more personally without you re-explaining yourself each time.</p>
-                <p>Your conversations pass through our server to generate responses and are logged in anonymised form (emails and phone numbers are scrubbed). Logs are used solely to improve the model — they are never sold or shared with third parties.</p>
+              <div class="team-card">
+                <div class="team-avatar">TK</div>
+                <div class="team-info">
+                  <h3>Tanmay Kukreja</h3>
+                  <span class="team-role">Co-Founder · CTO</span>
+                  <p>Data Scientist at Mercedes-Benz R&amp;D via Deloitte, processing continuous time-series data at scale. The exact skillset needed for real-time biometric streams. Built deep LLM engineering experience at Hitachi Research. Former state-level badminton player who brings the same competitive drive to shipping product.</p>
+                  <div class="team-links">
+                    <a href="mailto:writetotanmay@gmail.com">Email</a>
+                  </div>
+                </div>
               </div>
 
-              <div class="about-block">
-                <h3>The model</h3>
-                <p>Anchor is powered by a fine-tuned version of Llama 3.2 3B, trained on mental wellness conversations with a focus on empathetic, non-clinical support. The model is quantised (Q4_K_M) and optimised to run on consumer hardware — including fully on-device on Android.</p>
-              </div>
+            </div>
 
+            <div class="team-advantage">
+              <span class="team-advantage-label">Unfair advantage</span>
+              <p>Zero co-founder risk. We've been competing and building together since school and co-authored a peer-reviewed paper during undergrad. The foundation is already there.</p>
+            </div>
+
+            <div class="about-sections" style="margin-top: 48px;">
               <div class="about-block about-block--warning">
                 <h3>Important disclaimer</h3>
                 <p>Anchor is not a licensed therapist, counsellor, or medical professional. It cannot diagnose, treat, or provide clinical mental health advice. If you are in crisis or need immediate help, please reach out to a professional.</p>
-                <p><strong>Singapore:</strong> Samaritans of Singapore — <a href="tel:1767">1-767</a> (24/7)</p>
                 <p><strong>International:</strong> <a href="https://www.befrienders.org" target="_blank" rel="noopener">befrienders.org</a></p>
               </div>
-
-              <div class="about-block">
-                <h3>Built by</h3>
-                <p>Anchor is an independent project by <a href="https://www.linkedin.com/in/aryan-jain-4a58b9230/" target="_blank" rel="noopener">Aryan Jain</a>. Have feedback, ideas, or questions? <a href="mailto:aryanjain@u.nus.edu">aryanjain@u.nus.edu</a></p>
-              </div>
-
             </div>
           </div>
         </div>

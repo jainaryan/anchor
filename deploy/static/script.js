@@ -42,7 +42,7 @@
   let chats = loadChats();
   let activeChatId = null;
   let isStreaming = false;
-  let activeTab = "chat";
+  let activeTab = "home";
 
   function activeChat() { return chats.find(c => c.id === activeChatId); }
 
@@ -81,10 +81,20 @@
 
     // Header controls relevant only on Chat tab
     const modelWrap = document.getElementById("model-select-wrap");
-    modelWrap.style.display = name === "chat" ? "" : "none";
+    modelWrap.classList.toggle("visible", name === "chat");
 
-    if (name === "insights") renderInsights();
-    if (name === "profile") loadProfileForm();
+    // Sidebar toggle visible only on chat tab
+    toggleBtn.hidden = name !== "chat";
+
+    // Header CTA: hide on chat (already there), show elsewhere
+    const headerCta = document.querySelector(".header-cta");
+    if (headerCta) headerCta.style.display = name === "chat" ? "none" : "";
+
+    // Scroll landing back to top on enter
+    if (name === "home") {
+      const scroller = document.querySelector(".landing-scroll");
+      if (scroller) scroller.scrollTop = 0;
+    }
   }
 
   // Expose for inline onclick use in empty state
@@ -93,6 +103,17 @@
   document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
+
+  // Any element with [data-tab-link="<tab>"] switches tab on click
+  document.querySelectorAll("[data-tab-link]").forEach(el => {
+    el.addEventListener("click", e => {
+      e.preventDefault();
+      switchTab(el.dataset.tabLink);
+    });
+  });
+
+  // Initialise tab state (default = "home" set above)
+  switchTab(activeTab);
 
   // ── Sidebar toggle ─────────────────────────────────────────────────────
   function closeSidebar() { sidebarEl.classList.add("collapsed"); }
@@ -190,15 +211,13 @@
 
   function showEmptyState() {
     const profile = loadProfile();
-    const hasProfile = !!(profile.name || profile.about);
     const greeting = profile.name ? `Hey, ${profile.name}` : "Hey, I'm Anchor";
     const div = document.createElement("div");
     div.className = "empty-state";
     div.innerHTML = `
       <div class="welcome-icon">⚓</div>
       <h2>${escapeHtml(greeting)}</h2>
-      <p class="welcome-sub">We're building a private, on-device mental wellness companion — an AI that lives on your phone and never sends your conversations anywhere. This is an early version we're using to gather feedback. Try it out and let us know what you think.</p>
-      ${!hasProfile ? `<button class="profile-nudge" onclick="window.switchTab('profile')">Add your profile for a personal experience →</button>` : ""}
+      <p class="welcome-sub">A private, on-device mental wellness companion — an AI that lives on your phone and never sends your conversations anywhere. This is an early web preview. Try it out and let us know what you think.</p>
     `;
     messagesEl.appendChild(div);
   }
@@ -340,80 +359,6 @@
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   });
   sendBtn.addEventListener("click", sendMessage);
-
-  // ── Profile form ───────────────────────────────────────────────────────
-  function loadProfileForm() {
-    const profile = loadProfile();
-    document.getElementById("profile-name").value  = profile.name   || "";
-    document.getElementById("profile-about").value = profile.about  || "";
-    document.getElementById("profile-helps").value = profile.helps  || "";
-    document.getElementById("profile-people").value = profile.people || "";
-    const style = profile.style || "";
-    document.querySelectorAll("input[name='interaction-style']").forEach(radio => {
-      radio.checked = radio.value === style;
-    });
-  }
-
-  document.getElementById("profile-save-btn").addEventListener("click", () => {
-    const style = document.querySelector("input[name='interaction-style']:checked")?.value || "";
-    const profile = {
-      name:   document.getElementById("profile-name").value.trim(),
-      about:  document.getElementById("profile-about").value.trim(),
-      helps:  document.getElementById("profile-helps").value.trim(),
-      people: document.getElementById("profile-people").value.trim(),
-      style,
-    };
-    saveProfile(profile);
-
-    const msg = document.getElementById("profile-saved-msg");
-    msg.textContent = "Saved";
-    msg.classList.add("show");
-    setTimeout(() => msg.classList.remove("show"), 2200);
-  });
-
-  // ── Insights ───────────────────────────────────────────────────────────
-  function detectMood(text) {
-    const t = text.toLowerCase();
-    const heavy = ["anxious","anxiety","stressed","overwhelmed","depressed","sad","crying","scared","hopeless","worthless","panic","hurt","pain","lonely","alone","suicide","die","death","grief","loss","exhausted","hate myself","can't do","giving up"];
-    const positive = ["happy","good","great","better","excited","grateful","thankful","joy","calm","peaceful","hopeful","proud","relieved","content","wonderful"];
-    const hCount = heavy.filter(w => t.includes(w)).length;
-    const pCount = positive.filter(w => t.includes(w)).length;
-    if (hCount >= 3) return { cls: "heavy", label: "Heavy" };
-    if (hCount >= 1 && pCount === 0) return { cls: "mixed", label: "Mixed" };
-    if (pCount >= 2) return { cls: "positive", label: "Positive" };
-    return { cls: "neutral", label: "Neutral" };
-  }
-
-  function renderInsights() {
-    const el = document.getElementById("insights-list");
-    const allChats = loadChats().filter(c => c.messages && c.messages.length > 0);
-
-    if (!allChats.length) {
-      el.innerHTML = `<p class="empty-insights">Your insights will appear after your first conversation with Anchor.</p>`;
-      return;
-    }
-
-    const sorted = [...allChats].sort((a, b) => b.updatedAt - a.updatedAt);
-    el.innerHTML = sorted.map(chat => {
-      const date = new Date(chat.updatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-      const turns = Math.floor(chat.messages.length / 2);
-      const userText = chat.messages.filter(m => m.role === "user").map(m => m.content).join(" ");
-      const mood = detectMood(userText);
-      const firstMsg = chat.messages.find(m => m.role === "user")?.content || "";
-      const preview = firstMsg.length > 130 ? firstMsg.slice(0, 130) + "…" : firstMsg;
-      return `
-        <div class="insight-card">
-          <div class="insight-meta">
-            <span class="insight-date">${date}</span>
-            <span class="insight-turns">${turns} exchange${turns !== 1 ? "s" : ""}</span>
-            <span class="mood-badge mood-${mood.cls}">${mood.label}</span>
-          </div>
-          <div class="insight-title">${escapeHtml(chat.title)}</div>
-          <div class="insight-preview">${escapeHtml(preview)}</div>
-        </div>
-      `;
-    }).join("");
-  }
 
   // ── Contact modal ──────────────────────────────────────────────────────
   const contactModal = document.getElementById("contact-modal");
