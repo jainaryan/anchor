@@ -17,7 +17,7 @@ React Native Android app. Forked from PocketPal AI (open-source GGUF runner). Ru
 | **Repo** | github.com/tanmaykay/Anchor |
 | **Branch** | `aryan_branch` |
 | **Local path** | `~/projects/anchor-app/` |
-| **Package ID** | `com.pocketpalai` — intentionally kept from upstream (changing breaks installs) |
+| **Package ID** | `com.anchor.app` — changed from `com.pocketpalai` on 2026-05-25 to prevent Play Store auto-updates from overwriting custom builds |
 | **React Native** | 0.82.1 |
 | **DB** | WatermelonDB 0.28 (SQLite) |
 | **Inference** | llama.rn (llama.cpp JNI bindings) |
@@ -337,9 +337,17 @@ Defined in `src/utils/anchorSystemPrompt.ts`. All three currently return the sam
 
 ---
 
-## UI Revamp (2026-05-24)
+## UI Revamp (2026-05-25)
 
-The following changes are **shipped** (committed to `aryan_branch`):
+### Session 3 changes (2026-05-25)
+
+- **Home screen: 3D orb** — breathing orb replaced with react-native-svg `RadialGradient` sphere. Five render layers: base diffuse (light source top-left 30%/26%), bottom-right shadow pass, soft highlight bloom, sharp specular ellipse, tiny bright specular core. Palette tokens `avatarOrbTop/Mid/Bottom` drive all layers per theme.
+- **Sidebar visual redesign** — `SidebarContent` now uses `LinearGradient` background (`#FBFDFC → #F2F7F6 → #E5EFEC`). New header: 36×36 SVG teal orb (radial gradient + white stroke anchor icon, drop shadow) + "Anchor" serif italic. All nav items replaced with custom `DrawerNavItem` (34×34 rounded-square icon wrap, hint subtitle, 3px teal active left bar). Privacy footer: lock icon + "Everything stays on this device. / No cloud, no account, no analytics."
+- **ChatInput placeholder** — changed to `"Tell Anchor anything…"`.
+- **Adaptive app icon** — added `mipmap-anydpi-v26/ic_launcher.xml` + `ic_launcher_round.xml` (adaptive icon XML), `drawable/ic_launcher_foreground.xml` (vector drawable, white anchor on transparent, 108dp canvas), `values/colors.xml` (`ic_launcher_background: #3E706C`). Android 8+ launchers now apply correct shape masking (circle/squircle/etc).
+- **Package ID changed** — `applicationId` changed from `com.pocketpalai` → `com.anchor.app` (`namespace` stays `com.pocketpal` for Codegen compatibility). Prevents Play Store auto-updates from overwriting dev builds. Requires uninstalling old app before first install: `adb uninstall com.pocketpalai`.
+
+### Session 2 changes (2026-05-24)
 
 - **Home screen** — new `HomeScreen` with animated breathing orb, per-theme greetings, 3 action tiles. Registered as first Drawer.Screen but hidden from sidebar; app opens here.
 - **8 chat themes** — `uiStore.activeChatThemeKey` drives `activeChatPalette` (harbor/midnight/paper/sunset/lagoon/amethyst/sage/mono). Palette tokens used everywhere: `ink`, `inkSoft`, `composerBg`, `composerBorder`, `avatarOrbTop/Mid/Ring`, `blob1Color`, `blob2Color`.
