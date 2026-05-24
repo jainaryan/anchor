@@ -194,18 +194,20 @@ Stores the profile card (Tier 1). Key fields: `name`, `age`, `gender`, `location
 
 | Screen | Path | Purpose |
 |---|---|---|
+| `HomeScreen` | `src/screens/HomeScreen/` | Landing screen — animated orb, greeting, 3 action tiles (Write/Chat/Breathe). Hidden from sidebar, app opens here |
 | `ChatScreen` | `src/screens/ChatScreen/ChatScreen.tsx` | Main chat. Wires model + memory + diary flow + panic detection |
 | `ProfileSetupScreen` | `src/screens/ProfileSetupScreen/` | 4-step profile wizard: About you / What helps / Your people / Boundaries |
 | `ModelsScreen` | `src/screens/ModelsScreen/` | GGUF model browser, download from HuggingFace, local model management |
 | `MemoryViewScreen` | `src/screens/MemoryViewScreen/MemoryViewScreen.tsx` | Inspect episodic memory entries stored in DB |
-| `DiaryScreen` | `src/screens/DiaryScreen/` | View past session reflections |
-| `DiaryEditorScreen` | `src/screens/DiaryEditorScreen/` | Edit/view a single diary entry |
+| `DiaryScreen` | `src/screens/DiaryScreen/` | Diary entry list — search, per-entry preview, FAB for new entry, hamburger to open drawer |
+| `DiaryEditorScreen` | `src/screens/DiaryEditorScreen/` | Edit/write a diary entry — text only, no mood picker |
 | `PanicScreen` | `src/screens/PanicScreen.tsx` | Crisis screen — grounding techniques, crisis line numbers |
-| `EvalScreen` | `src/screens/EvalScreen/` | In-app eval harness UI |
-| `BenchmarkScreen` | `src/screens/BenchmarkScreen/` | Model benchmarking UI |
-| `SettingsScreen` | `src/screens/SettingsScreen/` | App settings |
+| `SettingsScreen` | `src/screens/SettingsScreen/` | App settings — Appearance (8 chat themes), Model, Notifications, Dev Settings |
+| `DevSettingsScreen` | `src/screens/DevSettingsScreen/` | Dev-only — links to Benchmark, Dev Tools, Eval Harness screens (hidden from main sidebar) |
+| `EvalScreen` | `src/screens/EvalScreen/` | In-app eval harness UI (accessible via Dev Settings only) |
+| `BenchmarkScreen` | `src/screens/BenchmarkScreen/` | Model benchmarking UI (accessible via Dev Settings only) |
 | `AboutScreen` | `src/screens/AboutScreen/` | Attribution — keeps PocketPal upstream links intentionally |
-| `DevToolsScreen` | `src/screens/DevToolsScreen/` | Dev/debug tools |
+| `DevToolsScreen` | `src/screens/DevToolsScreen/` | Dev/debug tools (accessible via Dev Settings only) |
 
 ---
 
@@ -335,7 +337,23 @@ Defined in `src/utils/anchorSystemPrompt.ts`. All three currently return the sam
 
 ---
 
-## UX Revamp Plan (session 6)
+## UI Revamp (2026-05-24)
+
+The following changes are **shipped** (committed to `aryan_branch`):
+
+- **Home screen** — new `HomeScreen` with animated breathing orb, per-theme greetings, 3 action tiles. Registered as first Drawer.Screen but hidden from sidebar; app opens here.
+- **8 chat themes** — `uiStore.activeChatThemeKey` drives `activeChatPalette` (harbor/midnight/paper/sunset/lagoon/amethyst/sage/mono). Palette tokens used everywhere: `ink`, `inkSoft`, `composerBg`, `composerBorder`, `avatarOrbTop/Mid/Ring`, `blob1Color`, `blob2Color`.
+- **SettingsScreen restructure** — Appearance section with theme picker grid; Dev Settings moved to `DevSettingsScreen` (separate screen); Benchmark/Dev Tools/Eval Harness accessible only from Dev Settings.
+- **Sidebar cleanup** — Home added as first nav item; Benchmark/Dev Tools/Eval removed from sidebar; `AnchorLogoIcon` replaces `BenchmarkIcon`.
+- **Diary: mood removed** — mood picker removed from `DiaryEditorScreen`. `DiaryEntry.mood` still stored in DB (defaults to `'calm'` on new entries, preserved on edit) to avoid breaking existing storage.
+- **Diary: FAB + hamburger** — FAB for new entry (teal pill, bottom-right). Hamburger opens navigation drawer.
+- **Diary: warm paper card design** — cards use `rgba(251,246,233,0.88)` background with ink/inkSoft colors.
+- **App icon** — all Android mipmap PNGs (`ic_launcher` + `ic_launcher_round`) replaced with the real Anchor logo (white anchor on teal `#3E706C` background), generated at mdpi/hdpi/xhdpi/xxhdpi/xxxhdpi.
+- **iOS-only module shims** — `appleAuthShim`, `healthKitShim`, `healthConnectShim` platform shims prevent Metro from crashing on Android; `crypto-js` replaced with native WebCrypto (`crypto.subtle`).
+
+---
+
+## Legacy UX Plan (session 6)
 
 Three UX updates are now part of the near-term app roadmap.
 
