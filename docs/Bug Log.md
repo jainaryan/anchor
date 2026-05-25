@@ -25,6 +25,18 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 **Job 621991 resubmitted 2026-05-26** with `--export=ALL,MODEL=genzv6_ck1600`.
 
+### `run_export.slurm`: `libcufile.so.0` missing — cu126 torch broken on some A100-80 nodes
+
+**Job:** 621991 (genzv6_ck1600 GGUF export, 2026-05-26)
+
+**Bug:** After the cu126 reinstall, `import torch` crashed with `ImportError: libcufile.so.0: cannot open shared object file`. torch 2.12.0+cu126 links against the CUDA GPUDirect Storage library, which is absent on some A100-80 nodes. Training scripts use the same cu126 install but land on nodes that have cufile; the export job landed on one that doesn't.
+
+**Root cause:** Export pipeline is entirely CPU (`device_map="cpu"` for merge, llama.cpp convert + quantize are compiled C++ binaries). There is no reason to install GPU torch for export at all.
+
+**Fix (2026-05-26, committed):** Changed `run_export.slurm` to install CPU-only torch (`--index-url https://download.pytorch.org/whl/cpu`). Eliminates all CUDA driver / libcufile dependencies from the export path.
+
+**Job 622015 resubmitted 2026-05-26.**
+
 ---
 
 ## 2026-05-25

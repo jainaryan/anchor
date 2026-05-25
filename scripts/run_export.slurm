@@ -25,25 +25,20 @@ echo "[setup] Ensuring pip is in venv..."
 if python -c "import pip" 2>/dev/null; then
     echo "[setup] pip already present in venv"
 else
-    echo "[setup] Installing pip via ensurepip..."
     python -m ensurepip --upgrade
 fi
+# Export is 100% CPU (device_map="cpu" throughout) — install CPU-only torch to
+# avoid CUDA driver / libcufile issues on nodes with mixed driver versions.
 echo "[setup] Uninstalling existing torch from venv..."
 python -m pip uninstall -y torch torchvision 2>&1 | tail -5 || true
 VENV_SITE=$(python -c "import site; print(site.getsitepackages()[0])")
-echo "[setup] Wiping remnant torch dirs in $VENV_SITE..."
 rm -rf "$VENV_SITE/torch" "$VENV_SITE"/torch-*.dist-info 2>/dev/null || true
 rm -rf "$VENV_SITE/torchvision" "$VENV_SITE"/torchvision-*.dist-info 2>/dev/null || true
-echo "[setup] Installing PyTorch cu126..."
-python -m pip install -q --index-url https://download.pytorch.org/whl/cu126 torch torchvision
+echo "[setup] Installing CPU-only PyTorch..."
+python -m pip install -q --index-url https://download.pytorch.org/whl/cpu torch torchvision
 echo "[setup] torch version:"
-python -c "
-import torch
-print('  torch:', torch.__version__)
-print('  cuda:', torch.version.cuda)
-assert 'cu126' in torch.__version__, f'Expected cu126, got {torch.__version__}'
-print('  [OK] cu126 confirmed')
-" || { echo "[setup] FATAL: cu126 install failed"; exit 1; }
+python -c "import torch; print('  torch:', torch.__version__); print('  [OK]')" \
+  || { echo "[setup] FATAL: torch install failed"; exit 1; }
 
 # Build llama-quantize if not already compiled
 if [ ! -f "llama.cpp/build/bin/llama-quantize" ]; then

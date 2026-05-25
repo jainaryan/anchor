@@ -32,7 +32,7 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **v4 leaderboard** | genzv3_ck200 **61.5%** > llama_base 57.4% > genzv4_ck200 58.3% > genzv6_ck1600 56.7% > genzv5_ck1400 53.5% > … See [[Benchmarks]] |
 | **genzv6 outcome** | Checkpoint sweep complete (all ck200–ck2000, single runs). Best: ck1600 at 56.7%. Same Goldilocks pattern (dip at ck400, peak mid-late, decay after ck1600). Still below genzv3_ck200 — next: add crisis data → genzv6+crisis SFT |
 | **genzv5 outcome** | Peaks at ck1400 (53.5%) — below genzv3. Root causes: biometric_qwen_s0 missing preamble (993 ex), biometric_qwen_s1/s2 800-char responses, conv_memory_gemma4 therapy-speak, zero crisis training data. Full audit in [[Data]] |
-| **Active cluster jobs** | 🟢 **621987** — crisis datagen (A100-80/xgph2, 48h, started 2026-05-25); 🟢 **621991** — genzv6_ck1600 GGUF export (A100-80, 2h, submitted 2026-05-26; 621990 failed — see Bug Log) |
+| **Active cluster jobs** | 🟢 **621987** — crisis datagen (A100-80/xgph2, 48h, started 2026-05-25); 🟢 **622015** — genzv6_ck1600 GGUF export (A100-80, CPU torch, submitted 2026-05-26; 621990+621991 failed — see Bug Log) |
 | **Crisis datagen status** | 🟢 Job 621987 running on A100-80. Pipeline fixed: SLURM h100-96→a100-80, early-exit after 10 consecutive GPU errors. Previous jobs 619781–619783 failed on H100-96 (CUDNN). |
 | **llama_base 3-run avg** | ⚠️ Incomplete — jobs 619895–619896 never logged. Only 1 run (57.4%) confirmed. Submit 2 more when ready. |
 | **Next milestone** | Wait for 621987 → rsync crisis data → genzv6+crisis SFT → 3-run avg on genzv6_ck1600 |
