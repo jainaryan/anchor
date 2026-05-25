@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-25 (crisis-help pipeline fix: changed SLURM to a100-80, PHASE1_BATCH_SIZE 8→1; jobs 619781–619783 produced only 5 crisis + 200 help_mode examples before dying from CUDNN_STATUS_NOT_INITIALIZED on H100-96; pipeline needs rerun on a100-80. llama_base runs 2+3 (619895–619896) never logged — only 1-run result (57.4%) stands. All cluster jobs now complete/failed. Next: rerun crisis pipeline on a100-80 → genzv6+crisis SFT. anchor-app: chat text visibility fixed across all 8 themes; earlier: 3D SVG orb, sidebar redesign, adaptive icon, package ID → com.anchor.app; see [[Anchor App]] for full changelog)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-25 (crisis pipeline fixed and resubmitted as job 621987 on xgph2/A100-80 — running. Fixes: SLURM h100-96→a100-80, pipeline early-exit after 10 consecutive GPU errors. Earlier: SLURM fix committed, genzv6 sweep documented, all prior jobs complete/failed. anchor-app: chat text visibility fixed across all 8 themes; 3D SVG orb, sidebar redesign, adaptive icon, package ID → com.anchor.app; see [[Anchor App]] for full changelog)
 >
 > **Cleanup (2026-05-21):** freed ~106 GB on cluster, ~40 GB locally. Cluster: deleted exports `mindmate_qwen3_1p7b`, `mindmate_qwen25_dpo_ck200`, `mindmate_llama_dpo_ck200`, `mindmate_gemma4_e2b` (teacher), `mindmate_genz_llama32_3b` (superseded), `mindmate_llama_sft_ck200`, `mindmate_genzv4_ck200`; deleted all DPO adapters (`CUDA_mindmate_llama32b_dpo_ck{200,1600}`, `genz_dpo`, `genz_dpo_ck1600`, `genzv2_dpo_ck1200`, `genzv3_dpo_ck200`, `CUDA_mindmate_qwen25_3b_dpo_ck{200,1600}`) — DPO abandoned. `exports/` 141G→42G, `adapters/` 19G→12G. Local: deleted `mindmate_app/` (superseded by `anchor-app/`, GitHub-backed), `exports.zip` (Jan-24 archive), `models/mlx_base_llama32_3b` (MLX abandoned), `.claude/worktrees`; pruned `adapters/` to keep only `genz/checkpoint-1200` (3.4G→219M); `git gc --aggressive --prune=now` (.git 11G→606M). Disk 5.3 GiB→45 GiB free. All deletions regeneratable via `scripts/export_gguf_cuda.py`.)
 
@@ -32,10 +32,10 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **v4 leaderboard** | genzv3_ck200 **61.5%** > llama_base 57.4% > genzv4_ck200 58.3% > genzv6_ck1600 56.7% > genzv5_ck1400 53.5% > … See [[Benchmarks]] |
 | **genzv6 outcome** | Checkpoint sweep complete (all ck200–ck2000, single runs). Best: ck1600 at 56.7%. Same Goldilocks pattern (dip at ck400, peak mid-late, decay after ck1600). Still below genzv3_ck200 — next: add crisis data → genzv6+crisis SFT |
 | **genzv5 outcome** | Peaks at ck1400 (53.5%) — below genzv3. Root causes: biometric_qwen_s0 missing preamble (993 ex), biometric_qwen_s1/s2 800-char responses, conv_memory_gemma4 therapy-speak, zero crisis training data. Full audit in [[Data]] |
-| **Active cluster jobs** | ✅ None — all jobs complete or failed |
-| **Crisis datagen status** | ❌ 619781–619783 FAILED — CUDNN_STATUS_NOT_INITIALIZED on H100-96, PHASE1_BATCH_SIZE=8. Produced only 5 crisis + 200 help_mode examples. Fix: rerun on a100-80 with PHASE1_BATCH_SIZE=1. SLURM fixed. |
-| **llama_base 3-run avg** | ⚠️ Incomplete — jobs 619895–619896 never logged. Only 1 run (57.4%) confirmed. |
-| **Next milestone** | Rerun crisis pipeline (a100-80, fixed SLURM) → genzv6+crisis SFT → 3-run avg on genzv6_ck1600 |
+| **Active cluster jobs** | 🟢 **621987** — crisis datagen (A100-80/xgph2, 48h, started 2026-05-25) |
+| **Crisis datagen status** | 🟢 Job 621987 running on A100-80. Pipeline fixed: SLURM h100-96→a100-80, early-exit after 10 consecutive GPU errors. Previous jobs 619781–619783 failed on H100-96 (CUDNN). |
+| **llama_base 3-run avg** | ⚠️ Incomplete — jobs 619895–619896 never logged. Only 1 run (57.4%) confirmed. Submit 2 more when ready. |
+| **Next milestone** | Wait for 621987 → rsync crisis data → genzv6+crisis SFT → 3-run avg on genzv6_ck1600 |
 | **DPO** | ❌ Abandoned — all 3 runs flat or worse than SFT |
 
 ---

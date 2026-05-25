@@ -22,7 +22,11 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 - `finetuning/crisis_help_pipeline_qwen.slurm`: `--gres=gpu:h100-96:1` → `--gres=gpu:a100-80:1`
 - `PHASE1_BATCH_SIZE`: 8 → 1 (conservative default; batch size 8 may have amplified failures)
 
-**Action needed:** Rerun crisis pipeline on a100-80 to generate sufficient crisis data (~hundreds of examples) for genzv6+crisis SFT.
+**Fix 1 (2026-05-25, committed):** `finetuning/crisis_help_pipeline_qwen.slurm` — `--gres=gpu:h100-96:1` → `--gres=gpu:a100-80:1`, `PHASE1_BATCH_SIZE` 8 → 1.
+
+**Fix 2 (2026-05-25, committed):** `synthetic/crisis_help_pipeline.py` — added `consecutive_phase1_errors` counter; exits with code 1 after 10 consecutive Phase 1 failures so SLURM marks the job FAILED instead of burning the full 48h wall time doing nothing.
+
+**Job 621987 submitted 2026-05-25 on xgph2/A100-80.** Appends to existing `data/synthetic_train_crisis_qwen.jsonl` (5 lines from failed run).
 
 ---
 

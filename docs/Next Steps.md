@@ -12,27 +12,26 @@ tags: [anchor, next-steps]
 
 ✅ **genzv6 checkpoint sweep COMPLETE** — all 10 checkpoints (ck200–ck2000) benchmarked on v4. Best: ck1600 at 56.7% (single run). Beats genzv5 peak (+3.2pp) but still below genzv3_ck200 (61.5%). 3-run average pending.
 
-❌ **Crisis datagen failed** — jobs 619781–619783 hit `CUDNN_STATUS_NOT_INITIALIZED` on H100-96 nodes. Only 5 crisis + 200 help_mode examples saved. Root cause: wrong GPU type in SLURM. **Fixed:** `crisis_help_pipeline_qwen.slurm` now uses `a100-80` + `PHASE1_BATCH_SIZE=1`. Rerun needed.
+✅ **Crisis pipeline fixed and resubmitted** — root cause was `--gres=gpu:h100-96:1` in SLURM (H100-96 fails cuDNN init). Fixed: `a100-80`, `PHASE1_BATCH_SIZE=1`, pipeline now exits after 10 consecutive Phase 1 GPU errors instead of spinning. **Job 621987 running on xgph2/A100-80.** See [[Bug Log]] 2026-05-25.
 
-⚠️ **llama_base 3-run average incomplete** — jobs 619895–619896 (runs 2+3) never produced logs. Only 1 run (57.4%) is confirmed. Need to resubmit.
+⚠️ **llama_base 3-run average incomplete** — jobs 619895–619896 (runs 2+3) never produced logs. Only 1 run (57.4%) confirmed. Resubmit when cluster is free.
 
 ---
 
 ## Immediate Priority (2026-05-25)
 
-### 1. Rerun crisis pipeline on a100-80
+### 1. 🟢 Crisis pipeline — job 621987 RUNNING
 
-SLURM is fixed. Launch 3 shards:
-
+No action needed. Monitor with:
 ```bash
-for i in 0 1 2; do
-  sbatch --gres=gpu:a100-80:1 \
-      --export=ALL,PIPELINE_MODE=crisis,SHARD_IDX=$i \
-      finetuning/crisis_help_pipeline_qwen.slurm
-done
+ssh nus-student-cluster "tail -f ~/logs/mindmate-crisis-help-qwen_621987.out"
 ```
-
-Target: ~200+ crisis examples per shard (300 hours × 30B teacher throughput on a100-80). Inspect first shard at ~12h to confirm yield before all 3 shards complete.
+Once complete (~48h from 2026-05-25), rsync:
+```bash
+rsync -az -e "ssh -o LogLevel=QUIET" \
+  nus-student-cluster:~/projects/mindmate/data/synthetic_train_crisis_qwen.jsonl \
+  data/
+```
 
 ### 2. Complete llama_base 3-run average
 
@@ -56,9 +55,9 @@ for i in 2 3; do
 done
 ```
 
-### 4. genzv6+crisis SFT (once crisis data is ready)
+### 4. genzv6+crisis SFT (once job 621987 finishes)
 
-Once crisis shards complete (~200+ examples total), add to v6 preset and rerun SFT. See [[Data]] → "v6 data mix" for exact preset.
+Once crisis data ready (~200+ examples), add to v6 preset and rerun SFT. See [[Data]] → "v6 data mix" for exact preset.
 
 ---
 
