@@ -5,7 +5,7 @@ tags: [anchor, index]
 # Anchor — Project Hub
 
 > Local, finetuned mental-health companion. Llama 3.2 3B SFT → GGUF → Android + webapp.
-> **Production:** https://tryanchor.me | **Last updated:** 2026-05-25 (crisis pipeline fixed and resubmitted as job 621987 on xgph2/A100-80 — running. Fixes: SLURM h100-96→a100-80, pipeline early-exit after 10 consecutive GPU errors. Earlier: SLURM fix committed, genzv6 sweep documented, all prior jobs complete/failed. anchor-app: chat text visibility fixed across all 8 themes; 3D SVG orb, sidebar redesign, adaptive icon, package ID → com.anchor.app; see [[Anchor App]] for full changelog)
+> **Production:** https://tryanchor.me | **Last updated:** 2026-05-26 (genzv6_ck1600 GGUF export submitted as job 621990 on A100-80. `scripts/run_export.slurm` fixed: h100-96→a100-80, log path, partition. genzv6_ck1600 entry added to `scripts/export_gguf_cuda.py`. Earlier: crisis pipeline fixed + resubmitted as job 621987 running on xgph2/A100-80; anchor-app UI revamp.)
 >
 > **Cleanup (2026-05-21):** freed ~106 GB on cluster, ~40 GB locally. Cluster: deleted exports `mindmate_qwen3_1p7b`, `mindmate_qwen25_dpo_ck200`, `mindmate_llama_dpo_ck200`, `mindmate_gemma4_e2b` (teacher), `mindmate_genz_llama32_3b` (superseded), `mindmate_llama_sft_ck200`, `mindmate_genzv4_ck200`; deleted all DPO adapters (`CUDA_mindmate_llama32b_dpo_ck{200,1600}`, `genz_dpo`, `genz_dpo_ck1600`, `genzv2_dpo_ck1200`, `genzv3_dpo_ck200`, `CUDA_mindmate_qwen25_3b_dpo_ck{200,1600}`) — DPO abandoned. `exports/` 141G→42G, `adapters/` 19G→12G. Local: deleted `mindmate_app/` (superseded by `anchor-app/`, GitHub-backed), `exports.zip` (Jan-24 archive), `models/mlx_base_llama32_3b` (MLX abandoned), `.claude/worktrees`; pruned `adapters/` to keep only `genz/checkpoint-1200` (3.4G→219M); `git gc --aggressive --prune=now` (.git 11G→606M). Disk 5.3 GiB→45 GiB free. All deletions regeneratable via `scripts/export_gguf_cuda.py`.)
 
@@ -26,13 +26,13 @@ The goal: a model that behaves like a close friend who listens, remembers contex
 | **Best model overall (v4)** | `genzv3_ck200` — **61.5%** on v4 benchmark — first SFT to beat base model |
 | **Best base** | `llama_base` — **57.4%** on v4 benchmark (1 run) |
 | **Best genzv6** | `genzv6_ck1600` — **56.7%** on v4 (single run, 2026-05-23) — beats genzv5 (+3.2pp), below base/genzv3 |
-| **Best SFT GGUF** | `exports/mindmate_genzv2_ck1200_q4_k_m.gguf` (pending re-export of genzv3_ck200) |
+| **Best SFT GGUF** | `exports/mindmate_genzv2_ck1200_q4_k_m.gguf` (genzv3_ck200 export pending; genzv6_ck1600 export → job 621990) |
 | **Production serving** | `exports/mindmate_llama_sft_ck1600/` at tryanchor.me — ⚠️ outdated, should upgrade to genzv3_ck200 GGUF |
 | **Benchmark suite** | **v4** (released 2026-05-15) — 83 scenarios (45 dynamic), unified cluster + mobile, Gemma4 judge, **production sampling params** (temp=0.7, top_p=0.95, top_k=40, min_p=0.05). v3 available for legacy. See [[Benchmarks]]. |
 | **v4 leaderboard** | genzv3_ck200 **61.5%** > llama_base 57.4% > genzv4_ck200 58.3% > genzv6_ck1600 56.7% > genzv5_ck1400 53.5% > … See [[Benchmarks]] |
 | **genzv6 outcome** | Checkpoint sweep complete (all ck200–ck2000, single runs). Best: ck1600 at 56.7%. Same Goldilocks pattern (dip at ck400, peak mid-late, decay after ck1600). Still below genzv3_ck200 — next: add crisis data → genzv6+crisis SFT |
 | **genzv5 outcome** | Peaks at ck1400 (53.5%) — below genzv3. Root causes: biometric_qwen_s0 missing preamble (993 ex), biometric_qwen_s1/s2 800-char responses, conv_memory_gemma4 therapy-speak, zero crisis training data. Full audit in [[Data]] |
-| **Active cluster jobs** | 🟢 **621987** — crisis datagen (A100-80/xgph2, 48h, started 2026-05-25) |
+| **Active cluster jobs** | 🟢 **621987** — crisis datagen (A100-80/xgph2, 48h, started 2026-05-25); 🟢 **621990** — genzv6_ck1600 GGUF export (A100-80, 2h, submitted 2026-05-25) |
 | **Crisis datagen status** | 🟢 Job 621987 running on A100-80. Pipeline fixed: SLURM h100-96→a100-80, early-exit after 10 consecutive GPU errors. Previous jobs 619781–619783 failed on H100-96 (CUDNN). |
 | **llama_base 3-run avg** | ⚠️ Incomplete — jobs 619895–619896 never logged. Only 1 run (57.4%) confirmed. Submit 2 more when ready. |
 | **Next milestone** | Wait for 621987 → rsync crisis data → genzv6+crisis SFT → 3-run avg on genzv6_ck1600 |

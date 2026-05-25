@@ -14,6 +14,13 @@ tags: [anchor, next-steps]
 
 ✅ **Crisis pipeline fixed and resubmitted** — root cause was `--gres=gpu:h100-96:1` in SLURM (H100-96 fails cuDNN init). Fixed: `a100-80`, `PHASE1_BATCH_SIZE=1`, pipeline now exits after 10 consecutive Phase 1 GPU errors instead of spinning. **Job 621987 running on xgph2/A100-80.** See [[Bug Log]] 2026-05-25.
 
+✅ **genzv6_ck1600 GGUF export submitted** — `scripts/run_export.slurm` fixed (h100-96→a100-80, log path `/home/a/aryanj/logs/`, partition `gpu-long`). `genzv6_ck1600` entry added to `scripts/export_gguf_cuda.py`. **Job 621990 running on A100-80 (~2h).** Rsync when done:
+```bash
+rsync -az -e "ssh -o LogLevel=QUIET" \
+  nus-student-cluster:~/projects/mindmate/exports/mindmate_genzv6_ck1600/ \
+  exports/mindmate_genzv6_ck1600/
+```
+
 ⚠️ **llama_base 3-run average incomplete** — jobs 619895–619896 (runs 2+3) never produced logs. Only 1 run (57.4%) confirmed. Resubmit when cluster is free.
 
 ---
