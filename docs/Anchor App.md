@@ -339,7 +339,15 @@ Defined in `src/utils/anchorSystemPrompt.ts`. All three currently return the sam
 
 ## UI Revamp (2026-05-25)
 
-### Session 4 changes (2026-05-25)
+### Session 5 changes (2026-05-26)
+
+- **Screen transitions** — `withFadeTransition` HOC added to `App.tsx`. Wraps every Drawer screen in a `Reanimated.View`; uses `useFocusEffect` to fire a 230ms fade + 6px upward translate on every navigation (not just first mount, because `useFocusEffect` re-triggers on each focus). Modal-style screens (DiaryEditor, Panic, ProfileSetup) get 14px translate for a more pronounced slide-up. Bug note: original implementation reset opacity to 0 in the cleanup function, which snapped the incoming screen invisible mid-drawer-slide — fixed by resetting at the START of the focus callback instead (no cleanup reset). `drawerType: 'back'` also reverted after it conflicted with the opacity animation.
+- **ChatEmptyPlaceholder: remove "Download Anchor" button** — replaced `Button` with a `TouchableOpacity` wrapping the whole card. Title/description text now uses `palette.ink` / `palette.inkSoft` (was `theme.colors.onSurface` — invisible on dark themes). Description for the no-models state simplified to direct user to sidebar.
+- **Chat header logo** — `ChatHeaderTitle` logo size `20×20` → `32×32` with `borderRadius: 8`.
+- **App icon PNGs regenerated** — all 10 mipmap PNGs (mdpi→xxxhdpi, `ic_launcher` + `ic_launcher_round`) regenerated using `cairosvg` from `anchor-logo.svg`: white anchor (`#FFFFFF`) on teal background (`#3E706C`). Previous icons had anchor in near-identical teal (invisible). Generated at 72% fill ratio so anchor sits within safe zone.
+- **`Anchor-Icon.png` replaced** — was 587×425 RGBA with grey anchor on transparent background (broke on dark themes). Replaced with 512×512 white-anchor-on-teal to match app icon and look correct on all chat themes.
+
+### Session 4 changes (2026-05-26)
 
 - **Chat text visibility fix (all themes)** — `TextMessage.tsx` `textColor` was hardcoded `#1F2933` (dark), invisible on midnight/dark themes. Now uses `palette.aiFg` (AI messages) / `palette.userFg` (user messages) from `uiStore.activeChatPalette`. `TextMessage/styles.ts` link-preview colors updated the same way.
 - **ChatInput palette-aware colors** — `textColor`, `secondaryTextColor`, `accentColor` were all hardcoded. Now use `palette.ink`, `palette.inkSoft`, `palette.sendBgBottom` respectively.
