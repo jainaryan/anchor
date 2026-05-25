@@ -8,6 +8,25 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-05-26
+
+### `run_export.slurm`: two bugs caused job 621990 to run wrong model and crash
+
+**Job:** 621990 (genzv6_ck1600 GGUF export, submitted 2026-05-25)
+
+**Bug 1 — wrong model:** Script used `MODEL=${1:-genz}` (positional arg), but submission used `--export=ALL,MODEL=genzv6_ck1600` (env var). `$1` was empty so it fell back to `genz`. Job ran the wrong model.
+
+**Bug 2 — torch crash:** `OSError: libtorch_global_deps.so: No such file or directory` — the venv has cu130 torch installed (broken on A100-80 driver), same root cause as training jobs. The export script needs the same cu126 reinstall step as all other SLURM scripts.
+
+**Fix (2026-05-26, committed):**
+- `MODEL=${1:-genz}` → `MODEL=${MODEL:-genz}` (reads env var, not positional arg)
+- Added cu126 torch reinstall block (same pattern as `finetuning/run_sft_v6.slurm`)
+- Also added `cd ~/projects/mindmate` at top (script was relying on CWD)
+
+**Job 621991 resubmitted 2026-05-26** with `--export=ALL,MODEL=genzv6_ck1600`.
+
+---
+
 ## 2026-05-25
 
 ### Crisis-help pipeline: `CUDNN_STATUS_NOT_INITIALIZED` on H100-96 (SLURM fixed)
