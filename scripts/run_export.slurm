@@ -12,12 +12,38 @@
 
 set -euo pipefail
 
+cd ~/projects/mindmate
 unset VIRTUAL_ENV
 source mindmatenv/bin/activate
+export PYTHONUNBUFFERED=1
 
-MODEL=${1:-genz}   # pass model as arg: sbatch run_export.slurm genz
-
+# MODEL passed via --export=ALL,MODEL=genzv6_ck1600; default genz
+MODEL=${MODEL:-genz}
 echo "Exporting model: $MODEL"
+
+echo "[setup] Ensuring pip is in venv..."
+if python -c "import pip" 2>/dev/null; then
+    echo "[setup] pip already present in venv"
+else
+    echo "[setup] Installing pip via ensurepip..."
+    python -m ensurepip --upgrade
+fi
+echo "[setup] Uninstalling existing torch from venv..."
+python -m pip uninstall -y torch torchvision 2>&1 | tail -5 || true
+VENV_SITE=$(python -c "import site; print(site.getsitepackages()[0])")
+echo "[setup] Wiping remnant torch dirs in $VENV_SITE..."
+rm -rf "$VENV_SITE/torch" "$VENV_SITE"/torch-*.dist-info 2>/dev/null || true
+rm -rf "$VENV_SITE/torchvision" "$VENV_SITE"/torchvision-*.dist-info 2>/dev/null || true
+echo "[setup] Installing PyTorch cu126..."
+python -m pip install -q --index-url https://download.pytorch.org/whl/cu126 torch torchvision
+echo "[setup] torch version:"
+python -c "
+import torch
+print('  torch:', torch.__version__)
+print('  cuda:', torch.version.cuda)
+assert 'cu126' in torch.__version__, f'Expected cu126, got {torch.__version__}'
+print('  [OK] cu126 confirmed')
+" || { echo "[setup] FATAL: cu126 install failed"; exit 1; }
 
 # Build llama-quantize if not already compiled
 if [ ! -f "llama.cpp/build/bin/llama-quantize" ]; then
@@ -28,6 +54,6 @@ if [ ! -f "llama.cpp/build/bin/llama-quantize" ]; then
     cd ..
 fi
 
-mindmatenv/bin/python scripts/export_gguf_cuda.py --model $MODEL
+python scripts/export_gguf_cuda.py --model $MODEL
 
 echo "Export complete!"
