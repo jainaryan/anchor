@@ -85,6 +85,11 @@ MODELS = {
         "adapter": PROJECT_ROOT / "adapters" / "genzv4" / "checkpoint-200",
         "out_name": "mindmate_genzv4_ck200",
     },
+    "genzv6_ck1600": {
+        "base": "meta-llama/Llama-3.2-3B-Instruct",
+        "adapter": PROJECT_ROOT / "adapters" / "genzv6" / "checkpoint-1600",
+        "out_name": "mindmate_genzv6_ck1600",
+    },
     # Legacy
     "genz": {
         "base": "meta-llama/Llama-3.2-3B-Instruct",

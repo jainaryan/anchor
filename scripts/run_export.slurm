@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=mindmate-export
-#SBATCH --output=logs/export_%j.log
-#SBATCH --error=logs/export_%j.err
+#SBATCH --output=/home/a/aryanj/logs/%x_%j.out
+#SBATCH --error=/home/a/aryanj/logs/%x_%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:h100-96:1
+#SBATCH --partition=gpu-long
+#SBATCH --gres=gpu:a100-80:1
 #SBATCH --time=02:00:00
 
 set -euo pipefail
