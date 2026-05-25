@@ -186,10 +186,12 @@ DPO consistently hurts HELP_MODE and sometimes BIOMETRIC. Pattern: model becomes
 
 | Directory | Model | Training | Status |
 |---|---|---|---|
-| `adapters/genz/checkpoint-1200` | genzv2_ck1200 | v2 mix, 1600 steps | **BEST** |
+| `adapters/genz/checkpoint-1200` | genzv2_ck1200 | v2 mix, 1600 steps | Best v3-era SFT |
 | `adapters/genz/checkpoint-1600` | genzv2_ck1600 | v2 mix, 1600 steps | Deployed (outdated) |
-| `adapters/genzv3/checkpoint-200` | genzv3_ck200 | v3 mix, 200 steps (best ck) | Active |
-| `adapters/genzv4/checkpoint-200` | genzv4_ck200 | v4 mix, 200 steps (best ck) | Active |
+| `adapters/genzv3/checkpoint-200` | genzv3_ck200 | v3 mix, 200 steps | **BEST OVERALL (v4: 61.5%)** |
+| `adapters/genzv4/checkpoint-200` | genzv4_ck200 | v4 mix, 200 steps | Active |
+| `adapters/genzv5/checkpoint-1400` | genzv5_ck1400 | v5 mix, 14,373 ex, 2000 steps | Best v5 (53.5% v4) |
+| `adapters/genzv6/checkpoint-1600` | genzv6_ck1600 | v6 mix, 12,729 ex, 2000 steps | **Best genzv6 (56.7% v4, 1 run)** |
 | `adapters/genzv2_continued/` | genzv2_continued | v2_continued mix | ❌ Broken MEMORY_USE |
 | `adapters/genz_dpo_ck1600/` | genz_dpo_ck1600 | DPO | ❌ Abandoned |
 | `adapters/genzv2_dpo_ck1200/` | genzv2_dpo_ck1200 | DPO | ❌ Abandoned |

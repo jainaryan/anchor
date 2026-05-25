@@ -304,12 +304,10 @@ Output dir: `benchmarks/results/cluster_<label>_<timestamp>/` containing:
 
 **genzv6 outcome:** Best at ck1600 (56.7%), still below llama_base (57.4%) and genzv3_ck200 (61.5%). Beats genzv5 peak (53.5%) meaningfully (+3.2pp). Full 3-run average on ck1600 needed before committing to ranking.
 
-**Active benchmark jobs (2026-05-24):**
-- 619895, 619896 — `llama_base` runs 2 + 3 (completing the 3-run average)
-- Next: 3-run average on genzv6_ck1600; genzv6+crisis SFT once crisis datagen (619781–619783) completes
-
-**Active training/datagen jobs (2026-05-24):**
-- 619781–619783 — crisis datagen shards (still running, ~32–33h of 72h at 2026-05-23)
+**Job status (2026-05-25):**
+- 619895, 619896 — `llama_base` runs 2+3 — ❌ never logged, presumed cancelled. llama_base avg remains 1-run only (57.4%).
+- 619781–619783 — crisis datagen — ❌ FAILED (CUDNN_STATUS_NOT_INITIALIZED on H100-96). See [[Bug Log]] 2026-05-25.
+- **No active jobs.** Next: rerun crisis pipeline on a100-80 → 2 more llama_base runs → 2 more genzv6_ck1600 runs. See [[Next Steps]].
 
 **Per-category (best available, single or multi-run):**
 

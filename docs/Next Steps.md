@@ -8,6 +8,60 @@ tags: [anchor, next-steps]
 
 ---
 
+## What just landed (2026-05-25)
+
+✅ **genzv6 checkpoint sweep COMPLETE** — all 10 checkpoints (ck200–ck2000) benchmarked on v4. Best: ck1600 at 56.7% (single run). Beats genzv5 peak (+3.2pp) but still below genzv3_ck200 (61.5%). 3-run average pending.
+
+❌ **Crisis datagen failed** — jobs 619781–619783 hit `CUDNN_STATUS_NOT_INITIALIZED` on H100-96 nodes. Only 5 crisis + 200 help_mode examples saved. Root cause: wrong GPU type in SLURM. **Fixed:** `crisis_help_pipeline_qwen.slurm` now uses `a100-80` + `PHASE1_BATCH_SIZE=1`. Rerun needed.
+
+⚠️ **llama_base 3-run average incomplete** — jobs 619895–619896 (runs 2+3) never produced logs. Only 1 run (57.4%) is confirmed. Need to resubmit.
+
+---
+
+## Immediate Priority (2026-05-25)
+
+### 1. Rerun crisis pipeline on a100-80
+
+SLURM is fixed. Launch 3 shards:
+
+```bash
+for i in 0 1 2; do
+  sbatch --gres=gpu:a100-80:1 \
+      --export=ALL,PIPELINE_MODE=crisis,SHARD_IDX=$i \
+      finetuning/crisis_help_pipeline_qwen.slurm
+done
+```
+
+Target: ~200+ crisis examples per shard (300 hours × 30B teacher throughput on a100-80). Inspect first shard at ~12h to confirm yield before all 3 shards complete.
+
+### 2. Complete llama_base 3-run average
+
+```bash
+for i in 2 3; do
+  sbatch --gres=gpu:a100-80:1 \
+      --export=ALL,MODEL=llama_base \
+      benchmarks/run_benchmarks_v4.slurm
+done
+```
+
+### 3. 3-run average on genzv6_ck1600
+
+Only 1 run done (56.7%). Need 2 more:
+
+```bash
+for i in 2 3; do
+  sbatch --gres=gpu:a100-80:1 \
+      --export=ALL,MODEL=genzv6_ck1600 \
+      benchmarks/run_benchmarks_v4.slurm
+done
+```
+
+### 4. genzv6+crisis SFT (once crisis data is ready)
+
+Once crisis shards complete (~200+ examples total), add to v6 preset and rerun SFT. See [[Data]] → "v6 data mix" for exact preset.
+
+---
+
 ## What just landed (2026-05-22)
 
 ✅ **v4 benchmark complete** for all models (genzv2–genzv5, llama_base). Results in [[Bug Log]] → 2026-05-22. Key finding: genzv3_ck200 (61.5%) beats llama_base (57.4%) — SFT can beat base. But genzv5 peaks at 53.5%, well below genzv3. Root causes fully diagnosed via data quality audit — see [[Data]] → "Data Quality Audit".

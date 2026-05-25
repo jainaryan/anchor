@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
 #SBATCH --partition=gpu-long
-#SBATCH --gres=gpu:h100-96:1
+#SBATCH --gres=gpu:a100-80:1
 #SBATCH --time=48:00:00
 
 PROJECT_DIR=~/projects/mindmate
@@ -31,11 +31,12 @@ cd $PROJECT_DIR
 export TEACHER_MODEL=30b
 export OUT_LABEL=qwen
 
-# vLLM is NOT usable on this cluster — H100-96 nodes run CUDA driver 12090
-# (12.0.90), which is too old for torch.accelerator used by vLLM V1 engine.
+# vLLM is NOT usable on this cluster (CUDA driver too old on available nodes).
 # HF backend (USE_VLLM=0) is the only viable option.
+# A100-80 required — H100-96 causes CUDNN_STATUS_NOT_INITIALIZED in batch phase 1.
+# See Bug Log 2026-05-25.
 export USE_VLLM=0
-export PHASE1_BATCH_SIZE=8
+export PHASE1_BATCH_SIZE=1
 echo "[Setup] USE_VLLM=$USE_VLLM  PHASE1_BATCH_SIZE=$PHASE1_BATCH_SIZE"
 
 # PIPELINE_MODE is passed via --export=ALL,PIPELINE_MODE=crisis (or help_mode).
