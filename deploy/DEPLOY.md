@@ -5,13 +5,14 @@
 ## Current Production (DigitalOcean) ✅
 
 **URL:** https://tryanchor.me  
-**Server:** DigitalOcean c-4 dedicated CPU droplet, IP: 209.38.122.228  
+**Server:** DigitalOcean c-4 dedicated CPU droplet, IP: 165.22.97.226 (droplet name: `mindmate`, ID 571732607)  
+**Lookup:** `doctl compute droplet list` (don't trust hardcoded IPs — they can change)  
 **Model:** `exports/mindmate_llama_sft_ck1600/` (ck1600 GGUF — ⚠️ should upgrade to `mindmate_genzv2_ck1200_q4_k_m.gguf`)  
 **Stack:** FastAPI + llama-cpp-python (CPU, N_GPU_LAYERS=0), nginx reverse proxy, systemd service  
 
 ```bash
 # SSH
-ssh -i ~/.ssh/id_ed25519 root@209.38.122.228
+ssh -i ~/.ssh/id_ed25519 root@165.22.97.226
 
 # Restart service
 systemctl restart mindmate
@@ -20,10 +21,10 @@ systemctl restart mindmate
 journalctl -u mindmate -f
 
 # Deploy static file changes
-rsync -az -e "ssh -i ~/.ssh/id_ed25519" deploy/static/ root@209.38.122.228:~/mindmate/deploy/static/
+rsync -az -e "ssh -i ~/.ssh/id_ed25519" deploy/static/ root@165.22.97.226:~/mindmate/deploy/static/
 
 # ⚠️ Upgrade model to genzv2_ck1200 (better benchmark scores)
-rsync -az exports/mindmate_genzv2_ck1200_q4_k_m.gguf root@209.38.122.228:~/mindmate/exports/
+rsync -az exports/mindmate_genzv2_ck1200_q4_k_m.gguf root@165.22.97.226:~/mindmate/exports/
 # Then update deploy/config.py MODEL_PATH and restart
 ```
 

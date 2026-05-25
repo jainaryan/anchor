@@ -8,6 +8,24 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-05-25
+
+### Crisis-help pipeline: `CUDNN_STATUS_NOT_INITIALIZED` on H100-96 (SLURM fixed)
+
+**Jobs:** 619781, 619782, 619783 (crisis + help_mode pipeline, Qwen3-30B-A3B, May 22–24)
+
+**Bug:** `crisis_help_pipeline_qwen.slurm` requested `--gres=gpu:h100-96:1`. The H100-96 nodes produce `CUDNN_STATUS_NOT_INITIALIZED` errors repeatedly in batch Phase 1 (the HF inference phase). This killed most generation — 619781 produced only 5 crisis examples out of an expected ~hundreds. The help_mode pipeline in the same jobs produced 200 examples (less batch-intensive phase) before the same errors terminated it.
+
+**Root cause:** H100-96 nodes have a CUDA driver version incompatible with cuDNN initialization in the HF batched inference path. A100-80 nodes do not have this issue — they are the proven GPU for all training and datagen in this project.
+
+**Fix (2026-05-25):**
+- `finetuning/crisis_help_pipeline_qwen.slurm`: `--gres=gpu:h100-96:1` → `--gres=gpu:a100-80:1`
+- `PHASE1_BATCH_SIZE`: 8 → 1 (conservative default; batch size 8 may have amplified failures)
+
+**Action needed:** Rerun crisis pipeline on a100-80 to generate sufficient crisis data (~hundreds of examples) for genzv6+crisis SFT.
+
+---
+
 ## 2026-05-22
 
 ### `run_benchmarks_v4.py` f-string format spec crash at summary (commit a464b88)

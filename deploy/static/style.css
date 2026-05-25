@@ -511,7 +511,7 @@ header {
 /* Feature grid — editorial numbered */
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 1px;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -1001,10 +1001,14 @@ header {
   .cta-card { padding: 40px 24px; }
   .footer-inner { flex-direction: column; align-items: flex-start; gap: 16px; }
 
-  .feature-grid { grid-template-columns: 1fr; }
+  .feature-grid { grid-template-columns: 1fr 1fr; }
   .steps { grid-template-columns: 1fr; }
   .step { border-right: none; border-bottom: 1px solid var(--border); }
   .step:last-child { border-bottom: none; }
+}
+
+@media (max-width: 480px) {
+  .feature-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {
