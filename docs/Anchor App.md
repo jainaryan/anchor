@@ -339,6 +339,14 @@ Defined in `src/utils/anchorSystemPrompt.ts`. All three currently return the sam
 
 ## UI Revamp (2026-05-25)
 
+### Session 4 changes (2026-05-25)
+
+- **Chat text visibility fix (all themes)** — `TextMessage.tsx` `textColor` was hardcoded `#1F2933` (dark), invisible on midnight/dark themes. Now uses `palette.aiFg` (AI messages) / `palette.userFg` (user messages) from `uiStore.activeChatPalette`. `TextMessage/styles.ts` link-preview colors updated the same way.
+- **ChatInput palette-aware colors** — `textColor`, `secondaryTextColor`, `accentColor` were all hardcoded. Now use `palette.ink`, `palette.inkSoft`, `palette.sendBgBottom` respectively.
+- **ChatView composer background** — `inputBackgroundColor` was `theme.dark ? surface : '#FFFFFF'` (ignored chat theme). Now uses `palette.composerBg`.
+- **ChatScreen session tools + empty state** — `TEXT_PRIMARY/SECONDARY/MUTED` constants removed. `styles` converted from static `StyleSheet.create` to `createStyles(palette)` function called inside the observer component. All text colors now use `palette.ink` / `palette.inkSoft`. UI cards (mood strip, toolbar, pills) adapt opacity for dark themes.
+- **SettingsScreen theme swatch label** — selected state used hardcoded `#1F2933`; now uses `theme.palette.ink` (each theme's own contrast color).
+
 ### Session 3 changes (2026-05-25)
 
 - **Home screen: 3D orb** — breathing orb replaced with react-native-svg `RadialGradient` sphere. Five render layers: base diffuse (light source top-left 30%/26%), bottom-right shadow pass, soft highlight bloom, sharp specular ellipse, tiny bright specular core. Palette tokens `avatarOrbTop/Mid/Bottom` drive all layers per theme.
