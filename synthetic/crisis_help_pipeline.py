@@ -764,6 +764,7 @@ def main():
 
     counts = {m: 0 for m in (CRISIS_MODES if is_crisis else HELP_MODES)}
     attempts = 0
+    consecutive_phase1_errors = 0
 
     while not shutdown_requested:
         # ── Batch Phase 1 ──────────────────────────────────────────────────────
@@ -785,8 +786,13 @@ def main():
                 responses = [teacher.generate(build_prompt(profile, mode, num_turns),
                                               max_new_tokens=phase1_max_tokens, temperature=phase1_temp,
                                               system=phase1_system)]
+            consecutive_phase1_errors = 0
         except Exception as e:
             print(f"[batch Phase 1 error] {e}")
+            consecutive_phase1_errors += 1
+            if consecutive_phase1_errors >= 10:
+                print(f"[FATAL] {consecutive_phase1_errors} consecutive Phase 1 errors — GPU likely broken. Exiting.")
+                sys.exit(1)
             time.sleep(2)
             continue
 
