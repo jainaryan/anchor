@@ -339,6 +339,13 @@ Defined in `src/utils/anchorSystemPrompt.ts`. All three currently return the sam
 
 ## UI Revamp (2026-05-25)
 
+### Session 6 changes (2026-05-27)
+
+- **Release APK build** — switched from debug (Metro-dependent) to release build. JS bundle baked into APK via `npx react-native bundle --dev false`. Old `com.mindmate` package uninstalled from device — was causing old app to load on restart. Release APK installed permanently; works without Metro.
+- **App icon color swap** — previous session had icon colors inverted (white anchor on teal). Fixed by swapping `ic_launcher_background` color (`#3E706C` → `#FFFFFF`) and `ic_launcher_foreground.xml` fill (`#FFFFFF` → `#3E706C`). Note: adaptive icon XML (`mipmap-anydpi-v26/`) overrides PNG mipmaps on Android 8+ — PNG changes alone don't affect the visible icon.
+- **App icon centering** — anchor was 29px above center in the 1024px viewport. Fixed by wrapping paths in `<group android:translateY="29">` in `ic_launcher_foreground.xml`.
+- **`Anchor-Icon.png` recentered** — replaced flat-scale render with crop-to-bbox + center-with-equal-padding approach using PIL. Anchor is now visually centered in the 512×512 image. Color: teal (`#3E706C`) on white.
+
 ### Session 5 changes (2026-05-26)
 
 - **Screen transitions** — `withFadeTransition` HOC added to `App.tsx`. Wraps every Drawer screen in a `Reanimated.View`; uses `useFocusEffect` to fire a 230ms fade + 6px upward translate on every navigation (not just first mount, because `useFocusEffect` re-triggers on each focus). Modal-style screens (DiaryEditor, Panic, ProfileSetup) get 14px translate for a more pronounced slide-up. Bug note: original implementation reset opacity to 0 in the cleanup function, which snapped the incoming screen invisible mid-drawer-slide — fixed by resetting at the START of the focus callback instead (no cleanup reset). `drawerType: 'back'` also reverted after it conflicted with the opacity animation.
