@@ -6,7 +6,7 @@ tags: [anchor, data]
 
 ← [[Home]]
 
-> **2026-05-22 status:** v6 data mix finalised. All Qwen pipeline data dropped (uniformly too long — 529–800 char avg). v6 = v3 base + help_mode_qwen (markdown-stripped) + crisis data (jobs 619781–619783, pending). Preset defined in `build_dataset.py DATA_MIX_PRESETS["v6"]`. See audit below.
+> **2026-05-29 status:** Crisis + help_mode datagen pipeline fixed and requeued (jobs 623595–623599). Key fixes: `active_si` keyword heuristic dropped (was rejecting ~99%), `TECHNIQUE_WORDS` expanded for help_mode, `"988"` removed from all heuristics, torch /tmp workaround for NFS nodes. Current data: crisis=252 usable (active_si=3, passive_si=62, humor_deflect=68, ambiguous=119); help_mode=200 (cold_open=197, mid_session=2, not_working=1). New jobs will fill active_si→~80, passive_si→~120, mid_session→~120, not_working→~80. Earlier 2026-05-22: v6 data mix finalised. All Qwen pipeline data dropped (uniformly too long — 529–800 char avg). v6 = v3 base + help_mode_qwen (markdown-stripped) + crisis data. Preset defined in `build_dataset.py DATA_MIX_PRESETS["v6"]`. See audit below.
 
 ---
 

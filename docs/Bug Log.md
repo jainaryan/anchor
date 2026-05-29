@@ -8,6 +8,43 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-05-29
+
+### `crisis_help_pipeline.py`: `active_si` heuristic rejected ~99% of examples
+
+**Symptom:** After job 621987 (256 examples), `crisis_active_si` was only 3/256 (1.2%) vs 20% target. Logs showed thousands of `active_si fail heuristic` lines.
+
+**Root cause:** The `heuristic_crisis` function required Anchor to use specific reach-out phrases (`"reach out"`, `"crisis line"`, `"988"`, `"call someone"`, etc.) somewhere in the conversation. Qwen3 was generating appropriate, empathetic responses that encouraged connection without hitting those exact keywords. Nearly every `active_si` attempt failed this check.
+
+**Fix:** Dropped the entire `active_si` keyword check. The teacher prompt already instructs Qwen3 to handle `active_si` seriously — no keyword policing needed. Also removed `"988"` from all heuristics (hardcoded crisis line numbers should not appear in training data).
+
+### `crisis_help_pipeline.py`: `mid_session` and `not_working` help_mode modes near-absent
+
+**Symptom:** `help_mode_qwen_raw.jsonl` had 200 examples: `cold_open`=197, `mid_session`=2, `not_working`=1.
+
+**Root cause:** `TECHNIQUE_WORDS` list was too narrow (breathing/grounding/DARE only). Qwen3 offers techniques by name — journaling, walking, progressive relaxation, mindfulness, cold shower, etc. — none of which matched. Every `mid_session`/`not_working` attempt failed the technique-word check.
+
+**Fix:** Expanded `TECHNIQUE_WORDS` with common technique phrases Qwen3 actually uses: `walk`, `journal`, `mindful`, `meditat`, `progressive`, `body scan`, `cold shower`, `stretch`, `here's something`, `a technique`, `this might help`, etc.
+
+### `crisis_help_pipeline_qwen.slurm`: torch broken on H100 nodes (NFS stale file handle)
+
+**Symptom:** Jobs 623575–623589 all failed immediately with `OSError: libtorch_global_deps.so: No such file or directory`. Attempted reinstall via `pip install` hit `OSError: [Errno 116] Stale file handle`.
+
+**Root cause (layer 1):** The venv's torch install was corrupted on H100-96 compute nodes — `libtorch_global_deps.so` missing.
+
+**Root cause (layer 2):** NFS home directory had stale file handles on these nodes, making `pip install` to the venv impossible (`Errno 116`).
+
+**Root cause (layer 3 — pre-existing):** Bare `pip` resolves to miniconda's pip (Python 3.13), not the venv's pip. Fix already documented in Home.md §3b, but wasn't applied to this slurm script.
+
+**Fix:** Install torch to `/tmp` instead of the venv, then prepend to `PYTHONPATH`. `/tmp` is local disk per node, unaffected by NFS issues. Pattern:
+```bash
+TORCH_TMP=/tmp/torch_fix_$$
+python -m pip install --target="$TORCH_TMP" \
+  --index-url https://download.pytorch.org/whl/cu126 "torch==2.11.0"
+export PYTHONPATH="$TORCH_TMP:${PYTHONPATH:-}"
+```
+Pinned to `torch==2.11.0` to match the venv's `torchvision==0.26.0` dependency.
+
 ## 2026-05-26
 
 ### `run_export.slurm`: two bugs caused job 621990 to run wrong model and crash

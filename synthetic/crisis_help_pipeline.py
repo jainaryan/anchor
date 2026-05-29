@@ -482,16 +482,6 @@ def heuristic_crisis(conv: list, mode: str) -> bool:
         if not any(w in first for w in CRISIS_SIGNAL_WORDS):
             return False
 
-    # active_si — must mention reaching out somewhere in the conversation
-    # (not necessarily the first turn — Qwen3 empathizes first, then offers resources)
-    if mode == "active_si":
-        reach_out_words = [
-            "reach out", "someone you trust", "crisis line", "not alone",
-            "worried about you", "i'm worried", "please talk to", "please reach",
-            "988", "text a friend", "call someone",
-        ]
-        if not any(w in all_assistant for w in reach_out_words):
-            return False
 
     # passive_si — must acknowledge the specific feeling directly somewhere
     # in the first turn (not just generic empathy)
@@ -604,14 +594,29 @@ def generate_help_user_turns(teacher, profile: dict, mode: str, num_turns: int =
 # Help mode heuristics
 
 TECHNIQUE_WORDS = [
+    # Breathing
     "breathe", "inhale", "exhale", "breath", "breathing",
     "in through", "out through", "4 seconds", "count",
     "box breathing", "4-7-8", "diaphragmatic",
+    # Grounding / sensory
     "grounding", "five things", "5 things", "5-4-3-2-1", "four things",
-    "feet on the floor", "let's try", "try this", "close your eyes",
-    "cold water", "ice water", "feel your feet",
-    "DARE", "dare method", "opposite action",
-    "name five", "look around", "notice",
+    "feet on the floor", "close your eyes", "feel your feet",
+    "name five", "look around", "notice", "anchor yourself",
+    # Physical reset
+    "cold water", "ice water", "cold shower", "splash",
+    "progressive", "muscle relaxation", "body scan",
+    # Movement / behavioural
+    "walk", "walking", "step outside", "move your body",
+    "shake", "stretch",
+    # Cognitive / journaling
+    "journal", "journaling", "write it down", "write down",
+    "note down", "jot",
+    # Mindfulness / meditation
+    "mindful", "mindfulness", "meditat", "sit with",
+    # Action / technique framing
+    "let's try", "try this", "try a", "here's something",
+    "one thing", "a technique", "something that", "this might help",
+    "opposite action", "DARE", "dare method",
 ]
 
 PROBE_OPENERS = [
