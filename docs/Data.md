@@ -247,6 +247,10 @@ These are *output* of `build_dataset.py` / `clean_dataset.py` and live in `data/
 
 All files live in `~/projects/mindmate/data/` (local) and mirrored on cluster. All 42,038 examples were normalized to production system prompt format in commit c3acdc9 (2026-05-09).
 
+**⚠️ 2026-05-30 — residual drift found and re-fixed.** c3acdc9 was only partial. `targeted_fix` (all 13,524), `biometric` (2,029) and the gold `targeted_fixes` (46) still had memory blocks that did NOT match `benchmarks/scenarios.py::_sys()` byte-for-byte: single `\n` instead of `\n\n` between `[User]` and `[Recent sessions]`, and a truncated `ABOUT THIS USER` header (gold file) instead of the full `_MEMORY_HEADER`. Fixed by `scripts/normalize_memory_format.py` (idempotent, imports the canonical format from `scenarios.py`). 15,599 records rewritten, line counts unchanged. Synced to cluster + verified.
+
+**Also salvaged `synthetic_train_biometric_qwen_s0.jsonl` (993 ex, the genzv5 "missing preamble" file).** Its 912 broken records had the entire preamble + header stripped (not just the separator); the conversations themselves are good biometric memory data. Recovered via the normalizer's opt-in `--rebuild-missing-preamble` flag — all 993 now match `_sys()` byte-for-byte, 0 unsalvageable. Fixed locally + cluster. **Worth adding back to the next data mix** (biometric is a weak SFT category). **Cluster re-sync done; a fresh build→clean→train run is still required for any of this to reach a model.** See Bug Log 2026-05-30.
+
 | File | Examples | Content | Generation | Status |
 |---|---|---|---|---|
 | `synthetic_train_targeted_fix.jsonl` | **13,524** | help_mode + memory_recall; multi-turn | `synthetic/targeted_fix_pipeline.py`, job 599031 | ✅ normalized |

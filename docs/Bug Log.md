@@ -10,6 +10,40 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-30
 
+### Qwen3-30B-A3B does NOT fit on an A100-40 even in 4-bit — needs the 80GB card (RESOLVED/known-limit)
+
+**Context:** Benchmarking Qwen3-30B-A3B-Instruct-2507 (the datagen teacher) as a model-under-test on v4, via the two-phase `NO_JUDGE=1` flow (Qwen-only inference → separate Gemma4 replay-judge). To skip the a100-80 queue I tried phase-1 on idle a100-40 nodes.
+
+**Symptom (two failures):**
+- Job 624132 (`device_map="auto"`): `ValueError: Some modules are dispatched on the CPU or the disk`. accelerate sizes the model from its **unquantized fp16** footprint (~60GB) and offloads to CPU on a 40GB card.
+- Job 624135 (forced `device_map={"": 0}`): `torch.OutOfMemoryError: CUDA out of memory ... GPU 0 has a total capacity of 39.49 GiB of which 4.50 MiB is free`. The model genuinely occupies **~39GB loaded**.
+
+**Root cause:** Qwen3-30B-A3B is **MoE** — 4-bit quantization does *not* shrink it to the ~18GB a dense 30B would reach, because all experts' weights are resident. Real loaded footprint ≈39GB, which exceeds the a100-40's usable VRAM. The a100-40 path is infeasible regardless of `device_map`.
+
+**Fix:** Reverted `load_nf4_eval`'s eval-model `device_map` back to `"auto"` (the `{"": 0}` was only for the abandoned a100-40 attempt; reverting keeps the shared benchmark code byte-identical to prior leaderboard runs). Resubmitted the two-phase chain on **a100-80**: phase-1 inference job 624366 (`--gres=gpu:a100-80:1 NO_JUDGE=1 MODEL=qwen3_30b`), phase-2 replay job 624367 (`afterok:624366`, `RESULTS_GLOB='benchmarks/results/cluster_qwen3_30b_*'`). Both queued behind datagen jobs (623985-987, 624118-119) holding the a100-80 nodes; est. start ~2026-06-01.
+
+**Takeaway:** Confirms CLAUDE.md invariant #3 from a new angle — for *any* 30B-class MoE eval/judge, `--gres=gpu:a100-80:1` is mandatory; the 40GB cards are only viable for the dense 3B eval model.
+
+### Residual system-prompt format drift survived c3acdc9 — memory blocks did not match production byte-for-byte (RESOLVED)
+
+**Symptom:** Investigating whether base-beats-SFT is a LoRA-config problem. It is not — but verification against production format (`benchmarks/scenarios.py::_sys()`) surfaced that c3acdc9's "normalize to production format" fix was only partial. Three files' memory blocks still diverged from what inference actually injects:
+
+- `synthetic_train_targeted_fix.jsonl` (13,524 ex, 28% of v4 mix, weight 2.0): **single `\n`** between the `[User]` block and `[Recent sessions]`; production `_sys()` emits **`\n\n`**. All 13,524 records affected.
+- `synthetic_train_biometric.jsonl` (2,348 ex, weight 1.5): same single-`\n` drift on 2,029 of 2,339 memory records (310 were already correct).
+- `synthetic_train_targeted_fixes.jsonl` (gold, 181 ex, **weight 3.0 — highest in the entire mix**): the 46 memory-bearing records used a **truncated `ABOUT THIS USER` header** (no `====` bars, none of the instruction lines) instead of the full `_MEMORY_HEADER`. The other 135 records are legitimately memory-free (correct as-is).
+
+**Why it matters:** The gold file carries the strongest gradient signal (3× loss weight) yet was the *least* production-faithful — it taught the model to use `[Recent sessions]` without the header structure inference injects. Plausible contributor to memory categories (CROSS_SESSION, CONTEXT_MEMORY) still lagging base even in genzv6. The single-vs-double-newline drift is minor per-record but spans the two largest memory files.
+
+**Root cause:** c3acdc9 was an ad-hoc normalization with no reusable script; it fixed the preamble (verified byte-for-byte correct on all files) and the header on `targeted_fix`/`biometric` but not the `[User]→[Recent sessions]` separator, and never touched the gold file's truncated header.
+
+**Fix (applied 2026-05-30):** Added `scripts/normalize_memory_format.py` — imports `_APP_BASE_PROMPT` / `_MEMORY_HEADER` / `_sys` from `benchmarks/scenarios.py` (single source of truth), extracts each record's profile + memory verbatim, and rebuilds the system prompt via `_sys()`. Idempotent; skips no-memory records; refuses to rewrite any record whose pre-block text isn't the canonical preamble (0 such skips). Rewrote 15,599 records across the 3 files (line counts unchanged: 13,524 / 2,348 / 181). Re-run is a clean no-op; all 22 data files now reconstruct byte-for-byte identical to `_sys()` output.
+
+**Caveat still open:** `finetuning/clean_dataset.py` runs `clean_text()` (whitespace-collapse + HTML strip) on **all** message content including `system` (line ~248), so the *cleaned* tensors on the cluster should be spot-checked to confirm the system prompt survives the pipeline intact. The fix above is to the source `data/*.jsonl` only — a fresh build_dataset → clean_dataset → train run is required for it to reach a model.
+
+**Verdict on the original question:** Poor SFT results are a data-format/quality problem, not a LoRA-config problem (config is a conservative `r=8/alpha=16/lr=1e-5`, all 7 target modules). Re-normalize → retrain before tuning any hyperparameters; only then consider one `r=16/alpha=32/lr=2e-5` ablation.
+
+**Follow-up — salvaged `biometric_qwen_s0` (the documented genzv5 "missing preamble, 993 ex" defect):** Running the normalizer on the cluster surfaced 834 records in `synthetic_train_biometric_qwen_s0.jsonl` (cluster-only, not in the v6 mix — genzv6 dropped it) whose system prompt was missing the entire preamble + header, not just the separator. On inspection the conversations are high quality (coherent biometric memory dialogue, warm concise assistant turns, no empties) — genuinely salvageable. Added an opt-in `--rebuild-missing-preamble` flag + `rebuild_stripped()` to the normalizer: it reconstructs records whose preamble/header was stripped, handling bare `[Apr DD]` recent-sessions lines, inline `[Recent sessions] …` markers, and one flattened prose profile. Substring matching is safe in this path *only because* there is no canonical `_MEMORY_HEADER` present to false-match against (the default line-based `rebuild()` is kept for headered records — the header references `[User]`/`[Recent sessions]` inline). Result: all 993 records reconstructed byte-for-byte to `_sys()` (912 rebuilt + 81 already-correct, 0 unsalvageable). Idempotent; the default (no-flag) global run still touches nothing else (regression-checked). Fixed locally + on cluster. **993 usable biometric examples recovered — worth adding back to the next data mix** (biometric is a weak SFT category).
+
 ### GPU torch deleted from venv by export script; disk quota too full to reinstall (RESOLVED)
 
 **Symptom:** All crisis/help_mode datagen jobs (623575–623987) crashed. Venv `torch/` directory completely absent: `ls mindmatenv/lib/python3.12/site-packages/torch/` → No such file or directory.
