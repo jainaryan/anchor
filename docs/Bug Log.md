@@ -10,23 +10,33 @@ Chronological record of bugs found and fixed. Use this to understand what has al
 
 ## 2026-05-30
 
-### GPU torch deleted from venv by export script; disk quota too full to reinstall
+### GPU torch deleted from venv by export script; disk quota too full to reinstall (RESOLVED)
 
 **Symptom:** All crisis/help_mode datagen jobs (623575–623987) crashed. Venv `torch/` directory completely absent: `ls mindmatenv/lib/python3.12/site-packages/torch/` → No such file or directory.
 
 **Root cause:** `run_export.slurm` does `rm -rf "$VENV_SITE/torch" "$VENV_SITE"/torch-*.dist-info` before installing CPU-only torch for export. This permanently deleted GPU torch from the shared venv. Any subsequent GPU job finds no torch.
 
-**Cascading issue — /tmp workaround doesn't work:** Reinstalling torch to `/tmp` and prepending to `PYTHONPATH` passes `torch.cuda.is_available()` and loads model weights to GPU correctly, but the first `model.generate()` call hangs indefinitely (3+ hours, zero output). Root cause unclear — likely triton/CUDA kernel JIT compilation deadlock when torch was installed to a non-standard path.
+**Cascading issue — /tmp workaround doesn't work for GPU inference:** Reinstalling torch to `/tmp` and prepending to `PYTHONPATH` passes `torch.cuda.is_available()` and loads model weights to GPU correctly, but the first `model.generate()` call hangs indefinitely (3+ hours, zero output). Root cause unclear — likely triton/CUDA kernel JIT compilation deadlock when torch was installed to a non-standard path. Do NOT use this workaround for GPU inference jobs (it's still valid for the setup-check pattern in datagen scripts, but the script must fall back to killing the job, not attempting inference).
 
-**Cascading issue — can't reinstall in venv:** `python -m pip install torch==2.11.0+cu126` from login node fails with `OSError: [Errno 122] Disk quota exceeded` after downloading 26MB of 297MB nvidia-nccl package. Home dir at ~248GB (quota ~250GB). Breakdown:
-- `~/.cache/huggingface/hub/`: **145GB** — Qwen3-30B-A3B-2507 (57GB) + Gemma4-26B (49GB) + Gemma4-e4b (15GB) + Gemma4-e2b (9.4GB) + others
-- `~/projects/mindmate/exports/`: **42GB**
-- `~/projects/mindmate/adapters/`: **15GB**
-- `~/projects/mindmate/mindmatenv/`: **6GB**
+**Cascading issue — /tmp 50MB per-user quota:** `python -m pip install torch==2.11.0+cu126` from login node failed with `OSError: [Errno 122] Disk quota exceeded` at 52MB into the 830MB download. `quota -s` showed "no limited resources" (home dir has NO per-user quota). Root cause: pip downloads to `/tmp` by default, and `/tmp` has a **50MB per-user quota** on the login node (`quota -v` shows `/dev/sdd1  blocks=0  quota=51200  limit=51200`). The 830MB torch wheel hits this immediately.
 
-**Fix (pending):** Delete unused HF cache models (Gemma4 x3, Qwen2.5-3B, Qwen3-1.7B = ~83GB freed), then reinstall GPU torch into venv from login node. See next session.
+**Disk space issue:** Home dir was at ~248GB. Freed ~83GB by deleting HF cache (Gemma4-26B=49GB, Gemma4-e4b=15GB, Gemma4-e2b=9.4GB, Qwen2.5-3B=5.8GB, Qwen3-1.7B=3.8GB) + pip cache (3.4GB). After deletion, home dir was ~162GB with no quota limit.
 
-**Lesson:** Export script must NOT touch the shared GPU venv's torch. Either (a) create a separate CPU-only venv for export, or (b) reinstall GPU torch at the end of the export job.
+**Fix (applied 2026-05-30):** Submitted SLURM job 624114 on CPU node (`long` partition) with `TMPDIR=~/pip_tmp` to redirect pip's temp download to the home filesystem (no quota). Used `--no-deps` since `nvidia-nccl-cu12==2.29.3` was already in the venv. Install succeeded: `torch==2.11.0+cu126 torchvision==0.26.0+cu126` restored to venv in ~2m30s.
+
+**Commands to remember for future torch reinstall:**
+```bash
+mkdir -p ~/pip_tmp
+source ~/projects/mindmate/mindmatenv/bin/activate
+TMPDIR=~/pip_tmp python -m pip install --no-deps --no-cache-dir \
+  --index-url https://download.pytorch.org/whl/cu126 'torch==2.11.0' 'torchvision==0.26.0'
+```
+Or as a SLURM job on `--partition=long` (CPU) if login node connection drops.
+
+**Lesson (3 lessons):**
+1. Export script must NOT touch the shared GPU venv's torch — use isolated `/tmp` install for export only (see invariant 3c in Home.md).
+2. `/tmp` on the login node has a 50MB per-user quota — use `TMPDIR=~/pip_tmp` for any large pip downloads.
+3. `nvidia-nccl-cu12` is the largest dependency (297MB); use `--no-deps` when reinstalling torch if nccl is already installed.
 
 ### H100-96 nodes: `device_map="auto"` offloads model to CPU with /tmp torch
 

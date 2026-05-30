@@ -21,24 +21,32 @@ export PYTHONUNBUFFERED=1
 MODEL=${MODEL:-genz}
 echo "Exporting model: $MODEL"
 
-echo "[setup] Ensuring pip is in venv..."
-if python -c "import pip" 2>/dev/null; then
-    echo "[setup] pip already present in venv"
-else
-    python -m ensurepip --upgrade
-fi
-# Export is 100% CPU (device_map="cpu" throughout) — install CPU-only torch to
-# avoid CUDA driver / libcufile issues on nodes with mixed driver versions.
-echo "[setup] Uninstalling existing torch from venv..."
-python -m pip uninstall -y torch torchvision 2>&1 | tail -5 || true
-VENV_SITE=$(python -c "import site; print(site.getsitepackages()[0])")
-rm -rf "$VENV_SITE/torch" "$VENV_SITE"/torch-*.dist-info 2>/dev/null || true
-rm -rf "$VENV_SITE/torchvision" "$VENV_SITE"/torchvision-*.dist-info 2>/dev/null || true
-echo "[setup] Installing CPU-only PyTorch..."
-python -m pip install -q --index-url https://download.pytorch.org/whl/cpu torch torchvision
+# Export is 100% CPU (device_map="cpu" for merge, llama.cpp binaries are C++).
+# NEVER touch the venv's torch — it's GPU torch shared with all datagen/training jobs.
+# Install CPU-only torch into /tmp (local disk, per-node) and prepend to PYTHONPATH.
+# This avoids: (1) destroying GPU torch for other jobs, (2) libcufile.so.0 missing,
+# (3) NFS stale-file-handle failures on pip install to home dir.
+CPU_TMP=/tmp/cpu_torch_export_$$
+echo "[setup] Installing CPU-only torch to $CPU_TMP (venv untouched)..."
+mkdir -p "$CPU_TMP"
+python -m pip install --target="$CPU_TMP" -q \
+  --index-url https://download.pytorch.org/whl/cpu torch torchvision \
+  || { echo "[setup] FATAL: CPU torch install to /tmp failed"; exit 1; }
+export PYTHONPATH="$CPU_TMP:${PYTHONPATH:-}"
 echo "[setup] torch version:"
 python -c "import torch; print('  torch:', torch.__version__); print('  [OK]')" \
-  || { echo "[setup] FATAL: torch install failed"; exit 1; }
+  || { echo "[setup] FATAL: torch import failed after /tmp install"; exit 1; }
+
+# Compiled C extensions in the venv can have stale NFS file handles (Errno 116).
+# Scrub and reinstall any known-fragile packages before running the export script.
+VENV_SITE=$(python -c "import site; print(site.getsitepackages()[0])")
+for pkg in regex numpy; do
+  if ! python -c "import $pkg" 2>/dev/null; then
+    echo "[setup] $pkg import failed — reinstalling..."
+    rm -rf "$VENV_SITE/$pkg" "$VENV_SITE"/$pkg-*.dist-info 2>/dev/null || true
+    python -m pip install -q "$pkg" || echo "[setup] WARNING: $pkg reinstall failed, continuing"
+  fi
+done
 
 # Build llama-quantize if not already compiled
 if [ ! -f "llama.cpp/build/bin/llama-quantize" ]; then
