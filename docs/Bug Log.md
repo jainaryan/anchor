@@ -56,13 +56,17 @@ Or as a SLURM job on `--partition=long` (CPU) if login node connection drops.
 
 **Fix:** Dropped the entire `active_si` keyword check. The teacher prompt already instructs Qwen3 to handle `active_si` seriously — no keyword policing needed. Also removed `"988"` from all heuristics (hardcoded crisis line numbers should not appear in training data).
 
-### `crisis_help_pipeline.py`: `mid_session` and `not_working` help_mode modes near-absent
+### `crisis_help_pipeline.py`: `mid_session` and `not_working` help_mode modes near-absent (first fix 2026-05-29; root cause fixed 2026-05-30)
 
-**Symptom:** `help_mode_qwen_raw.jsonl` had 200 examples: `cold_open`=197, `mid_session`=2, `not_working`=1.
+**Symptom (v1, 2026-05-29):** `help_mode_qwen_raw.jsonl` had 200 examples: `cold_open`=197, `mid_session`=2, `not_working`=1.
 
-**Root cause:** `TECHNIQUE_WORDS` list was too narrow (breathing/grounding/DARE only). Qwen3 offers techniques by name — journaling, walking, progressive relaxation, mindfulness, cold shower, etc. — none of which matched. Every `mid_session`/`not_working` attempt failed the technique-word check.
+**First-fix hypothesis (wrong):** `TECHNIQUE_WORDS` list too narrow. Expanded with walking, journaling, progressive relaxation, mindfulness, cold shower, etc.
 
-**Fix:** Expanded `TECHNIQUE_WORDS` with common technique phrases Qwen3 actually uses: `walk`, `journal`, `mindful`, `meditat`, `progressive`, `body scan`, `cold shower`, `stretch`, `here's something`, `a technique`, `this might help`, etc.
+**Symptom persists (v2, 2026-05-30):** After expanding `TECHNIQUE_WORDS`, distribution still ~99% `cold_open` at 290 examples (cold_open=286, mid_session=2, not_working=2).
+
+**Root cause (identified 2026-05-30):** `heuristic_help` checked `assistant_turns[1]` (Anchor's SECOND response) for technique words in `mid_session`/`not_working` modes. But Qwen3 gives techniques proactively in `assistant_turns[0]` (before the user explicitly asks), then turn 1 becomes a follow-up or check-in without technique keywords → 99% rejection. The TECHNIQUE_WORDS expansion was irrelevant since the issue was which turn index was checked.
+
+**Fix (2026-05-30):** Changed heuristic to check `assistant_turns[0]` for ALL modes. Removes the mode-dependent turn index. Cold_open data, mid_session, and not_working all now check the first Anchor response for technique content. Training signal: "when user shows distress, Anchor offers a technique." Rsync'd to cluster before pending jobs 623987, 624118, 624119 started.
 
 ### `crisis_help_pipeline_qwen.slurm`: torch broken on H100 nodes (NFS stale file handle)
 

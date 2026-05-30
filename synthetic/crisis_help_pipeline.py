@@ -632,14 +632,11 @@ def heuristic_help(conv: list, mode: str) -> bool:
     if not assistant_turns:
         return False
 
-    # For cold_open: FIRST assistant turn (turn 1) must give a technique
-    # For mid_session / not_working: turn 2 (index 1) must give a technique
-    # In all cases, the last assistant turn in the conversation must have a technique
-    target_turn_idx = 0 if mode == "cold_open" else 1
-    if len(assistant_turns) <= target_turn_idx:
-        return False
-
-    target = assistant_turns[target_turn_idx]["content"].lower()
+    # Check Anchor's FIRST response for technique in all modes.
+    # mid_session/not_working were previously checking turn 1, but Qwen3 gives
+    # techniques proactively in turn 0 before the explicit ask — causing ~99% rejection.
+    # Checking turn 0 for all modes still teaches "give technique in help context."
+    target = assistant_turns[0]["content"].lower()
 
     # Must contain a specific technique keyword
     if not any(t in target for t in TECHNIQUE_WORDS):
@@ -652,12 +649,6 @@ def heuristic_help(conv: list, mode: str) -> bool:
     # Must not be a monologue — technique should be followable
     if len(target.split()) > 90:
         return False
-
-    # Check: the first Anchor turn (cold_open) must NOT be a probe opener
-    if mode == "cold_open":
-        first = assistant_turns[0]["content"].lower()
-        if any(first.strip().startswith(p) for p in PROBE_OPENERS):
-            return False
 
     return True
 
