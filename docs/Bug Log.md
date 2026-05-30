@@ -8,6 +8,34 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-05-30
+
+### GPU torch deleted from venv by export script; disk quota too full to reinstall
+
+**Symptom:** All crisis/help_mode datagen jobs (623575–623987) crashed. Venv `torch/` directory completely absent: `ls mindmatenv/lib/python3.12/site-packages/torch/` → No such file or directory.
+
+**Root cause:** `run_export.slurm` does `rm -rf "$VENV_SITE/torch" "$VENV_SITE"/torch-*.dist-info` before installing CPU-only torch for export. This permanently deleted GPU torch from the shared venv. Any subsequent GPU job finds no torch.
+
+**Cascading issue — /tmp workaround doesn't work:** Reinstalling torch to `/tmp` and prepending to `PYTHONPATH` passes `torch.cuda.is_available()` and loads model weights to GPU correctly, but the first `model.generate()` call hangs indefinitely (3+ hours, zero output). Root cause unclear — likely triton/CUDA kernel JIT compilation deadlock when torch was installed to a non-standard path.
+
+**Cascading issue — can't reinstall in venv:** `python -m pip install torch==2.11.0+cu126` from login node fails with `OSError: [Errno 122] Disk quota exceeded` after downloading 26MB of 297MB nvidia-nccl package. Home dir at ~248GB (quota ~250GB). Breakdown:
+- `~/.cache/huggingface/hub/`: **145GB** — Qwen3-30B-A3B-2507 (57GB) + Gemma4-26B (49GB) + Gemma4-e4b (15GB) + Gemma4-e2b (9.4GB) + others
+- `~/projects/mindmate/exports/`: **42GB**
+- `~/projects/mindmate/adapters/`: **15GB**
+- `~/projects/mindmate/mindmatenv/`: **6GB**
+
+**Fix (pending):** Delete unused HF cache models (Gemma4 x3, Qwen2.5-3B, Qwen3-1.7B = ~83GB freed), then reinstall GPU torch into venv from login node. See next session.
+
+**Lesson:** Export script must NOT touch the shared GPU venv's torch. Either (a) create a separate CPU-only venv for export, or (b) reinstall GPU torch at the end of the export job.
+
+### H100-96 nodes: `device_map="auto"` offloads model to CPU with /tmp torch
+
+**Symptom:** Jobs on H100 nodes (xgpi*) — torch import worked, CUDA visible, model loaded to 100%, but `device_map="auto"` offloaded some layers to CPU. Inference was effectively on CPU (no output after hours).
+
+**Root cause:** When torch is installed to `/tmp` via PYTHONPATH, `accelerate`'s memory estimator may miscalculate available VRAM or the CUDA device context is not fully initialized, causing partial CPU offload. On A100-80 (xgph2), the same /tmp torch approach passed the CUDA check but then hung in the first `generate()` call (different failure mode, same root cause).
+
+**Fix:** Restore GPU torch to the venv (see above). The /tmp approach is fundamentally unreliable for GPU inference.
+
 ## 2026-05-29
 
 ### `crisis_help_pipeline.py`: `active_si` heuristic rejected ~99% of examples

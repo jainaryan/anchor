@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
 #SBATCH --partition=gpu-long
-#SBATCH --gres=gpu:h100-96:1
+#SBATCH --gres=gpu:a100-80:1
 #SBATCH --time=48:00:00
 
 PROJECT_DIR=~/projects/mindmate
@@ -22,22 +22,26 @@ echo "  PIPELINE_MODE: ${PIPELINE_MODE:-crisis}"
 echo "======================================="
 
 source $PROJECT_DIR/mindmatenv/bin/activate
+export PYTHONUNBUFFERED=1
 echo "[Setup] Python: $(which python) -- $(python --version)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 echo ""
 
-# Reinstall GPU torch if the shared libs are missing.
-# NFS home dirs can have stale file handles on compute nodes (Errno 116), so we
-# install to /tmp instead of the venv and prepend it to PYTHONPATH.
-python -c "import torch" 2>/dev/null || {
-  echo "[Setup] torch import failed — installing torch 2.11.0+cu126 to /tmp..."
+# Fix broken torch/torchvision on H100 nodes.
+# NFS home dirs can have stale file handles (Errno 116), blocking venv reinstalls.
+# Install torch + torchvision to /tmp (local disk) and prepend to PYTHONPATH.
+# torchvision must come from the same install as torch — venv torchvision imports
+# torch C++ extensions that break if torch comes from a different path.
+python -c "import torch; import torchvision" 2>/dev/null || {
+  echo "[Setup] torch/torchvision import failed — installing to /tmp..."
   TORCH_TMP=/tmp/torch_fix_$$
   python -m pip install --target="$TORCH_TMP" \
-    --index-url https://download.pytorch.org/whl/cu126 "torch==2.11.0" \
-    || { echo "[Setup] FATAL: torch pip install failed"; exit 1; }
+    --index-url https://download.pytorch.org/whl/cu126 \
+    "torch==2.11.0" "torchvision==0.26.0" \
+    || { echo "[Setup] FATAL: pip install to /tmp failed"; exit 1; }
   export PYTHONPATH="$TORCH_TMP:${PYTHONPATH:-}"
-  python -c "import torch; print('[Setup] torch', torch.__version__, 'OK')" \
-    || { echo "[Setup] FATAL: torch still unimportable after /tmp install"; exit 1; }
+  python -c "import torch; import torchvision; assert torch.cuda.is_available(), 'CUDA not available'; print('[Setup] torch', torch.__version__, '/ torchvision', torchvision.__version__, '/ CUDA', torch.cuda.get_device_name(0), 'OK')" \
+    || { echo "[Setup] FATAL: torch/torchvision/CUDA broken after /tmp install"; exit 1; }
   echo "[Setup] PYTHONPATH=$PYTHONPATH"
 }
 
