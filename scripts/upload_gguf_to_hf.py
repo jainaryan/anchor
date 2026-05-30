@@ -20,6 +20,8 @@ EXPORTS_DIR  = PROJECT_ROOT / "exports"
 
 # All available Q4_K_M GGUFs
 ALL_MODELS = {
+    # Best SFT (v4 benchmark 2026-05-30)
+    "genzv6_ck1600":      EXPORTS_DIR / "mindmate_genzv6_ck1600"      / "mindmate_genzv6_ck1600_q4_k_m.gguf",
     # Top-3 SFT checkpoints (benchmark 2026-05-03)
     "genzv3_ck200":       EXPORTS_DIR / "mindmate_genzv3_ck200"       / "mindmate_genzv3_ck200_q4_k_m.gguf",
     "genzv2_ck1200":      EXPORTS_DIR / "mindmate_genzv2_ck1200"      / "mindmate_genzv2_ck1200_q4_k_m.gguf",
