@@ -8,63 +8,40 @@ tags: [anchor, next-steps]
 
 ---
 
-## What just landed (2026-05-25)
+## What just landed (2026-06-01)
 
-✅ **genzv6 checkpoint sweep COMPLETE** — all 10 checkpoints (ck200–ck2000) benchmarked on v4. Best: ck1600 at 56.7% (single run). Beats genzv5 peak (+3.2pp) but still below genzv3_ck200 (61.5%). 3-run average pending.
+✅ **v7 data mix ready (NOT yet trained)** — proven v6 mix + recovered `biometric_qwen_s0` (993 ex, length-clean). `v7` preset in `build_dataset.py`; `finetuning/run_sft_v7.slurm` does build→clean→train → `adapters/genzv7`. Confirmed `clean_dataset.py::clean_text()` does NOT mangle the production system prompt. **Run not yet launched.**
 
-✅ **Crisis pipeline fixed and resubmitted** — root cause was `--gres=gpu:h100-96:1` in SLURM (H100-96 fails cuDNN init). Fixed: `a100-80`, `PHASE1_BATCH_SIZE=1`, pipeline now exits after 10 consecutive Phase 1 GPU errors instead of spinning. **Job 621987 running on xgph2/A100-80.** See [[Bug Log]] 2026-05-25.
+✅ **Crisis pipeline reworked, root-caused, and RELAUNCHED (job 625037, queued).** Audit found the old crisis data clinically unsafe (no direct risk assessment, 2.4% resource rate, verbose, method-disclosure mishandled). Reject-log analysis proved active_si's near-zero yield was 95.5% the *heuristic* rejecting (not Qwen refusing), and the old `CLINICAL_WORDS` ban on "call 911"/"emergency services" was inverting selection. Fixes: generation-only `_CRISIS_ANCHOR_DIRECTOR` (clean prompt still saved), **country-agnostic resources** (988/911/emergency-services removed; `COUNTRY_SPECIFIC_WORDS` hard-reject added), per-turn 90-word cap, active_si weight 0.20→0.35, **rejected-sample logging** (`OUT_REJECT`). Old unsafe output archived on cluster; help_mode jobs left running. See [[Bug Log]] 2026-06-01.
 
-✅ **genzv6_ck1600 GGUF export submitted** — `scripts/run_export.slurm` fully fixed (GPU type, log path, partition, env-var MODEL, CPU-only torch). Jobs 621990+621991 failed (see [[Bug Log]] 2026-05-26). **Job 622015 running on A100-80 (~2h).** Rsync when done:
-```bash
-rsync -az -e "ssh -o LogLevel=QUIET" \
-  nus-student-cluster:~/projects/mindmate/exports/mindmate_genzv6_ck1600/ \
-  exports/mindmate_genzv6_ck1600/
-```
-
-⚠️ **llama_base 3-run average incomplete** — jobs 619895–619896 (runs 2+3) never produced logs. Only 1 run (57.4%) confirmed. Resubmit when cluster is free.
+✅ **Qwen3-30B-A3B v4 benchmark (two-phase)** — phase-1 inference complete (83/83 transcripts); phase-2 replay-judge resubmitted as job 624905 after fixing the `replay.py::generate_fn` BatchEncoding bug. See [[Bug Log]] 2026-05-30/31.
 
 ---
 
-## Immediate Priority (2026-05-25)
+## Immediate Priority (2026-06-01)
 
-### 1. 🟢 Crisis pipeline — job 621987 RUNNING
+### 1. 🟢 Crisis regen — job 625037 QUEUED
 
-No action needed. Monitor with:
+Queued behind 5 running help_mode jobs (623985-987, 624118-119) + replay 624905 on a100-80. When it starts, **immediately check `synthetic/outputs/crisis_qwen_rejected.jsonl`** to confirm the teacher is producing generic (country-agnostic) resources and active_si yield is recovering. Monitor:
 ```bash
-ssh nus-student-cluster "tail -f ~/logs/mindmate-crisis-help-qwen_621987.out"
+ssh nus-student-cluster "tail -f ~/logs/mindmate-crisis-help-qwen_625037.out"
 ```
-Once complete (~48h from 2026-05-25), rsync:
+Rsync when it has a useful sample:
 ```bash
 rsync -az -e "ssh -o LogLevel=QUIET" \
-  nus-student-cluster:~/projects/mindmate/data/synthetic_train_crisis_qwen.jsonl \
-  data/
+  nus-student-cluster:~/projects/mindmate/data/synthetic_train_crisis_qwen.jsonl data/
 ```
 
-### 2. Complete llama_base 3-run average
+### 2. Launch v7 SFT (fresh build→clean→train)
 
 ```bash
-for i in 2 3; do
-  sbatch --gres=gpu:a100-80:1 \
-      --export=ALL,MODEL=llama_base \
-      benchmarks/run_benchmarks_v4.slurm
-done
+sbatch finetuning/run_sft_v7.slurm   # → adapters/genzv7
 ```
+Already self-contained (build_dataset --model v7 → clean → train). Do NOT add crisis to v7 yet — wait for the regenerated, re-audited crisis data first.
 
-### 3. 3-run average on genzv6_ck1600
+### 3. Add re-audited crisis data to a later mix
 
-Only 1 run done (56.7%). Need 2 more:
-
-```bash
-for i in 2 3; do
-  sbatch --gres=gpu:a100-80:1 \
-      --export=ALL,MODEL=genzv6_ck1600 \
-      benchmarks/run_benchmarks_v4.slurm
-done
-```
-
-### 4. genzv6+crisis SFT (once job 621987 finishes)
-
-Once crisis data ready (~200+ examples), add to v6 preset and rerun SFT. See [[Data]] → "v6 data mix" for exact preset.
+Once 625037 produces a clean sample, audit for direct risk-check + generic resource presence, THEN add to a v8 preset. See [[Data]] → "v6 data mix" for the preset pattern.
 
 ---
 

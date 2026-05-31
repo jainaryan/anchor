@@ -257,6 +257,44 @@ Output dir: `benchmarks/results/cluster_<label>_<timestamp>/` containing:
 - `failures/<scenario_id>__<criterion_id>.json` — debug artifacts for every failed criterion
 - `transcripts/<scenario_id>.json` — preserved transcripts for replay
 
+### Benchmarking a large eval model (two-phase / `--no-judge`)
+
+The runner loads the **eval model and the Gemma4 judge on the same A100-80**. That's
+fine for the 3B Llama models, but a large reference model — e.g. the
+`qwen3_30b` shortcut (`Qwen/Qwen3-30B-A3B-Instruct-2507`, the same model used as the
+datagen teacher/simulator) — does **not** co-fit with Gemma4 (~52 GB bf16) on one 80 GB card.
+
+Run it in two phases so each model owns the GPU alone:
+
+```bash
+# Phase 1 — inference only. NO_JUDGE=1 skips the Gemma4 judge entirely; the eval
+# model runs every scenario and writes transcripts/. For dynamic scenarios the
+# eval model ALSO plays the user simulator (Gemma4 isn't loaded).
+JOB1=$(ssh nus-student-cluster "cd ~/projects/mindmate && sbatch --parsable \
+    --gres=gpu:a100-80:1 \
+    --export=ALL,MODEL=qwen3_30b,NO_JUDGE=1,LABEL=qwen3_30b \
+    benchmarks/run_benchmarks_v4.slurm")
+
+# Phase 2 — replay-judge. Loads ONLY Gemma4, re-judges the saved transcripts, and
+# writes replay_<ts>/judged.json. RESULTS_GLOB picks the newest matching run dir,
+# so this can be queued immediately with an afterok dependency (the phase-1 dir is
+# timestamped and unknown at submit time).
+ssh nus-student-cluster "cd ~/projects/mindmate && sbatch \
+    --dependency=afterok:$JOB1 --gres=gpu:a100-80:1 \
+    --export=ALL,RESULTS_GLOB='benchmarks/results/cluster_qwen3_30b_*' \
+    benchmarks/replay.slurm"
+```
+
+The final scores live in `benchmarks/results/cluster_qwen3_30b_<ts>/replay_<ts>/judged.json`
+and use the exact same Gemma4 judge as the leaderboard.
+
+**Methodology caveat:** in `--no-judge` mode the dynamic-scenario user turns are
+simulated by the eval model (Qwen) rather than Gemma4. Scripted + single categories are
+fully leaderboard-comparable; dynamic categories (CONVERSATION_MEMORY, CRISIS escalation,
+etc.) are directional only — the conversation partner differs from a standard run.
+`benchmarks/replay.slurm` accepts either `RUN_DIR` (explicit path) or `RESULTS_GLOB`
+(newest dir matching a glob that contains `transcripts/`).
+
 ---
 
 ## v4 Leaderboard (complete runs only, 3-run averaged where n≥3)

@@ -89,7 +89,42 @@ Defined in `finetuning/build_dataset.py` → `DATA_MIX_PRESETS`. Each key maps t
 
 **As of 2026-05-19, the iterator `extra_paths` is derived from `SOURCE_CAPS.keys()`** — adding a file to a preset automatically picks it up at load time. Previously `extra_paths` was a separate hand-maintained list and silently dropped files that weren't in it. v3 and v4 build_dataset runs against the git version of this file under-loaded by 3 files (`targeted_fix`, `biometric`, `targeted_fixes`); the documented `~21k` / `~10k` totals below reflect *intent*, not necessarily what was loaded historically. See Bug Log 2026-05-19.
 
-### v4 — current (job 602945, genzv4)
+### v7 — current (2026-05-31, prepared; launch blocked on cluster SSH auth)
+
+v6 proven mix (= v3 proportions, the best-performing voice) **plus the recovered
+`biometric_qwen_s0`** — 993 examples that were the genzv5 "missing preamble" defect,
+now salvaged byte-for-byte to production format (912 rebuilt + 81 already-correct, see
+Bug Log 2026-05-30/31). Verified length-clean too: assistant turns mean 185 char,
+median 124, p90 256 — inside the 100-250 target. (v6's note that "all qwen biometric
+shards are 750-800 char" only describes s3-s5; **s0 is fine**.) Crisis still skipped —
+only 5 examples locally.
+
+```python
+"v7": {
+    "synthetic_train_targeted_fix.jsonl":        3500,   # 27%  weight=2.0
+    "synthetic_train_friend_1.jsonl":            2000,   # 15%
+    "synthetic_train_transition.jsonl":          2000,   # 15%
+    "synthetic_train_biometric.jsonl":           2348,   # 18%  weight=1.5 (Gemma4)
+    "synthetic_train_biometric_qwen_s0.jsonl":    993,   #  8%  weight=1.5 (recovered)
+    "synthetic_train_casual.jsonl":              1000,   #  8%
+    "synthetic_train_therapist_.jsonl":          1000,   #  8%
+    "synthetic_train.jsonl":                      500,   #  4%  (grief)
+    "synthetic_train_targeted_fixes.jsonl":       181,   #  1%  weight=3.0 (gold)
+    "synthetic_train_help_mode_qwen.jsonl":       200,   #  2%  weight=3.0
+}
+# Total caps: ~13,722 | Steps: 2000 | Output: adapters/genzv7
+# Launcher: finetuning/run_sft_v7.slurm  (build --model v7 → clean → train)
+```
+
+**To launch (once SSH auth is restored):**
+```bash
+rsync -az finetuning/build_dataset.py finetuning/run_sft_v7.slurm \
+    data/synthetic_train_biometric_qwen_s0.jsonl \
+    nus-student-cluster:~/projects/mindmate/  # --relative or per-dir as needed
+ssh nus-student-cluster "sbatch ~/projects/mindmate/finetuning/run_sft_v7.slurm"
+```
+
+### v4 — earlier (job 602945, genzv4)
 
 ```python
 "v4": {

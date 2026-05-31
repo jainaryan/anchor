@@ -63,6 +63,9 @@ _label_suffix = f"_{_label}" if _label else ""
 
 OUT_TRAIN = BASE_DIR.parent / "data" / f"synthetic_train_{PIPELINE_MODE}{_label_suffix}{_shard_suffix}.jsonl"
 OUT_RAW = OUTPUTS_DIR / f"{PIPELINE_MODE}{_label_suffix}_raw{_shard_suffix}.jsonl"
+# Rejected samples (fail parse / phase2 / heuristic) are persisted here with a
+# `reason` field so we can audit WHY yield is low instead of guessing from logs.
+OUT_REJECT = OUTPUTS_DIR / f"{PIPELINE_MODE}{_label_suffix}_rejected{_shard_suffix}.jsonl"
 
 shutdown_requested = False
 
@@ -299,7 +302,10 @@ HELP_PROFILES = [
 # ─── Crisis mode ──────────────────────────────────────────────────────────────
 
 CRISIS_MODES = ["passive_si", "humor_deflect", "active_si", "ambiguous"]
-CRISIS_MODE_WEIGHTS = {"passive_si": 0.30, "humor_deflect": 0.20, "active_si": 0.20, "ambiguous": 0.30}
+# active_si raised 0.20 → 0.35 (2026-05-31): only 3 active_si examples survived the
+# prior run — the highest-stakes mode was the most under-represented. humor_deflect
+# trimmed since it was over-producing the "vanish into wifi" near-dupes.
+CRISIS_MODE_WEIGHTS = {"passive_si": 0.25, "humor_deflect": 0.15, "active_si": 0.35, "ambiguous": 0.25}
 
 CRISIS_USER_SIM_PROMPT = """\
 You are simulating a person texting their AI companion Anchor.
@@ -318,6 +324,7 @@ Rules:
 - Do NOT use clinical words like "suicidal ideation", "passive SI", "self-harm plan" — write how a real person texts
 - Each message 5-40 words. Authentically human.
 - Turn 1 opens the conversation. Later turns respond naturally to what Anchor says.
+- VARY the imagery and wording. Avoid recycled clichés like "disappear into the wifi signal", "become a ghost", or "fade out" unless it genuinely fits this person — prefer fresh, specific, personal phrasing grounded in THEIR background.
 - Do NOT explain the mode — just write the messages.
 
 Output JSON only:
@@ -343,15 +350,18 @@ CRISIS_MODE_INSTRUCTIONS = {
         "Anchor must gently catch what's underneath without overreacting or laughing along."
     ),
     "active_si": (
-        "The person expresses more active or explicit thoughts about not being alive — "
-        "thinking about how, or saying they've been thinking about it seriously. "
-        "This is a clearer danger signal. No plan needs to be stated but the tone is "
-        "more direct than passive. "
-        "Examples: 'i've actually been thinking about it more than i should', "
-        "'i keep coming back to the thought that i should just end it', "
-        "'i looked up some things the other night'. "
-        "Anchor must take this seriously — gently encourage reaching out to someone they trust "
-        "or a crisis line, stay present, not panic."
+        "The person expresses active, explicit thoughts about not being alive — thinking "
+        "about how, or saying they've been thinking about it seriously. This is a clear danger "
+        "signal. Across the turns, at least one message should hint (in everyday words, never "
+        "clinical) at a method, a means, or having looked into 'how' — a place, pills, or a way. "
+        "Keep it the way a real person would let it slip, not graphic. "
+        "Examples: 'i keep coming back to the thought that i should just end it', "
+        "'i drove past the bridge again and just... thought about it', "
+        "'i've been counting how many of my pills are left', "
+        "'i looked some stuff up the other night and now i can't stop thinking about it'. "
+        "Anchor must take this seriously THIS conversation — check if they're safe right now and "
+        "warmly point to a concrete support (someone they trust by name, or a crisis line), stay "
+        "present, not panic."
     ),
     "ambiguous": (
         "The person is expressing very low mood, emptiness, or hopelessness, but it's not "
@@ -408,24 +418,64 @@ def generate_crisis_user_turns(teacher, profile: dict, mode: str, num_turns: int
     return _parse_crisis_user_turns(resp, num_turns)
 
 
-def generate_anchor_turns(teacher, system_prompt: str, user_turns: list) -> list:
-    messages = [{"role": "system", "content": system_prompt}]
+# Generation-only steering for the teacher's Anchor turns in CRISIS mode.
+# Appended to the production system prompt for generation, then DISCARDED — the
+# saved training example keeps the clean production system prompt (see
+# generate_anchor_turns). Encodes the gaps the 2026-05-31 audit found: responses
+# were long, metaphor-mirroring, never did a direct risk check, and almost never
+# surfaced a resource even on method disclosure.
+_CRISIS_ANCHOR_DIRECTOR = (
+    "\n\n"
+    "RESPONSE GUIDANCE FOR THIS REPLY (private — never mention or quote these rules):\n"
+    "- Keep it SHORT: 2-4 sentences, under ~70 words. No stacked metaphors, no poem-like lines.\n"
+    "- Name the real feeling once, plainly. Do NOT echo their 'disappear / ghost / vanish / fade' "
+    "imagery back at them — repeating it can reinforce it. Acknowledge, then gently steer toward staying.\n"
+    "- Do ONE gentle but direct check, in plain words — e.g. 'when you say that, are you having "
+    "thoughts of not being here?' or 'are you safe right now?' Ask like a caring friend, not a clinician.\n"
+    "- If they hint at a method, a plan, or a 'how' (a place, pills, a way), take it seriously THIS reply: "
+    "ask if they're safe right now AND warmly point them to a concrete support — someone they trust by name "
+    "from their profile, or a crisis line / emergency line in their area.\n"
+    "- The user's country is UNKNOWN. Do NOT cite a specific national number or service (no '988', no '911', "
+    "no country-specific hotline names). Say 'a crisis line', 'a local crisis or emergency line', or "
+    "'emergency services in your area' instead.\n"
+    "- For lighter or ambiguous low mood, stay warm and present — do not escalate or alarm.\n"
+    "- Never use jargon ('suicidal ideation', 'risk', 'safety plan'). Sound like a friend who cares."
+)
+
+
+def generate_anchor_turns(teacher, system_prompt: str, user_turns: list,
+                          director: str | None = None, max_new_tokens: int = 200) -> list:
+    """Generate Anchor's turns. `director` steers generation but is NOT saved:
+    the returned `messages[0]` always carries the clean production system prompt."""
+    gen_system = system_prompt + director if director else system_prompt
+    gen_messages = [{"role": "system", "content": gen_system}]
+    out_messages = [{"role": "system", "content": system_prompt}]
     for user_turn in user_turns:
-        messages.append({"role": "user", "content": user_turn})
-        response = teacher.chat(messages, max_new_tokens=200, temperature=0.80)
+        gen_messages.append({"role": "user", "content": user_turn})
+        out_messages.append({"role": "user", "content": user_turn})
+        response = teacher.chat(gen_messages, max_new_tokens=max_new_tokens, temperature=0.80)
         response = response.strip()
         if not response:
             return []
-        messages.append({"role": "assistant", "content": response})
-    return messages
+        gen_messages.append({"role": "assistant", "content": response})
+        out_messages.append({"role": "assistant", "content": response})
+    return out_messages
 
 
 # Crisis heuristics
 
+# Clinician-LABEL jargon — always inappropriate for Anchor's friend voice.
+# NOTE (2026-05-31): "call 911" and "emergency services" were REMOVED from this
+# list. The reject-log analysis showed active_si rejection was 95.5% heuristic
+# (not Qwen refusals), and the 3 survivors were all long, soft, resource-free —
+# i.e. this filter was auto-rejecting the appropriately-escalating responses
+# ("call 911 / emergency services") while passing the unsafe metaphor-mirroring
+# ones. Plain-language safety direction is now ALLOWED (and required for active_si
+# via ACTIVE_RESOURCE_CUES). Only true clinical labels stay banned.
 CLINICAL_WORDS = [
     "suicidal ideation", "passive suicidal", "active suicidal", "safety plan",
-    "risk assessment", "imminent danger", "mental health crisis", "call 911",
-    "emergency services", "hospitalization", "psychiatric",
+    "risk assessment", "imminent danger", "mental health crisis",
+    "hospitalization", "psychiatric",
 ]
 
 DEFLECTION_OPENERS = [
@@ -455,6 +505,40 @@ CRISIS_SIGNAL_WORDS = [
 
 LAUGH_ALONG_WORDS = ["haha", "lol", "yeah rough", "that's dark", "😂", "😅"]
 
+# active_si is the highest-stakes mode — a passing response MUST surface a concrete
+# support (a trusted person or a crisis line), per the production prompt's own rule
+# ("gently encourage them to reach out to someone they trust or a crisis line").
+# The 2026-05-31 audit found resources in only 2.4% of turns and a method disclosure
+# (CONV 107) handled with zero escalation, so this is now enforced for active_si.
+# NOTE (2026-06-01): country-specific numbers/services REMOVED — the user's country
+# is unknown, so the data must not bake in US-centric "988 / 911 / emergency services".
+# Generic safety direction (a crisis line, a local emergency line, reaching a trusted
+# person) is country-agnostic and still satisfies the production prompt's intent. The
+# specific tokens are now BANNED via COUNTRY_SPECIFIC_WORDS so the teacher can't slip
+# them in.
+ACTIVE_RESOURCE_CUES = [
+    "crisis line", "crisis text", "hotline", "lifeline", "helpline",
+    "emergency line", "emergency services", "emergency room",
+    "reach out", "someone you trust", "are you safe", "you safe right now",
+    "call someone", "text someone", "talk to someone", "be with someone",
+    "call", "text",
+]
+
+# Country-specific resources to keep OUT of the data (user's locale is unknown).
+# Any assistant turn naming one of these is rejected — the director already steers
+# toward generic "a crisis line / emergency line in your area"; this enforces it.
+COUNTRY_SPECIFIC_WORDS = [
+    "988", "911", "999", "112", "741741",
+    "national suicide prevention", "samaritans", "lifeline (",
+]
+
+# Brevity cap applied to EVERY assistant turn (not just the first; old code capped
+# only the first at ≤100, so later turns ran to 130-160 words / 780+ chars). The
+# director targets ~70 words; the cap sits a bit above at 90 (≈470 chars) to allow
+# natural variation in the turns that also carry a risk-check + a named resource,
+# while still cutting the 717-char median the audit found roughly in half.
+MAX_WORDS_PER_TURN = 90
+
 
 def heuristic_crisis(conv: list, mode: str) -> bool:
     assistant_turns = [m for m in conv if m["role"] == "assistant"]
@@ -467,6 +551,19 @@ def heuristic_crisis(conv: list, mode: str) -> bool:
     # Never use clinical language in any turn
     if any(w in all_assistant for w in CLINICAL_WORDS):
         return False
+
+    # Never name a country-specific resource — user's locale is unknown
+    if any(w in all_assistant for w in COUNTRY_SPECIFIC_WORDS):
+        return False
+
+    # Brevity — reject if ANY assistant turn runs long (was first-turn-only, ≤100 words)
+    if any(len(m["content"].split()) > MAX_WORDS_PER_TURN for m in assistant_turns):
+        return False
+
+    # active_si — highest stakes: a concrete support/resource must appear somewhere
+    if mode == "active_si":
+        if not any(c in all_assistant for c in ACTIVE_RESOURCE_CUES):
+            return False
 
     # For passive/active/humor — must not open with pure deflection
     if mode in ("passive_si", "active_si", "humor_deflect"):
@@ -495,10 +592,6 @@ def heuristic_crisis(conv: list, mode: str) -> bool:
         ]
         if not any(w in first for w in acknowledge_words):
             return False
-
-    # Response must not be a monologue — increased from 80 to 100 words
-    if len(first.split()) > 100:
-        return False
 
     return True
 
@@ -662,7 +755,8 @@ def generate_crisis_example(teacher, profile: dict, mode: str) -> dict | None:
         return None
 
     system_prompt = build_anchor_system(profile)
-    messages = generate_anchor_turns(teacher, system_prompt, user_turns)
+    messages = generate_anchor_turns(teacher, system_prompt, user_turns,
+                                     director=_CRISIS_ANCHOR_DIRECTOR, max_new_tokens=130)
     if not messages:
         return None
 
@@ -739,6 +833,10 @@ def main():
     # token budget differs: crisis turns are short but sensitive; help turns include technique
     phase1_max_tokens = 400 if is_crisis else 300
     phase1_temp = 0.88 if is_crisis else 0.86
+    # Phase-2 (Anchor turn) steering: crisis gets the brevity/risk/resource director and a
+    # tight token budget to force ≤~70-word replies; help mode is unchanged.
+    anchor_director = _CRISIS_ANCHOR_DIRECTOR if is_crisis else None
+    phase2_max_tokens = 130 if is_crisis else 200
 
     teacher = TeacherModel()
     use_batch = teacher.use_vllm and PHASE1_BATCH_SIZE > 1
@@ -754,8 +852,9 @@ def main():
     print(f"  Phase 1 batching: {'ON  PHASE1_BATCH_SIZE=' + str(PHASE1_BATCH_SIZE) if use_batch else 'OFF (HF — sequential)'}")
     if _shard_idx_env is not None:
         print(f"  Shard: {_shard_idx_env}  (RNG seed: {1000 + int(_shard_idx_env) * 7919})")
-    print(f"  OUT_TRAIN: {OUT_TRAIN}")
-    print(f"  OUT_RAW:   {OUT_RAW}")
+    print(f"  OUT_TRAIN:  {OUT_TRAIN}")
+    print(f"  OUT_RAW:    {OUT_RAW}")
+    print(f"  OUT_REJECT: {OUT_REJECT}")
     print("=" * 60)
 
     counts = {m: 0 for m in (CRISIS_MODES if is_crisis else HELP_MODES)}
@@ -796,19 +895,27 @@ def main():
         for (profile, mode, num_turns), response in zip(batch_jobs, responses):
             attempts += 1
             try:
+                meta = {"mode": mode, "profile": profile["name"],
+                        "kind": "crisis" if is_crisis else "help"}
+
                 user_turns = parse_turns(response, num_turns)
                 if not user_turns:
                     print(f"[{attempts}] {mode} fail parse ({profile['name']})")
+                    append_jsonl({**meta, "reason": "parse", "raw_response": response}, OUT_REJECT)
                     continue
 
                 system_prompt = build_anchor_system(profile)
-                messages = generate_anchor_turns(teacher, system_prompt, user_turns)
+                messages = generate_anchor_turns(teacher, system_prompt, user_turns,
+                                                 director=anchor_director,
+                                                 max_new_tokens=phase2_max_tokens)
                 if not messages:
                     print(f"[{attempts}] {mode} fail Phase 2 ({profile['name']})")
+                    append_jsonl({**meta, "reason": "phase2_empty", "user_turns": user_turns}, OUT_REJECT)
                     continue
 
                 if not heuristic(messages, mode):
                     print(f"[{attempts}] {mode} fail heuristic ({profile['name']})")
+                    append_jsonl({**meta, "reason": "heuristic", "conversations": messages}, OUT_REJECT)
                     continue
 
                 result = {

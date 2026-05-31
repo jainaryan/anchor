@@ -90,6 +90,10 @@ PRODUCTION_SAMPLING = {
 
 MODEL_SHORTCUTS = {
     "llama_base":       ("meta-llama/Llama-3.2-3B-Instruct", None),
+    # Large reference model — score the teacher/simulator on the suite itself.
+    # 30B MoE doesn't co-fit with the Gemma4 judge on one A100-80, so run it
+    # with --no-judge (inference only) then judge transcripts via replay.py.
+    "qwen3_30b":        ("Qwen/Qwen3-30B-A3B-Instruct-2507", None),
     "genzv2_ck1600":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genz/checkpoint-1600"),
     "genzv2_ck1200":    ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genz/checkpoint-1200"),
     "genzv3_ck200":     ("meta-llama/Llama-3.2-3B-Instruct", "adapters/genzv3/checkpoint-200"),
@@ -164,6 +168,13 @@ def parse_args():
                    help="Run holdout scenarios (hd_*) instead of regular scenarios. "
                         "Holdout scenarios have disjoint profiles from data-gen; "
                         "run at final release ranking only — not during routine evals.")
+    p.add_argument("--no-judge", action="store_true",
+                   help="Inference only: run scenarios, persist transcripts, and skip "
+                        "loading/running the judge. Use when the eval model is too large "
+                        "to co-reside with Gemma4 on one GPU (e.g. qwen3_30b). Judge the "
+                        "saved transcripts afterward with: "
+                        "python -m benchmarks.replay <run_dir> --judge-only. "
+                        "For dynamic scenarios the eval model also plays the user simulator.")
     p.add_argument("--no-save", action="store_true")
     p.add_argument("--log-level", default="INFO",
                    choices=["TRACE", "DEBUG", "INFO", "WARN", "ERROR"])
@@ -203,7 +214,9 @@ def load_nf4_eval(base_model_id: str, adapter_path: Optional[Path],
                   *, top_k: int, top_p: float,
                   repetition_penalty: float, min_p: float):
     """
-    Returns (generate_fn, tokenizer) for the eval model in NF4.
+    Returns (generate_fn, tokenizer, model) for the eval model in NF4.
+    The raw model is returned so --no-judge mode can build a user simulator
+    from the eval model itself (no second large model on the GPU).
 
     Sampling params are baked into the closure at load time. transformers
     does not natively support min_p, so we silently drop it here — note this
@@ -264,7 +277,7 @@ def load_nf4_eval(base_model_id: str, adapter_path: Optional[Path],
         new_tokens = out[0][inputs["input_ids"].shape[1]:]
         return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
-    return generate_fn, tokenizer
+    return generate_fn, tokenizer, model
 
 
 def load_gguf_eval(gguf_path: Path, *, top_k: int, top_p: float,
@@ -604,6 +617,8 @@ def main():
         judge_tok = None
     else:
         # Load eval model — sampling params baked into closure at load time
+        eval_model = None
+        eval_tok = None
         if args.backend == "gguf":
             assert adapter_path, "gguf backend requires --gguf-path"
             generate_fn, _ = load_gguf_eval(
@@ -612,22 +627,37 @@ def main():
                 repetition_penalty=args.repetition_penalty,
             )
         else:
-            generate_fn, _ = load_nf4_eval(
+            generate_fn, eval_tok, eval_model = load_nf4_eval(
                 base_model_id, adapter_path,
                 top_k=args.top_k, top_p=args.top_p, min_p=args.min_p,
                 repetition_penalty=args.repetition_penalty,
             )
 
-        judge_fn, judge_model, judge_tok = load_judge()
+        if args.no_judge:
+            # Inference-only: don't load Gemma4 at all (lets a large eval model
+            # like qwen3_30b own the whole GPU). Transcripts are judged later via
+            # `python -m benchmarks.replay <run_dir> --judge-only`.
+            judge_fn, judge_model, judge_tok = None, None, None
+            sim_fn = None
+            if n_dyn > 0:
+                if eval_model is None:
+                    log.warn("dynamic scenarios with --no-judge need an NF4 eval model "
+                             "to act as simulator; they will be skipped on this backend")
+                else:
+                    print("[Load] Simulator: reusing eval model (--no-judge, no judge loaded)")
+                    sim_fn = build_sim_fn_from_judge(eval_model, eval_tok)
+        else:
+            judge_fn, judge_model, judge_tok = load_judge()
 
-        # Reuse Gemma4 as the simulator — Qwen3-30B doesn't fit on A100-80
-        # alongside Gemma4 + eval model (tried bfloat16 and 4-bit NF4, both OOM).
-        sim_fn = None
-        if n_dyn > 0:
-            print("[Load] Simulator: reusing Gemma4 judge model (no extra VRAM)")
-            sim_fn = build_sim_fn_from_judge(judge_model, judge_tok)
+            # Reuse Gemma4 as the simulator — Qwen3-30B doesn't fit on A100-80
+            # alongside Gemma4 + eval model (tried bfloat16 and 4-bit NF4, both OOM).
+            sim_fn = None
+            if n_dyn > 0:
+                print("[Load] Simulator: reusing Gemma4 judge model (no extra VRAM)")
+                sim_fn = build_sim_fn_from_judge(judge_model, judge_tok)
 
-    judge = JudgeService(generate_fn=judge_fn, logger=log, tokenizer=judge_tok)
+    judge = (None if args.no_judge
+             else JudgeService(generate_fn=judge_fn, logger=log, tokenizer=judge_tok))
 
     backend_label = "Q4_K_M" if args.backend == "gguf" else "NF4_adapter"
     log.run_start(model=label, scenarios=len(scenarios), backend=backend_label,
@@ -682,6 +712,19 @@ def main():
             else:
                 system_prompt = render_system_prompt(s.get("seed", {}))
 
+            # Persist the transcript before judging so --no-judge runs (and any
+            # mid-run crash) still leave replayable artifacts on disk.
+            log.transcript(scenario_id=s["id"], transcript=transcript,
+                           perf_per_turn=run_out.get("perf_per_turn", []))
+
+            if args.no_judge:
+                # Inference-only phase — no verdict yet. Judge later with:
+                #   python -m benchmarks.replay <run_dir> --judge-only
+                n_asst = sum(1 for t in transcript if t.get("role") == "assistant")
+                log.info(f"transcript saved (inference-only): {s['id']} "
+                         f"({n_asst} assistant turn(s))", scenario_id=s["id"])
+                continue
+
             # Judge
             results = judge.judge_scenario(
                 scenario_id=s["id"],
@@ -692,9 +735,6 @@ def main():
             score = score_scenario(results)
             weighted_pass_total += score["weighted_pass"]
             weighted_total_total += score["weighted_total"]
-
-            log.transcript(scenario_id=s["id"], transcript=transcript,
-                           perf_per_turn=run_out.get("perf_per_turn", []))
 
             # Failure artifacts
             for r in results:
@@ -789,7 +829,7 @@ def main():
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "judged_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "judge_model": JUDGE_MODEL_ID,
-        "judge_stats": judge.stats,
+        "judge_stats": (judge.stats if judge is not None else None),
         "config": {
             "sysprompt": args.sysprompt,
             "sampling": {
@@ -822,7 +862,11 @@ def main():
         "scenarios": judged_scenarios,
     }
 
-    if not args.no_save:
+    if args.no_judge:
+        log.info(f"Inference-only run complete — {len(scenarios)} transcript(s) in "
+                 f"{run_dir}/transcripts/")
+        log.info(f"Next: python -m benchmarks.replay {run_dir} --judge-only")
+    elif not args.no_save:
         out_path = run_dir / "judged.json"
         with out_path.open("w") as f:
             json.dump(out_doc, f, indent=2, ensure_ascii=False, default=str)

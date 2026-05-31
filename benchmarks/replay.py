@@ -90,18 +90,26 @@ def _load_judge_generator(judge_model: str, stub: bool = False):
 
     def generate_fn(prompt: str, max_new_tokens: int, temperature: float) -> str:
         msgs = [{"role": "user", "content": prompt}]
-        inputs = tokenizer.apply_chat_template(
+        # apply_chat_template returns a BatchEncoding (dict-like) in newer
+        # transformers, not a raw tensor. Passing it straight to generate() makes
+        # generate() call .shape on the BatchEncoding and raise AttributeError.
+        # Extract input_ids explicitly (mirrors run_benchmarks_v4.py::load_judge).
+        enc = tokenizer.apply_chat_template(
             msgs, return_tensors="pt", add_generation_prompt=True
-        ).to(model.device)
+        )
+        if hasattr(enc, "input_ids"):
+            input_ids = enc.input_ids.to(model.device)
+        else:
+            input_ids = enc.to(model.device)
         with torch.no_grad():
             out = model.generate(
-                inputs,
+                input_ids,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
                 do_sample=temperature > 0,
                 pad_token_id=tokenizer.eos_token_id,
             )
-        return tokenizer.decode(out[0][inputs.shape[-1]:], skip_special_tokens=True)
+        return tokenizer.decode(out[0][input_ids.shape[-1]:], skip_special_tokens=True)
 
     return generate_fn, tokenizer
 

@@ -38,6 +38,9 @@
 #   TYPE           comma-separated types to include
 #   IDS            comma-separated scenario IDs
 #   SYSPROMPT      full (default) | preamble_only | none
+#   NO_JUDGE       set to 1 for inference-only (skip Gemma4 judge; judge later
+#                  via benchmarks/replay.slurm). Use for large eval models that
+#                  don't co-fit with the judge on one A100-80 (e.g. qwen3_30b).
 #   TEMPERATURE    eval model temp for single/scripted (default 0.0)
 #   TEMPERATURE_DYNAMIC  eval model temp for dynamic (default 0.7)
 #   LOG_LEVEL      TRACE/DEBUG/INFO/WARN/ERROR (default INFO)
@@ -94,6 +97,7 @@ fi
 [ -n "${TYPE:-}" ] && ARGS+=(--type "$TYPE")
 [ -n "${IDS:-}" ] && ARGS+=(--ids "$IDS")
 [ -n "${SYSPROMPT:-}" ] && ARGS+=(--sysprompt "$SYSPROMPT")
+[ -n "${NO_JUDGE:-}" ] && ARGS+=(--no-judge)
 [ -n "${TEMPERATURE:-}" ] && ARGS+=(--temperature "$TEMPERATURE")
 [ -n "${TEMPERATURE_DYNAMIC:-}" ] && ARGS+=(--temperature-dynamic "$TEMPERATURE_DYNAMIC")
 [ -n "${LOG_LEVEL:-}" ] && ARGS+=(--log-level "$LOG_LEVEL")
