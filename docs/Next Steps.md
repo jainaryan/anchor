@@ -8,6 +8,17 @@ tags: [anchor, next-steps]
 
 ---
 
+## What just landed (2026-06-05)
+
+✅ **anchor-app: fixed freezes/OOM on non-Pixel phones** — `n_gpu_layers` default changed from `99` → `0` in `contextInitParamsVersions.ts`. Root cause: Pixel (Mali GPU) always failed the Adreno check and silently ran CPU; Snapdragon phones passed and got untested OpenCL full-offload → freeze/OOM. GPU is now opt-in via Settings. See [[Bug Log]] 2026-06-05 and [[Anchor App]] → "GPU / CPU Inference Defaults".
+
+**Next steps for GPU:**
+- ⬜ **Validate GPU path on a Snapdragon device** — open Settings → toggle GPU on → test `n_gpu_layers` values (try 16, 32, then 99) to find what the Adreno/OpenCL backend can handle without OOM on a typical 6–8GB phone
+- ⬜ **Set a smarter per-device default** — once the safe layer count is known, consider a RAM-gated heuristic: e.g. if totalRAM ≥ 8GB and hasAdreno, default to partial offload (e.g. 32 layers) instead of 0. The RAM check infrastructure already exists in `ModelStore.ts`
+- ⬜ **Capture GPU perf numbers** — all current on-device benchmarks (`EVAL_RESULTS.md`, perf table in [[Anchor App]]) are CPU-path (Pixel 8a). Get TPS + TTFT on Snapdragon with GPU enabled to know whether it's worth the complexity
+
+---
+
 ## What just landed (2026-06-01)
 
 ✅ **v7 data mix ready (NOT yet trained)** — proven v6 mix + recovered `biometric_qwen_s0` (993 ex, length-clean). `v7` preset in `build_dataset.py`; `finetuning/run_sft_v7.slurm` does build→clean→train → `adapters/genzv7`. Confirmed `clean_dataset.py::clean_text()` does NOT mangle the production system prompt. **Run not yet launched.**

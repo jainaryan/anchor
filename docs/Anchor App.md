@@ -490,6 +490,32 @@ git commit -m "Feat: Add Biometric Memory Injection"
 
 ---
 
+## GPU / CPU Inference Defaults
+
+**Default since 2026-06-05: CPU-only (`n_gpu_layers = 0`). GPU is opt-in.**
+
+### Background
+The GPU path (OpenCL via Adreno) is only enabled when a phone passes three checks: `hasAdreno && hasI8mm && hasDotProd` ([`deviceCapabilities.ts`](../src/utils/deviceCapabilities.ts)). Phones that fail (e.g. Pixel with Mali GPU) are silently downgraded to CPU. All development and benchmarking has been done on the Pixel 8a, which always ran CPU — so the GPU/OpenCL path with `n_gpu_layers=99` was completely untested and caused freezes/OOM on Snapdragon devices.
+
+### Fix
+Three defaults changed in [`contextInitParamsVersions.ts`](../src/utils/contextInitParamsVersions.ts):
+- `createContextInitParams`: `n_gpu_layers ?? 99` → `0`
+- `createDefaultContextInitParams`: `n_gpu_layers: 99` → `0`
+- Migration 1.0→2.0: when GPU was previously enabled and n_gpu_layers was unset, no longer upgrades it to 99
+
+GPU is still configurable via Settings — users on Snapdragon phones can manually enable it to experiment.
+
+### GPU support matrix (Android)
+
+| GPU family | `checkGpuSupport()` | Result |
+|---|---|---|
+| Adreno (Qualcomm/Snapdragon) | ✅ passes (if i8mm + dotprod present) | GPU path available in settings |
+| Mali (Pixel/Tensor, Exynos, MediaTek) | ❌ fails `hasAdreno` | Forced to CPU |
+
+All perf benchmarks below are CPU-path numbers (Pixel 8a). No validated GPU-path numbers exist yet.
+
+---
+
 ## On-device Performance (Pixel 8a, genzv2_ck1200 Q4_K_M)
 
 | Metric | Value |
@@ -513,6 +539,49 @@ Model copy on first load: app copies GGUF to `DocumentDirectoryPath/models/local
 Reads from device health APIs (Android Health Connect / iOS HealthKit). Returns per-day summaries with: steps, sleepDurationMin, sleepQuality, restingHeartRate, hrv, spo2, activeCalories, exerciseMinutes, recoveryScore (Whoop), strainScore (Whoop).
 
 Biometric context is injected into the system prompt as `[Health data — last 7 days]` (Tier 4). The contextBuilder includes specific directives about how to interpret poor sleep, low HRV, low recovery scores, and high strain.
+
+---
+
+## Play Store Publishing (2026-06-05)
+
+De-PocketPal pass + self-review for Google Play submission. Two scoping decisions: **full removal** of inherited PocketPal features that don't fit a focused local mental-health companion, and **document (not rename)** deep internal identifiers (renaming breaks existing-user data and native codegen).
+
+### Features removed (full removal)
+- **PalsHub** persona marketplace — utils (`exportPal`/`importPals` + `imageUtils.ts`), screens, fixtures, mocks, tests.
+- **Local-server mode** + **remote-model / OpenAI-compatible API** — `src/api/openai.ts`, `src/api/sseParser.ts`, `OpenAICompletionEngine` (only `LocalCompletionEngine` is instantiated now, ModelStore.ts:1605). `remoteModels` getter stubbed to `[]`; residual `ModelOrigin.REMOTE` guards left as inert defensive no-ops (never reachable — no creation path remains). Safe to delete in a later cleanup.
+- **Auth** — Supabase, Google Sign-In, Apple Authentication deps dropped from package.json; jest mappers/mocks removed.
+- Verified: no new `tsc` errors (only the pre-existing 7-error health-shim baseline). Jest delta confirms **zero new test failures** — clean HEAD = 58 failed suites / 13 failed tests; after removal = 50 failed suites / 12 failed tests (253 fewer total tests, all from deleted-feature suites). Residual failures are pre-existing: `react-native-health` not in package.json (~50 suites fail to load) + `activeChatPalette` missing from the `uiStore` test mock. Fixed one stale test (`contextInitParamsVersions` expected `n_gpu_layers` 99 → updated to 0, matching the GPU-opt-in default).
+
+### On-device verification (Pixel 8a / akita, 2026-06-05)
+`yarn install` → `./gradlew assembleDebug` → **BUILD SUCCESSFUL** (removing the 3 native auth deps did not break the native build). Installed + launched on the Pixel: home screen renders with **Anchor** branding (anchor icon + name), Diary and "Talk it out" Chat entry points work, navigation into Chat is clean, no FATAL exceptions. Chat correctly shows "Model not loaded" on a fresh install (no GGUF downloaded yet). The `palette.ink` code path that fails in the unit-test mock works fine on real hardware (the real `uiStore` has `activeChatPalette`), confirming that unit failure is a mock gap, not a bug. Dev requires `adb reverse tcp:8081 tcp:8081` for Metro (auto-set by `yarn android`).
+
+### Reviewer findings
+
+| # | Severity | Issue | Status |
+|---|---|---|---|
+| 1 | **BLOCKER** | `android/app/build.gradle` release block **falls back to the debug keystore** when `APP_RELEASE_STORE_PASSWORD`/`APP_RELEASE_KEY_PASSWORD` are absent. A debug-signed AAB is rejected by Play, and the debug keystore is publicly known. | **Open — must fix before upload.** Ensure release credentials (`pocketpal-release-key.keystore` + env vars) are present in the release build env, or remove the debug fallback so a misconfigured build fails loudly instead of shipping insecure. Enroll in Play App Signing. |
+| 2 | Resolved | Cleartext HTTP was enabled (`network_security_config.xml`) — only needed by the removed local-server feature. | Fixed → release/`main` config now `cleartextTrafficPermitted="false"`. **Gotcha:** this also blocks Metro (localhost:8081) in debug builds, which broke on-device dev with a black screen. Fixed by adding a **debug-only** override `android/app/src/debug/res/xml/network_security_config.xml` permitting cleartext to `localhost`/`10.0.2.2`/`127.0.0.1` only. Release stays locked down. |
+| 3 | Info | **Permissions** all justified: `INTERNET` (model downloads from HuggingFace, Firebase App Check), `CAMERA` (multimodal vision input — `react-native-vision-camera` + `react-native-image-picker` in `ChatInput.tsx`/`EmbeddedVideoView.tsx`), `READ/WRITE_EXTERNAL_STORAGE` (`maxSdkVersion=28`, chat-session export to `/Download`). | No action. |
+| 4 | Action | **Data Safety form** — what leaves the device: (a) HuggingFace (`huggingface.co`) model downloads/metadata — no personal data; (b) Firebase Functions `feedbackSubmit` + `benchmarkSubmit` (`src/config/urls.ts`) — user-initiated feedback/error reports and opt-in device benchmark results; (c) Firebase App Check attestation tokens (anti-abuse, no PII). **Chat content, diary, memory, and health data never leave the device.** | Declare the above in the Play Console Data Safety form + publish a matching privacy policy. |
+| 5 | Info | Branding: `displayName`/`app_name` = "Anchor", launcher icons present, deep-link scheme `anchor`, iOS LaunchScreen text = "Anchor". | Consistent. |
+
+### Internal PocketPal identifiers — KEPT (documented, not renamed)
+
+Renaming any of these breaks existing-user data, native codegen, or app-signing. Left intentionally as-is:
+
+| Identifier | Location | Why kept |
+|---|---|---|
+| `@pocketpal_ai/app_feedback_id` | `src/store/FeedbackStore.ts` | AsyncStorage key — renaming orphans existing users' feedback IDs. |
+| `dbName: 'pocketpalai'` | `src/database/index.ts` | WatermelonDB file name — renaming abandons all on-device user data. |
+| `name: "PocketPal"` | `app.json` | Couples to native `getMainComponentName()` (`MainActivity.kt`) + `withModuleName` (`AppDelegate.swift`). This is the RN component id, **not** the user-facing label (`displayName: "Anchor"`). |
+| `namespace 'com.pocketpal'` | `android/app/build.gradle` | Build namespace; applicationId is already `com.anchor.app`. |
+| `com.pocketpalai` Kotlin pkg / `com.pocketpal.specs` / `PocketPalSpecs` | Kotlin sources, `codegenConfig` | Native package dirs + TurboModule codegen names. |
+| `pocketpal-release-key.keystore` / `pocketpal_key_alias` | `android/app/build.gradle` | Existing release signing identity — must match the Play upload/signing key. |
+| iOS `PocketPal` project/scheme, `ai.pocketpal` entitlement, `com.pocketpalai.deeplink`, scheme `pocketpal` | `ios/`, build scripts | Xcode project + iOS bundle identifiers. |
+| `rootProject.name = 'PocketPal'` | `android/settings.gradle` | Gradle internal project name. |
+| GitHub attribution URL `a-ghorbani/pocketpal-ai` | `src/screens/AboutScreen/AboutScreen.tsx:152` | Required open-source attribution to the upstream fork. |
+
+User-facing brand strings (comments, labels, LaunchScreen) were changed PocketPal → Anchor.
 
 ---
 

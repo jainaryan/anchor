@@ -8,6 +8,23 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-06-05
+
+### App slow / freezes / OOM on all non-Pixel phones — GPU default was `n_gpu_layers=99` (FIXED)
+
+**Symptom:** App worked correctly on Pixel 8a but froze, ran out of memory, or was extremely slow on every other Android device tested.
+
+**Root cause:** `contextInitParamsVersions.ts` defaulted `n_gpu_layers` to `99` (full GPU offload). On Android, the app checks for GPU support via `checkGpuSupport()` in `deviceCapabilities.ts`, which requires an **Adreno GPU + i8mm + dotprod** CPU features (Qualcomm Snapdragon). Pixel uses a Google Tensor chip (Mali GPU), so it **fails** the Adreno check → GPU disabled → CPU inference.
+
+So: Pixel was silently forced to CPU the whole time. Every Snapdragon phone passed the GPU check and ran the OpenCL offload path with `n_gpu_layers=99` — a path that was never tested. That path is known to cause OOM and hangs with a fully-offloaded 3B model on the OpenCL/Adreno backend.
+
+**Fix:** Flipped all three `n_gpu_layers` defaults from `99` → `0` in `contextInitParamsVersions.ts`:
+- `createContextInitParams` (used for new model loads)
+- `createDefaultContextInitParams` (fallback on corrupt params)
+- Migration 1.0→2.0 (no longer upgrades previously-enabled-but-unset to 99)
+
+GPU is still available as an opt-in setting. No Adreno GPU path numbers exist yet — do not report GPU performance until validated on a Snapdragon device.
+
 ## 2026-06-01
 
 ### Crisis pipeline: country-agnostic resources + rejected-sample logging + RELAUNCHED
