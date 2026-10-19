@@ -28,5 +28,6 @@ When in doubt: add a dated entry to `docs/Bug Log.md` and update the date in `do
 3. **`--gres=gpu:a100-80:1` must be explicit in every sbatch.** H100-96 GRES can fall back to ~46 GB nodes (OOMs the Gemma4 judge at bfloat16 ~52 GB).
 4. **`--export` flag must go BEFORE the script path in sbatch.** After the path = silently ignored.
 5. **GitHub SSH is blocked from the cluster.** Use rsync. See `docs/Cluster.md`.
-6. **3-run averaged benchmark scores only.** Single runs swing ±17 scenarios at temp=0.7.
-7. **Base model beats all SFT on v3 benchmark (51% vs 44%).** Root cause fixed in commit c3acdc9. genzv5 is the next real test.
+6. **3-run averaged benchmark scores only.** Single runs swing ±17 scenarios at temp=0.7. ⚠️ But v4 repeats are currently ~identical (global `torch.manual_seed` in the simulator — 75/83 transcripts repeat). Fix seeding before trusting averages. See `docs/Bug Log.md` 2026-10-20.
+7. **Best v4 model is genzv3_ck200 (61.5%)**, base 57.4%, Qwen3-30B teacher 78.0%.
+8. **Check the cleaned dataset, not the preset.** `clean_dataset.py --drop-min-turns 4` drops all single-turn rows (all of targeted_fix, 175/181 gold). The cluster's old `clean_dataset.py` also drops `loss_weight`. Count rows per source and `loss_weight` in `conversations_cleaned_vN` before training.

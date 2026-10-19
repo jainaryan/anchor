@@ -8,6 +8,101 @@ tags: [anchor, bugs]
 
 Chronological record of bugs found and fixed. Use this to understand what has already been tried and why. Most recent first.
 
+## 2026-10-20 — Cluster audit (findings OPEN, nothing fixed yet)
+
+Read-through of the cluster checkout (`/home/a/aryanj/projects/mindmate`), `/home/a/aryanj/logs/`, `benchmarks/results/` and `data/`, then cross-checked against `main` (`b2bae61`).
+
+### ❗ `clean_dataset.py --drop-min-turns 4` drops all single-turn data — no model has ever trained on targeted_fix or most gold — OPEN
+
+**Bug:** `drop_min_turns()` counts user+assistant messages and drops anything under 4. Every row in `synthetic_train_targeted_fix.jsonl` (13,524) is single-turn: one user, one assistant. So are 175/181 rows of the gold `synthetic_train_targeted_fixes.jsonl`. Every SFT SLURM script passes `--drop-min-turns 4`, including `run_sft_v7.slurm` on main.
+
+**Evidence:**
+
+| Run | Raw train | Cleaned train (trained on) | Single-turn rows in raw | Single-turn rows in cleaned |
+|---|---|---|---|---|
+| v5 | 12,218 | 8,669 | 3,549 | 0 |
+| v6 | 10,820 | 7,734 | 3,086 | 0 |
+
+The `kept 8669/12218` / `kept 7734/10820` lines are in `sft_v5_618377.out` / `sft_v6_619894.out`. Combined with the 2026-05-19 build skip (v3/v4 never loaded the files), **genzv2–genzv6 have never seen targeted_fix or ~97% of gold.** The planned v7 would also lose its entire 3,500-row (27%) targeted_fix slot.
+
+**Implications:** earlier attributions are unsupported. Examples: "genzv3 NO_HALLUCINATION 89% from the gold anti-hallucination examples", "help_mode improved by targeted data", "loss weighting protects safety categories". The genzv5/v6 post-mortems blamed only Qwen reply length; the missing targeted/gold data was also a factor.
+
+**Fix (proposed):** `--drop-min-turns 2` (or drop the flag) in `run_sft_v7.slurm`. Then assert per-source counts after cleaning (see Home 7c).
+
+### ❗ The `loss_weight` passthrough (0d164a2, 2026-05-19) never reached the cluster — genzv5/genzv6 trained unweighted — OPEN
+
+**Bug:** `main`'s `clean_dataset.py` preserves `loss_weight` (and adds MinHash near-dedup). The cluster still runs the **Feb-21 `clean_dataset.py`**, which writes only `{"conversations": …}`. Jobs 616648/616650 failed on `unrecognized arguments: --near-dedup --near-dedup-threshold 0.8`. The flags were removed from the SLURM script instead of syncing `clean_dataset.py`.
+
+**Evidence:** `conversations_raw_v5/v6` rows carry `loss_weight` ∈ {1.0, 1.5, 2.0, 3.0}. `conversations_cleaned_v5/v6` (what `CUDA_train_qlora.py` read) have no `loss_weight` key → the trainer falls back to 1.0 everywhere. The cluster also lacks main's `build_dataset.py` v7 preset and `finetuning/run_sft_v7.slurm` (the rsync that was blocked on SSH auth never happened).
+
+**Fix:** rsync `finetuning/clean_dataset.py`, `build_dataset.py`, `run_sft_v7.slurm` to the cluster before v7. Note also: weights are normalized per micro-batch (`sum(w·L)/sum(w)`, batch 4), so the effective upweight is much smaller than nominal.
+
+### ❗ v4 benchmark "3-run averages" are not independent — OPEN
+
+**Bug:** `build_sim_fn_from_judge.sim_fn` calls `torch.manual_seed(seed + turn_idx)` before every simulated user turn. That reseeds the **global** RNG, which also drives the eval model's sampling. From the first dynamic scenario (`cv_01`, 9th in file order) to the end of the run, everything is deterministic.
+
+**Evidence:** genzv5_ck1400 ×3 → 75/83 transcripts byte-identical. Only `cm_01`–`cm_08` (run before any reseed) differ. Every v4 "3-run" std is 0.0–0.5pp. The v3 measurement was 17/49 flips between runs.
+
+**Implications:** v4 gaps of a few pp (genzv3_ck200 61.5 vs genzv4_ck200 58.3 vs base 57.4) are single-sample.
+
+**Fix (proposed):** give `sim_fn` a local `torch.Generator` (pass `generator=` / reseed only that), add a run-level `--seed`, record it in `judged.json`, then rerun the top models.
+
+### ❗ Holdout set is broken (schema) and contaminated (names) — OPEN
+
+**Bug 1:** `benchmarks/scenarios_holdout.py` uses the v3 shape (`system` string + `turns` messages; the dynamic one uses `opening`). `run_benchmarks_v4.py` reads `seed` → `render_system_prompt()` and `user_turns`. With `--holdout`, the 11 single-turn holdout scenarios get the bare base prompt and **zero user turns**, and the judge scores an empty conversation.
+
+**Bug 2:** the docstring says the holdout profiles are "never used in any data-gen script". In fact:
+- **Priya** and **Nadia** appear in ~1,900 `targeted_fix` rows each, ~1,400–1,600 `help_mode_qwen` rows, and in every biometric/conv-memory file.
+- The mobile eval's "held-out" names **Zoya, Kabir, Tanvi, Layla, Rohan** appear 85–200× each in `synthetic_train_biometric.jsonl`, which was trained on by genzv5/v6 and is planned for v7.
+- 6/12 holdout scenarios and 3 v4 scenarios (`cm_01`, `cm_05`, `xs_03`) use these names.
+
+**Fix (proposed):** port the holdout to the v4 schema. Choose names with `grep -c` = 0 across `data/synthetic_train*.jsonl`, and add that grep as a pre-benchmark check.
+
+### ❗ help_mode still 99.3% cold_open after the turn-index "fix" — OPEN
+
+**Bug:** c35c2d9 (2026-05-30) changed `heuristic_help` to check `assistant_turns[0]` for a technique in **all** modes. In `mid_session` the user vents first and asks for help later. A correct Anchor turn 0 responds to the venting **without** a technique, so it's rejected by construction.
+
+**Evidence:** final jobs 624118/624119 (ran 2026-05-31 → 06-02 with the fix) ended at `total=1446 | cold_open=1443 mid_session=2 not_working=1` and `total=1437 | cold_open=1425 mid_session=7 not_working=5`. Final `synthetic_train_help_mode_qwen.jsonl`: 7,462 rows = 7,413 cold_open / 33 mid_session / 16 not_working. Mean reply **509 chars** (p90 736) — the same length problem diagnosed for genzv5. Only 8 profiles. ~40% of turns open "I'm right here with…".
+
+**Also:** v7's `help_mode_qwen 200` slot now samples from this regenerated file. The markdown-stripped 2026-05-22 set the preset comment refers to is the cluster's `finetuning/synthetic_train_help_mode_qwen.jsonl`.
+
+**Fix (proposed):** check the assistant turn **after the explicit ask** (find the user turn containing the help request), and add a word cap.
+
+### ❗ Crisis regen (625037) — ambiguous mode over-escalates — OPEN
+
+**Result:** finished 2026-06-03 09:15, **12,715 examples** (13,806 attempts; 885 parse + 206 heuristic rejects in `outputs/crisis_qwen_rejected.jsonl`). The good: 0 country-specific numbers, active_si 99% resource + 99% direct check, mean reply 282 chars.
+
+**Problems:**
+- In the `ambiguous` mode (meant to *not* over- or under-react), 99% of conversations still ask "are you safe right now?" and 70% push a resource. `heuristic_crisis` has no check at all for `ambiguous`, so it doesn't enforce the director's "don't escalate ambiguous low mood".
+- 23% of all assistant turns open "that sounds really heavy". "heavy"/"weight" are on `CRISIS_SIGNAL_WORDS` and the passive_si acknowledgement list, so the filter rewards the cliché.
+- Only 10 crisis profiles (~1,300 rows each — e.g. "Raj", "Jay" will be memorized).
+
+**Fix (proposed):** add an ambiguous-mode rejection for unprompted risk questions / resource pushes, drop "heavy"/"weight" from the accept lists, dedup openers, add profiles — or subsample ≤2k with balanced openers.
+
+### Qwen3-30B reference judged — 78.0%
+
+Replay 624905 (2026-06-01) → `benchmarks/results/cluster_qwen3_30b_20260530_191415/replay_20260531_235809/judged.json`: **220/282 = 78.0%**.
+
+| Category | BIO | COMP | CM | CoM | CRISIS | XS | FMT | HELP | MD | NH | SA |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| % | 89 | 75 | 88 | 85 | 80 | 90 | 69 | 84 | 43 | 52 | 100 |
+
+Crisis strict pass by distress level: L1 2/2, L2 4/6, L3 3/5. (Every 3B model is ≤1/5 on L3.) NO_HALLUCINATION 52% and MEMORY_DRIFT 43% even for the teacher, so audit those criteria.
+
+### Plaintext HF token committed in `misc` — OPEN
+
+`misc` (tracked since `98c3d3d`) contains an `hf_…` token. Revoke it at huggingface.co → Settings → Access Tokens, delete the file, and purge history if the repo is or becomes public.
+
+### Minor (2026-10-20)
+
+- `synthetic/biometric_sft_pipeline.py` defines `main()` twice (v3 at ~L1424 and legacy at ~L1743), each with its own `if __name__ == "__main__": main()`. The legacy main runs after the v3 one returns. Delete the legacy block.
+- Judge/simulator `generate()` calls pass no `attention_mask` ("pad token is same as eos token" warning in every v4 log). Harmless at batch 1.
+- `finetuning/crisis_help_pipeline.py` / `finetuning/utils.py` are stale copies of the `synthetic/` versions. `finetuning/launch_crisis_help.sh` submits the older `finetuning/crisis_help_pipeline_qwen.slurm`. Both SLURM files run `synthetic/crisis_help_pipeline.py`.
+- Repo-root `system_prompt.txt` ("You are MindMate…") and `inference/system_prompt.txt` ("PANIC MODE OVERRIDES…") are legacy prompts. Only `inference/*.py`, `web/app.py` and the DPO pipelines read them.
+- `run_sft_v5/v6/v7.slurm` reinstall torch into the shared venv at job start. When ~10 datagen jobs each tried to reinstall torch at once on 2026-05-29 (623585–623594, after the export script had removed it — see 2026-05-30), they failed with `Errno 116 Stale file handle` and half-uninstalled `~riton` dirs. Never launch two venv-modifying jobs at once.
+
+---
+
 ## 2026-06-05
 
 ### App slow / freezes / OOM on all non-Pixel phones — GPU default was `n_gpu_layers=99` (FIXED)

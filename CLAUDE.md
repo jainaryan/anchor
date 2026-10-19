@@ -27,8 +27,9 @@ Finetuned local mental-health companion. Llama 3.2 3B + QLoRA SFT → GGUF → A
 3. **`--gres=gpu:a100-80:1` must be explicit** in every sbatch. H100-96 falls back to 46GB nodes (OOMs Gemma4).
 4. **`--export` flag goes BEFORE the script path** in sbatch. After = silently ignored.
 5. **GitHub SSH blocked from cluster.** Use rsync. See `docs/Cluster.md`.
-6. **3-run averaged benchmark scores only.** Single runs swing ±17 scenarios at temp=0.7.
-7. **Base model beats all SFT on v3 benchmark (51% vs 44%).** Root cause fixed (c3acdc9). genzv5 is next.
+6. **3-run averaged benchmark scores only.** Single runs swing ±17 scenarios at temp=0.7. ⚠️ But v4 repeats are currently ~identical (global `torch.manual_seed` in the simulator — 75/83 transcripts repeat). Fix seeding before trusting averages. See `docs/Bug Log.md` 2026-10-20.
+7. **Best v4 model is genzv3_ck200 (61.5%)**, base 57.4%, Qwen3-30B teacher 78.0%.
+8. **Check the cleaned dataset, not the preset.** `clean_dataset.py --drop-min-turns 4` drops all single-turn rows (all of targeted_fix, 175/181 gold). The cluster's old `clean_dataset.py` also drops `loss_weight`. Count rows per source and `loss_weight` in `conversations_cleaned_vN` before training.
 
 ## Doc update rule — mandatory
 

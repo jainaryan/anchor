@@ -321,7 +321,7 @@ This means new eval runs are directly comparable to what users experience. Old r
 
 Results: `src/eval/EVAL_RESULTS.md` — includes last run (2026-04-23, Pixel 8a) plus a warning block documenting all post-run fixes.
 
-Held-out eval names (not in training data): **Zoya, Kabir, Tanvi, Layla, Rohan**.
+Held-out eval names: **Zoya, Kabir, Tanvi, Layla, Rohan** — ⚠️ **not actually held out (2026-10-20).** Each appears 85–200× in `synthetic_train_biometric.jsonl` (trained on by genzv5/genzv6, planned for v7), and the gold file uses them too. Pick fresh names, checked with `grep -c` across `data/synthetic_train*.jsonl`, before trusting generalization results.
 
 ### Running eval
 

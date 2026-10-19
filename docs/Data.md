@@ -6,6 +6,15 @@ tags: [anchor, data]
 
 ← [[Home]]
 
+> **2026-10-20 status (cluster audit):**
+> - **Datagen is finished.** Crisis regen 625037 → `synthetic_train_crisis_qwen.jsonl` **12,715 rows**; help_mode → `synthetic_train_help_mode_qwen.jsonl` **7,462 rows**. Neither is training-ready — see "Final crisis + help_mode data" below.
+> - **Two data-loss facts that apply to every built dataset:**
+>   1. `clean_dataset.py --drop-min-turns 4` drops all single-turn rows: 100% of `targeted_fix` and 175/181 gold. No model has trained on them.
+>   2. The cluster's `clean_dataset.py` (Feb-21) strips `loss_weight`, so genzv5/v6 trained unweighted.
+> - **The "held-out" eval names aren't held out.** Zoya/Kabir/Tanvi/Layla/Rohan appear 85–200× each in `synthetic_train_biometric.jsonl`; holdout names Priya/Nadia appear ~1,900× in `targeted_fix`.
+>
+> See [[Bug Log]] 2026-10-20.
+>
 > **2026-05-29 status:** Crisis + help_mode datagen pipeline fixed and requeued (jobs 623595–623599). Key fixes: `active_si` keyword heuristic dropped (was rejecting ~99%), `TECHNIQUE_WORDS` expanded for help_mode, `"988"` removed from all heuristics, torch /tmp workaround for NFS nodes. Current data: crisis=252 usable (active_si=3, passive_si=62, humor_deflect=68, ambiguous=119); help_mode=200 (cold_open=197, mid_session=2, not_working=1). New jobs will fill active_si→~80, passive_si→~120, mid_session→~120, not_working→~80. Earlier 2026-05-22: v6 data mix finalised. All Qwen pipeline data dropped (uniformly too long — 529–800 char avg). v6 = v3 base + help_mode_qwen (markdown-stripped) + crisis data. Preset defined in `build_dataset.py DATA_MIX_PRESETS["v6"]`. See audit below.
 
 ---
@@ -180,6 +189,27 @@ Two-phase teacher-as-Anchor. Crisis: 4 modes (passive_si 30%, humor_deflect 20%,
 | `synthetic_train_crisis_qwen.jsonl` | Crisis SFT — Anchor catches passive/active SI, deflection, ambiguous signals | job 616643 ⚠️ RUNNING but heuristic blocks all output — only **5 examples** after 511+ attempts |
 | `synthetic_train_help_mode_qwen.jsonl` | Help mode SFT — Anchor gives technique in first turn on explicit help request | job 615518 ✅ **COMPLETE — 200 examples** (115 from earlier jobs + 85 from this run) |
 
+### Final crisis + help_mode data (cluster, audited 2026-10-20) — NOT training-ready
+
+| File | Rows | Reply chars (mean / p90) | Modes | Profiles |
+|---|---|---|---|---|
+| `synthetic_train_crisis_qwen.jsonl` (job 625037, 2026-06-01 → 06-03) | 12,715 | 282 / 361 | active_si 4,381 · passive_si 3,237 · ambiguous 3,222 · humor_deflect 1,875 | 10 (~1,300 each) |
+| `synthetic_train_help_mode_qwen.jsonl` (623921–623987, 624118–624119) | 7,462 | **509 / 736** | cold_open 7,413 · mid_session 33 · not_working 16 | 8 |
+| `synthetic_train_crisis_qwen.old_unsafe_20260601.jsonl` | 282 | 660 / 831 | quarantined first run — do not train | — |
+
+**Crisis — what's good:** 0 country-specific numbers; active_si has a resource in 99% and a direct "are you safe" check in 99%; length in range. Rejects: 885 parse + 206 heuristic (`outputs/crisis_qwen_rejected.jsonl`).
+
+**Crisis — what's wrong:**
+- **`ambiguous` over-escalates.** 99% of conversations ask "are you safe right now?" and 70% push a resource. `heuristic_crisis` has no ambiguous-mode check, so the director's "don't escalate ambiguous low mood" isn't enforced. Training on this risks SAFETY_AMBIGUITY and COMPANION.
+- **Formulaic.** 23% of assistant turns open "that sounds really heavy"; another ~12% "I hear how much/heavy…". "heavy"/"weight" are on `CRISIS_SIGNAL_WORDS` and the passive_si acknowledgement list.
+- **10 profiles** → support names (Raj, Jay…) repeated ~1,300×.
+
+**Help mode — what's wrong:** the c35c2d9 turn-0 fix rejects mid_session by construction. Turn 0 answers the venting, before any help request, so it has no technique. Result: 99.3% cold_open. Replies are 2× the target length (the genzv5 failure mode). ~40% of turns open "I'm right here with…". A rough regex flags ~18% of turns as containing list/bold markup.
+
+**Before adding either to a preset:**
+- Add an ambiguous-mode guard; drop "heavy"/"weight" from the accept lists; dedup openers; add profiles. Or subsample ≤2k crisis rows with balanced openers.
+- For help_mode, check the turn **after the explicit ask** and add a word cap.
+
 ### Biometric SFT data (biometric context handling, in progress)
 
 Teaches Anchor when to reference vs. ignore health/biometric data in [Recent sessions].
@@ -289,6 +319,14 @@ Always included at **100% weight** in every data mix (never sampled down). Hand-
 
 Gold expanded from 65 → 181 on 2026-05-01 (commit on that date).
 
+> ⚠️ **2026-10-20:** 175/181 gold rows are single-turn (1 user + 1 assistant), so `--drop-min-turns 4` removes them. "Always included at 100%" has never actually happened in any trained model (v3/v4 also skipped the file entirely — Bug Log 2026-05-19). On the cluster, gold prompt formats are mixed:
+> - 46 canonical full header
+> - 30 preamble-only (fine for no-memory cold opens)
+> - 56 with the old short `ABOUT THIS USER` header
+> - 49 with no preamble
+>
+> The ★/✗ markers above don't appear in current data.
+
 ---
 
 ## DPO Files (abandoned — kept for reference)
@@ -362,6 +400,17 @@ data/conversations_cleaned_v4/mindmate_val.jsonl
 ```
 
 Intermediate dirs for v4 already exist locally. For v5, new `conversations_raw_v5/` and `conversations_cleaned_v5/` dirs will be created by the scripts.
+
+**What actually survived cleaning (cluster, measured 2026-10-20):**
+
+| Built set | Raw train | Cleaned train | Single-turn in raw → cleaned | Rows with Anchor system prompt (cleaned) | `loss_weight` in cleaned |
+|---|---|---|---|---|---|
+| v3 | 10,256 | 10,256 | 0 → 0 | 0% | n/a |
+| v4 | 11,050 | 11,050 | 0 → 0 | 0% | n/a |
+| v5 | 12,218 | 8,669 | 3,549 → 0 | 91% | absent |
+| v6 | 10,820 | 7,734 | 3,086 → 0 | 100% | absent |
+
+`--drop-min-turns 4` counts user+assistant messages, so every 1-user/1-assistant example is dropped. Use `--drop-min-turns 2` to keep single-turn data.
 
 ---
 

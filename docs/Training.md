@@ -79,6 +79,13 @@ All defined in `finetuning/CUDA_train_qlora.py`:
 
 Prefix matching means sharded files (`*_qwen_s0.jsonl`, `*_merged.jsonl`) inherit the same weight. Examples missing the field default to 1.0 — old datasets continue to work unchanged.
 
+> ⚠️ **2026-10-20 — weights have never actually been applied, and much of the weighted data never reached training:**
+> - **genzv5/genzv6 trained unweighted.** The cluster still has the Feb-21 `clean_dataset.py` (no `loss_weight` passthrough, no near-dedup). Jobs 616648/616650 failed on `--near-dedup`, and the flags were removed from the SLURM script instead of syncing the file. `conversations_raw_v5/v6` carry `loss_weight`; `conversations_cleaned_v5/v6` (what the trainer reads) don't.
+> - **`--drop-min-turns 4` removes every single-turn example** — 100% of `targeted_fix` (w=2.0) and 175/181 gold (w=3.0). v5 `kept 8669/12218`, v6 `kept 7734/10820`, and 0 single-turn rows survive.
+> - **Weights are normalized per micro-batch** (`sum(w·L)/sum(w)` over batch 4). A weight only acts relative to the other examples in the same micro-batch, so the nominal 4.0 is much weaker in practice.
+>
+> Before v7: rsync main's `clean_dataset.py`, set `--drop-min-turns 2` in `run_sft_v7.slurm`, and check the cleaned set. See [[Bug Log]] 2026-10-20.
+
 **⚠️ NEVER use `--adapter-path` (continued training).** Tested in `genzv2_continued`: MEMORY_USE collapsed from 4/8 to 0/8 on all checkpoints. The approach is broken. Always train fresh from base model.
 
 ---
@@ -98,6 +105,12 @@ Bug Log 2026-05-30/31). Verified length-clean too: assistant turns mean 185 char
 median 124, p90 256 — inside the 100-250 target. (v6's note that "all qwen biometric
 shards are 750-800 char" only describes s3-s5; **s0 is fine**.) Crisis still skipped —
 only 5 examples locally.
+
+> **2026-10-20 notes on v7:**
+> - Cluster measurement: s1 and s2 are long too (740 / 782 char), so only s0 is clean.
+> - **As written, v7 loses its whole targeted_fix slot (3,500, 27%) and 175/181 gold** to `--drop-min-turns 4`.
+> - The `help_mode_qwen 200` slot now samples from the regenerated 7,462-row `data/synthetic_train_help_mode_qwen.jsonl` (509-char mean, 99.3% cold_open), not the 2026-05-22 markdown-stripped set (on the cluster that one is `finetuning/synthetic_train_help_mode_qwen.jsonl`).
+> - The cluster has neither the v7 preset nor `run_sft_v7.slurm` yet.
 
 ```python
 "v7": {

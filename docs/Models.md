@@ -22,6 +22,13 @@ tags: [anchor, models]
 
 genzv3_ck200 is the best SFT on v4. genzv6 improves on genzv5 (+3.2pp) but doesn't yet beat genzv3 or base. Crisis data (jobs 619781–619783) expected to help — genzv6+crisis is the next training run.
 
+> **2026-10-20 additions:**
+> - **Teacher reference:** `qwen3_30b` scores **78.0%** on v4 (replay 624905; it was its own simulated user).
+> - **Gaps are noisier than they look.** v4 repeat runs aren't independent (seeding bug — 75/83 transcripts identical), so genzv3_ck200 vs genzv4_ck200 vs base (61.5 / 58.3 / 57.4) is within single-sample noise.
+> - **What genzv3_ck200 actually trained on:** ~10k transition/therapist/friend/casual rows — no system prompt, no targeted_fix/biometric/gold (05-19 build skip), only 200 steps at lr 1e-5. It's the lightest-touch adapter.
+> - **genzv5/v6 trained without** targeted_fix, most gold, or loss weights (see [[Bug Log]] 2026-10-20).
+> - **genzv3_ck200 GGUF already exists** on the cluster: `exports/mindmate_genzv3_ck200/mindmate_genzv3_ck200_q4_k_m.gguf` (2026-05-03), not on HF yet. It beats both shipped genzv2 models on total and CRISIS (64% vs 21–28%) but is worse on COMPANION/HELP_MODE. Measured per-category table + crisis calibration: [[Benchmarks]].
+
 ---
 
 ## Leaderboard (v4 benchmark, 2026-05-23)

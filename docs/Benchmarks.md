@@ -17,10 +17,10 @@ The unified benchmark system. Cluster and mobile run **the same scenarios** agai
 | | |
 |---|---|
 | Scenarios | 83 across 11 categories |
-| Scripted (`single` + `scripted_multiturn`) | 38 — fixed user turns |
-| Dynamic (`dynamic_multiturn`) | 45 — Qwen3-30B simulator |
+| Scripted (`single` + `scripted_multiturn`) | 38 — fixed user turns (all 38 are `single`) |
+| Dynamic (`dynamic_multiturn`) | 45 — simulated user is the **Gemma4 judge model itself** (`build_sim_fn_from_judge`). Qwen3-30B doesn't fit next to Gemma4 + eval model (OOM, jobs 618656–619022). With `--no-judge`, the eval model plays the user |
 | Judge | Gemma4 26B A4B IT (bfloat16, A100-80, ~52GB VRAM) |
-| Weighted total | varies by run (sum of `weight` across `judge_criteria`) |
+| Weighted total | 282 for the full suite (sum of `weight` across `judge_criteria`) |
 | Critical categories | CRISIS (weight 2-3), SAFETY_AMBIGUITY (weight 2) |
 | New categories vs v3 | MEMORY_DRIFT, SAFETY_AMBIGUITY |
 
@@ -41,7 +41,9 @@ The whole point of v4 is to measure what users actually experience. Eval-time sa
 - Mobile runner: imports `defaultCompletionParams` directly from `src/utils/completionSettingsVersions.ts` — single source of truth, zero drift possible.
 - Both runtimes emit `sampling.matches_production_app: bool` in their result docs; flips false the moment any param is overridden.
 
-**Consequence:** scenarios are non-deterministic on every type (including scripted). Use 3-run averaging when ranking models. The diff tool (`benchmarks/diff_results.py`) is still useful single-run for spotting *category-level* regressions — fine-grained scenario flips need 3 runs to be trustworthy.
+> ⚠️ **2026-10-20 — v4 repeat runs are NOT independent.** `build_sim_fn_from_judge.sim_fn` calls `torch.manual_seed(seed + turn_idx)` before every simulated user turn. That reseeds the **global** RNG, so the eval model's sampling is also fixed from the first dynamic scenario (`cv_01`, 9th in file order) to the end of the run. Measured on genzv5_ck1400 ×3: **75/83 transcripts byte-identical**; only `cm_01`–`cm_08` vary. This is why every v4 "3-run" std below is 0.0–0.5pp. Treat each v4 number as ~one sample until the simulator uses a local `torch.Generator` and runs take a `--seed`. See [[Bug Log]] 2026-10-20.
+
+**Consequence (intended design):** scenarios are non-deterministic on every type (including scripted). Use 3-run averaging when ranking models. The diff tool (`benchmarks/diff_results.py`) is still useful single-run for spotting *category-level* regressions — fine-grained scenario flips need 3 runs to be trustworthy.
 
 Ablations that need determinism (e.g. studying the format-fix impact) can override via `--temperature 0`. The output JSON will record `matches_production_app: false`, so leaderboard tooling can flag the run as not-comparable.
 
@@ -53,7 +55,7 @@ Ablations that need determinism (e.g. studying the format-fix impact) can overri
 | Shared scenario schema + Python loader | `benchmarks/scenarios.json`, `benchmarks/scenarios_loader.py` |
 | Port script (v3 Python → v4 JSON, round-trip verified) | `benchmarks/_port_scenarios.py` |
 | Judge service (runtime-agnostic, ambiguity retry, scope-aware) | `benchmarks/judge_service.py` |
-| Cluster runner v4 (multi-turn, dynamic w/ Qwen3 sim, GGUF backend, temp=0) | `benchmarks/run_benchmarks_v4.py`, `run_benchmarks_v4.slurm` |
+| Cluster runner v4 (multi-turn, dynamic w/ Gemma4-as-simulator, GGUF backend, production sampling, `--no-judge`, `--holdout`) | `benchmarks/run_benchmarks_v4.py`, `run_benchmarks_v4.slurm` |
 | Mobile-results judging entrypoint + SLURM | `benchmarks/judge_mobile_results.py`, `benchmarks/judge_mobile.slurm` |
 | Diff / leaderboard / replay tools | `benchmarks/diff_results.py`, `leaderboard.py`, `replay.py` |
 | Rsync pipeline mobile→cluster→mobile | `scripts/sync_mobile_eval.sh` |
@@ -189,9 +191,16 @@ The runner logs a `WARN` if monotonicity is violated.
 
 ### Holdout scenarios (added 2026-05-19)
 
+> ⚠️ **2026-10-20 — holdout is broken and not disjoint; never run.**
+> 1. The file uses the v3 schema (`system` + `turns`; the dynamic one uses `opening`), but `run_benchmarks_v4.py` reads `seed` / `user_turns`. With `--holdout`, the 11 single-turn scenarios get the bare base prompt and **zero user turns**.
+> 2. **Priya** and **Nadia** appear in ~1,900 `targeted_fix` rows each, ~1,400–1,600 `help_mode_qwen` rows, and in every biometric/conv-memory file.
+> 3. The mobile eval's "held-out" Zoya/Kabir/Tanvi/Layla/Rohan appear 85–200× each in `synthetic_train_biometric.jsonl`.
+>
+> Port the file to the v4 schema and pick names with zero hits in `data/synthetic_train*.jsonl`. See [[Bug Log]] 2026-10-20.
+
 `benchmarks/scenarios_holdout.py` contains 12 scenarios with IDs `hd_*`. Profiles
-(Priya/architect, Marcus/translator, Nadia/retired teacher, Kai/sous chef) are entirely
-disjoint from the data-generation pool — never used in any pipeline script.
+(Priya/architect, Marcus/translator, Nadia/retired teacher, Kai/sous chef) were intended to be
+disjoint from the data-generation pool (see the warning above — they aren't).
 
 | Category | n |
 |---|---|
@@ -301,6 +310,7 @@ etc.) are directional only — the conversation partner differs from a standard 
 
 | Model | n | Avg % | Notes |
 |---|---|---|---|
+| *qwen3_30b (teacher, reference)* | 1 | *78.0%* | Two-phase (`NO_JUDGE` + replay 624905, 2026-06-01). Its own model played the simulated user — dynamic categories are directional |
 | genzv3_ck200 | 3 | **61.5%** | Best SFT — first to beat base |
 | llama_base | 1 | 57.4% | ⚠️ Only 1 run — jobs 619895/619896 pending for proper avg |
 | genzv4_ck200 | 3 | 58.3% | |
@@ -364,6 +374,60 @@ etc.) are directional only — the conversation partner differs from a standard 
 | SAFETY_AMBIGUITY | ~70% | ~65% | ~68% |
 
 *Note: per-category numbers for llama_base and genzv5 are from single or partial runs — treat as directional.*
+
+> ⚠️ **2026-10-20: the table above is superseded.** Its approximate values don't match the result files (e.g. genzv3_ck200 COMPANION is 65%, not 92%; HELP_MODE 37%, not ~55%; llama_base COMPANION 42%, not ~88%). Use the measured table below.
+
+### Measured per-category scores (2026-10-20, computed from every `benchmarks/results/cluster_*/judged.json`)
+
+Mean over run dirs. Remember that n>1 repeats are ~identical (seeding bug above). Category cells = % of weighted criteria passed.
+
+| Model | n | Total | BIO | COMP | CM | CoM | CRISIS | XS | FMT | HELP | MD | NH | SA |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| *qwen3_30b* | 1 | *78.0* | 89 | 75 | 88 | 85 | 80 | 90 | 69 | 84 | 43 | 52 | 100 |
+| genzv3_ck200 | 3 | 61.5 | 50 | 65 | 29 | 85 | 64 | 85 | 85 | 37 | 100 | 42 | 88 |
+| genzv4_ck200 | 3 | 58.3 | 61 | 63 | 29 | 62 | 57 | 65 | 62 | 47 | 43 | 61 | 75 |
+| llama_base | 1 | 57.4 | 67 | 42 | 38 | 54 | 56 | 70 | 77 | 58 | 43 | 74 | 56 |
+| genzv6_ck1600 | 1 | 56.7 | 67 | 87 | 38 | 62 | 41 | 45 | 46 | 40 | 43 | 58 | 88 |
+| genzv6_ck1800 | 1 | 55.7 | 56 | 83 | 12 | 69 | 44 | 45 | 38 | 49 | 43 | 52 | 81 |
+| genzv6_ck2000 | 1 | 55.0 | 56 | 85 | 0 | 69 | 39 | 45 | 31 | 44 | 71 | 58 | 81 |
+| genzv6_ck1200 | 1 | 54.6 | 44 | 85 | 12 | 69 | 41 | 35 | 31 | 44 | 71 | 52 | 100 |
+| genzv6_ck1400 | 1 | 53.9 | 39 | 87 | 12 | 69 | 46 | 20 | 62 | 44 | 71 | 48 | 69 |
+| genzv5_ck1400 | 3 | 53.5 | 78 | 63 | 12 | 69 | 48 | 60 | 62 | 40 | 43 | 42 | 75 |
+| genzv5_ck1000 | 2 | 53.5 | 67 | 62 | 50 | 38 | 43 | 45 | 92 | 49 | 43 | 52 | 69 |
+| genzv6_ck200 | 1 | 53.2 | 33 | 77 | 25 | 54 | 54 | 25 | 54 | 47 | 43 | 58 | 56 |
+| genzv5_ck800 | 3 | 53.1 | 56 | 67 | 33 | 69 | 41 | 40 | 46 | 40 | 71 | 65 | 75 |
+| genzv5_ck2000 | 1 | 52.8 | 78 | 75 | 0 | 69 | 33 | 35 | 38 | 51 | 43 | 61 | 69 |
+| genzv5_ck600 | 3 | 51.7 | 56 | 63 | 8 | 69 | 46 | 45 | 77 | 37 | 43 | 52 | 69 |
+| genzv2_ck1600 | 3 | 51.5 | 33 | 81 | 17 | 54 | 21 | 45 | 85 | 53 | 100 | 48 | 69 |
+| genzv2_ck1200 | 3 | 51.3 | 33 | 88 | 21 | 69 | 28 | 45 | 77 | 49 | 71 | 35 | 56 |
+| genzv5_ck1200 | 3 | 50.6 | 50 | 63 | 8 | 69 | 43 | 40 | 54 | 44 | 71 | 48 | 69 |
+| genzv5_ck1600 | 1 | 50.4 | 56 | 81 | 25 | 54 | 30 | 40 | 77 | 42 | 43 | 42 | 69 |
+| genzv6_ck600 | 1 | 50.0 | 33 | 73 | 12 | 54 | 31 | 35 | 77 | 63 | 43 | 52 | 44 |
+| genzv6_ck1000 | 1 | 49.6 | 61 | 69 | 25 | 69 | 34 | 35 | 38 | 42 | 43 | 61 | 56 |
+| genzv5_ck400 | 3 | 49.3 | 56 | 65 | 12 | 46 | 33 | 50 | 62 | 42 | 71 | 58 | 56 |
+| genzv6_ck800 | 1 | 49.3 | 50 | 81 | 0 | 31 | 38 | 35 | 77 | 42 | 43 | 39 | 69 |
+| genzv5_ck200 | 3 | 48.9 | 56 | 58 | 12 | 69 | 44 | 30 | 69 | 44 | 71 | 42 | 56 |
+| genzv6_ck400 | 1 | 47.5 | 44 | 83 | 0 | 46 | 31 | 30 | 38 | 42 | 71 | 42 | 69 |
+| genzv5_ck1800 | 1 | 47.2 | 50 | 67 | 25 | 54 | 33 | 35 | 54 | 28 | 43 | 65 | 69 |
+
+Key: BIO biometric · COMP companion · CM context memory · CoM conversation memory · XS cross-session memory · FMT format · HELP help mode · MD memory drift · NH no hallucination · SA safety ambiguity.
+
+### CRISIS calibration across models (2026-10-20) — every 3B model fails explicit SI
+
+Strict pass (all criteria) per `distress_level`. n per level: L1 = 2, L2 = 6, L3 = 5 (`cr_03`, `cr_06`, `cr_07`, `cr_10`, `cr_11`).
+
+| Model | L1 | L2 | L3 | Spearman ρ |
+|---|---|---|---|---|
+| qwen3_30b | 2/2 | 4/6 | 3/5 | — |
+| genzv3_ck200 | 100% | 50% | 20% | −0.52 |
+| genzv4_ck200 | 100% | 33% | 20% | −0.46 |
+| llama_base | 100% | 33% | 20% | −0.46 |
+| genzv6_ck1600 | 0% | 33% | 0% | −0.19 |
+| genzv5_ck1400 | 50% | 33% | 20% | −0.22 |
+| genzv2_ck1200 (app default) | 100% | 0% | 0% | −0.68 |
+| genzv2_ck1600 (tryanchor.me) | 50% | 0% | 0% | −0.46 |
+
+**At most 1/5 L3 scenarios fully pass for any 3B model**, and the monotonicity invariant is violated everywhere. Both shipped models are 0/5 and have the lowest CRISIS category scores (21–28%). No model has trained on crisis data yet.
 
 ---
 

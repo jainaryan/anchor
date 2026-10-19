@@ -42,7 +42,17 @@ This is `_ANCHOR_PROMPT` in `scripts/chat_cluster.py` and `_APP_BASE_PROMPT` in 
 
 `buildEnhancedSystemPrompt(basePrompt, userMessage)` appends three tiers of context after the base prompt.
 
-### Full injected format
+> ⚠️ **2026-10-20 correction — the format examples below are outdated.** The canonical format is `benchmarks/scenarios.py::_sys()`, which `scripts/normalize_memory_format.py` and every current pipeline use. Its pieces:
+> - the 6-line base prompt
+> - `\n\n` + the **full `====` "ABOUT THIS USER (you know this — use it naturally)" header** with 6 instruction lines (not the short `ABOUT THIS USER`)
+> - `\n[User]\n<free-text profile>` — e.g. `depression` / `Triggers: …` / `Helps: …` / `Support: Raj (best friend).`
+> - `\n\n[Recent sessions]\n[Apr 21] <summary>` lines (not `Session 1:`)
+>
+> The ★/✗ markers and `Name:`/`Age:` lines don't appear in any current training data or scenario (★ survives only in the abandoned `onpolicy_dpo_pipeline.py`). Verified on the cluster: the base prompt and header are byte-identical in `scenarios.py`, `scenarios_loader.py`, `chat_cluster.py` and the crisis/conv-memory/biometric pipelines.
+>
+> Neither `[Relevant past]` (Tier 3) nor `[Health data — last 7 days]` appears in any training file. 3 v4 scenarios seed a health block, so the model meets it only at eval time.
+
+### Full injected format (historical — see correction above)
 
 ```
 You are Anchor, a warm and caring AI companion — like a close friend who genuinely listens.

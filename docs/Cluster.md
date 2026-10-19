@@ -25,6 +25,23 @@ which python   # should be ~/projects/mindmate/mindmatenv/bin/python
 
 ---
 
+## Cluster checkout state (audited 2026-10-20)
+
+- **No mindmate jobs running.** Last job: crisis regen 625037, finished 2026-06-03 09:15 SGT.
+- **git is stale:** HEAD `cab430e` (2026-04-29). Everything newer was rsync'd and shows as modified or untracked: `benchmarks/`, `docs/`, most `finetuning/*.slurm`, the crisis pipeline, data and results. **Don't `git checkout` / `reset` / `stash` here.**
+- **Code drift vs `main` (`b2bae61`):** `synthetic/crisis_help_pipeline.py`, `benchmarks/run_benchmarks_v4.py`, `benchmarks/replay.py`, `scripts/normalize_memory_format.py`, `finetuning/CUDA_train_qlora.py` and `synthetic/utils.py` match main. But:
+  - `finetuning/clean_dataset.py` is the **Feb-21 version** — no `loss_weight` passthrough, no `--near-dedup`.
+  - `finetuning/build_dataset.py` has **no `v7` preset**.
+  - `finetuning/run_sft_v7.slurm` **doesn't exist**.
+
+  rsync all three before launching v7.
+- **Vault on the cluster:** the cluster's `docs/` (and root `*.md` copies) were rewritten on 2026-10-20 from the cluster's stale May-16 copy. **They're older than `main` — don't rsync them back over the Mac vault.** This branch (`docs/cluster-audit-2026-10-20`) carries the audit findings merged into main's docs.
+- **venv:** `torch 2.11.0+cu126` / `torchvision 0.26.0+cu126` (job 624114).
+- **Pushing from the cluster:** SSH to GitHub is blocked, but HTTPS works (`git fetch https://github.com/jainaryan/mindmate.git`, push with the stored credentials).
+- **`sacct`** returns nothing for May/June jobs (retention). The log files in `/home/a/aryanj/logs/` are the job history.
+
+---
+
 ## SLURM Quick Reference
 
 ```bash
@@ -127,6 +144,8 @@ ssh nus-student-cluster "for ck in 200 400 600; do sbatch --export=ALL,ADAPTER=$
 git pull
 
 # ✅ Use rsync from local machine instead (see File Sync section)
+# ✅ HTTPS works from the cluster (verified 2026-10-20):
+git fetch https://github.com/jainaryan/mindmate.git '+refs/heads/*:refs/remotes/https/*'
 ```
 
 ### 6. `set -euo pipefail` in SLURM scripts
@@ -232,7 +251,25 @@ squeue -u aryanj -o "%.7i %.8j %.8u %.2t %R %N"
 
 ---
 
-## Active Jobs (2026-05-14, session 8)
+## Active Jobs — none as of 2026-10-20
+
+Job outcomes after the last update of this note (from `/home/a/aryanj/logs/`):
+
+| Jobs | What | Outcome |
+|---|---|---|
+| 618377 | sft_v5 | ✅ after 17 env failures (616648 → 618371; see Bug Log 2026-05-19/21) |
+| 619894 | sft_v6 | ✅ 55 min |
+| 619781–619783 | crisis shards | ❌ `CUDNN_STATUS_NOT_INITIALIZED` |
+| 621990, 621991, 622015 | export | ❌ torch install → fixed (CPU torch in /tmp); 624115/624121 ✅ genzv6_ck1600 |
+| 623575–623599 | crisis/help (×25, 2026-05-29) | mostly ❌. GPU torch was missing from the venv (removed by the export script, Bug Log 2026-05-30), and the simultaneous reinstall attempts hit `Errno 116 Stale file handle` |
+| 624114 | torch-reinstall | ✅ cu126 |
+| 624132, 624135 | bench qwen3_30b | ❌ offload error / OOM → 624366 `NO_JUDGE` ✅ |
+| 624367, 624905 | replay | 624905 ✅ → qwen3_30b 78.0% |
+| 624368 | hf-upload | ✅ genzv6_ck1600 |
+| 624118, 624119 | help_mode | ✅ → 7,462 rows total (99.3% cold_open) |
+| 625037 | crisis regen | ✅ 2026-06-03 → 12,715 rows |
+
+## Active Jobs (2026-05-14, session 8) — historical
 
 | Job | Name | GPU | Status | Output |
 |---|---|---|---|---|

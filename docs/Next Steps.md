@@ -8,6 +8,33 @@ tags: [anchor, next-steps]
 
 ---
 
+## Cluster audit findings (2026-10-20) — do these BEFORE launching v7
+
+Nothing is running on the cluster. All 2026-06-01 "Immediate Priority" jobs have finished: crisis 625037 → 12,715 rows, help_mode → 7,462 rows, replay 624905 → Qwen3-30B 78.0%. The audit found six open issues ([[Bug Log]] 2026-10-20). They change what v7 would actually train on, so the order below matters.
+
+### P0 — small fixes that unblock everything
+
+1. **Revoke the HF token committed in `misc`** (huggingface.co → Settings → Access Tokens). Delete the file.
+2. **Stop dropping single-turn data.** In `finetuning/run_sft_v7.slurm` change `--drop-min-turns 4` → `2` (or remove the flag). Otherwise v7's 3,500-row targeted_fix slot and 175/181 gold rows vanish, as in every run since v3.
+3. **Sync the cluster** — it still has the Feb-21 `clean_dataset.py` (drops `loss_weight`) and a `build_dataset.py` without v7, and has no `run_sft_v7.slurm`. rsync `finetuning/{clean_dataset.py,build_dataset.py,run_sft_v7.slurm}` from the Mac. The rsync is still blocked on cluster SSH key auth from the Mac side.
+4. **Verify the cleaned set before training.** Add an assertion step to `run_sft_v7.slurm`: per-source row counts and `loss_weight` histogram on `conversations_cleaned_v7/mindmate_train.jsonl`. `kept X/Y` should be close to Y.
+5. **Fix benchmark seeding** (`benchmarks/run_benchmarks_v4.py::build_sim_fn_from_judge`). Use a local `torch.Generator` instead of global `torch.manual_seed`, add a run-level `--seed`, and record it in `judged.json`. Until then, repeat runs are ~identical (75/83 transcripts).
+6. **Repair the holdout.** Port `scenarios_holdout.py` to the v4 schema (`seed` + `user_turns`). Rename profiles to names with zero hits in `data/synthetic_train*.jsonl` — Priya/Nadia and the mobile eval's Zoya/Kabir/Tanvi/Layla/Rohan are all in training data.
+
+### P1 — data fixes before crisis/help go into a preset
+
+- **Crisis (12,715):** add an `ambiguous`-mode guard to `heuristic_crisis` (reject unprompted "are you safe" / resource pushes; currently 99% / 70%). Drop "heavy"/"weight" from the accept lists (23% of turns open "that sounds really heavy"). Add profiles beyond 10. Or subsample ≤2k with balanced openers.
+- **Help mode (7,462):** fix `heuristic_help` to check the assistant turn **after the explicit ask** (the turn-0 check rejects mid_session by construction → 99.3% cold_open). Add a word cap (mean 509 chars). Point v7's help slot at the 2026-05-22 markdown-stripped file if that's what's intended — `data/synthetic_train_help_mode_qwen.jsonl` is now the regenerated set.
+
+### P1 — measure honestly
+
+- Rerun genzv3_ck200, llama_base and genzv6_ck1600 ×3 with real seeds to get the true v4 variance.
+- Benchmark the shipping artifacts as GGUF (`GGUF_PATH=`) — never done yet. genzv3_ck200's GGUF already exists on the cluster (`exports/mindmate_genzv3_ck200/`, since 2026-05-03).
+- Audit the NO_HALLUCINATION / MEMORY_DRIFT criteria: the Qwen3-30B teacher only gets 52% / 43%.
+- Crisis L3 (explicit SI) strict pass is ≤1/5 for every 3B model (teacher 3/5). Consider letting the app's `panicDetection` hard path own L3 regardless of the model.
+
+---
+
 ## What just landed (2026-06-05)
 
 ✅ **anchor-app: fixed freezes/OOM on non-Pixel phones** — `n_gpu_layers` default changed from `99` → `0` in `contextInitParamsVersions.ts`. Root cause: Pixel (Mali GPU) always failed the Adreno check and silently ran CPU; Snapdragon phones passed and got untested OpenCL full-offload → freeze/OOM. GPU is now opt-in via Settings. See [[Bug Log]] 2026-06-05 and [[Anchor App]] → "GPU / CPU Inference Defaults".
@@ -31,7 +58,7 @@ tags: [anchor, next-steps]
 
 ## Immediate Priority (2026-06-01)
 
-### 1. 🟢 Crisis regen — job 625037 QUEUED
+### 1. ✅ Crisis regen — job 625037 DONE (2026-06-03, 12,715 rows — see audit above)
 
 Queued behind 5 running help_mode jobs (623985-987, 624118-119) + replay 624905 on a100-80. When it starts, **immediately check `synthetic/outputs/crisis_qwen_rejected.jsonl`** to confirm the teacher is producing generic (country-agnostic) resources and active_si yield is recovering. Monitor:
 ```bash
@@ -48,7 +75,7 @@ rsync -az -e "ssh -o LogLevel=QUIET" \
 ```bash
 sbatch finetuning/run_sft_v7.slurm   # → adapters/genzv7
 ```
-Already self-contained (build_dataset --model v7 → clean → train). Do NOT add crisis to v7 yet — wait for the regenerated, re-audited crisis data first.
+Already self-contained (build_dataset --model v7 → clean → train). Do NOT add crisis to v7 yet — wait for the regenerated, re-audited crisis data first. **⚠️ 2026-10-20: blocked on P0 items 2–4 above** — as written it drops all targeted_fix/gold, and the cluster lacks the script and the `loss_weight`-preserving `clean_dataset.py`.
 
 ### 3. Add re-audited crisis data to a later mix
 
