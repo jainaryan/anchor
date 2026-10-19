@@ -16,9 +16,17 @@ tags: [anchor, production]
 | **Server** | DigitalOcean c-4 droplet |
 | **IP** | 209.38.122.228 |
 | **Stack** | FastAPI + SSE streaming, `deploy/server.py` |
-| **Current model** | `exports/mindmate_llama_sft_ck1600/llama(genz)v2_q4_k_m.gguf` ← ⚠️ outdated |
-| **Best GGUF available** | `exports/mindmate_genzv2_ck1200_q4_k_m.gguf` — should upgrade |
+| **Current model** | `exports/mindmate_llama_sft_ck1600/llama(genz)v2_q4_k_m.gguf` (genzv2_ck1600 — v4 51.5%, CRISIS **21%**, 0/5 explicit-SI) ← ⚠️ outdated |
+| **System prompt** | ⚠️ `deploy/config.py` loads **`inference/system_prompt.txt`** — the legacy 34-line prompt ("PANIC MODE OVERRIDES ALL OTHER INSTRUCTIONS… Act like a casual, chill GenZ friend", with `[MEMORY & CONTEXT]` sections). **Not** the 6-line Anchor `BASE_PROMPT` that the app, all training data since c3acdc9, and the v4 benchmark use. So the webapp runs a prompt nothing was measured on. Found 2026-10-20 from the repo config (unchanged since 2026-04-12); the live server wasn't checked |
+| **Best GGUF available** | `exports/mindmate_genzv3_ck200/mindmate_genzv3_ck200_q4_k_m.gguf` (v4 61.5%, CRISIS 64%; on cluster since 2026-05-03). Older note said genzv2_ck1200 |
 | **Service name** | `mindmate` (managed by systemd) |
+
+> **To align the webapp with what's benchmarked (2026-10-20):**
+> 1. Point `MODELS[0]["path"]` at the chosen GGUF.
+> 2. Replace the `_prompt_path` load with the 6-line base prompt from `benchmarks/scenarios_loader.py::APP_BASE_PROMPT`. Add `render_system_prompt()` if the webapp should inject memory the same way.
+> 3. `MAX_TOKENS = 150` / `TEMPERATURE = 0.75` also differ from the app's `n_predict 1024` / `temperature 0.7`.
+>
+> See [[Bug Log]] 2026-10-20.
 
 ### SSH & Management
 

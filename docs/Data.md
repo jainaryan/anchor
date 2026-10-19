@@ -194,7 +194,7 @@ Two-phase teacher-as-Anchor. Crisis: 4 modes (passive_si 30%, humor_deflect 20%,
 | File | Rows | Reply chars (mean / p90) | Modes | Profiles |
 |---|---|---|---|---|
 | `synthetic_train_crisis_qwen.jsonl` (job 625037, 2026-06-01 → 06-03) | 12,715 | 282 / 361 | active_si 4,381 · passive_si 3,237 · ambiguous 3,222 · humor_deflect 1,875 | 10 (~1,300 each) |
-| `synthetic_train_help_mode_qwen.jsonl` (623921–623987, 624118–624119) | 7,462 | **509 / 736** | cold_open 7,413 · mid_session 33 · not_working 16 | 8 |
+| `synthetic_train_help_mode_qwen_regen_20260602.jsonl` in the repo (= `data/synthetic_train_help_mode_qwen.jsonl` on the cluster; jobs 623921–623987, 624118–624119) | 7,462 | **509 / 736** | cold_open 7,413 · mid_session 33 · not_working 16 | 8 |
 | `synthetic_train_crisis_qwen.old_unsafe_20260601.jsonl` | 282 | 660 / 831 | quarantined first run — do not train | — |
 
 **Crisis — what's good:** 0 country-specific numbers; active_si has a resource in 99% and a direct "are you safe" check in 99%; length in range. Rejects: 885 parse + 206 heuristic (`outputs/crisis_qwen_rejected.jsonl`).

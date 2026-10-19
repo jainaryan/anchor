@@ -64,7 +64,7 @@ The `kept 8669/12218` / `kept 7734/10820` lines are in `sft_v5_618377.out` / `sf
 
 **Evidence:** final jobs 624118/624119 (ran 2026-05-31 → 06-02 with the fix) ended at `total=1446 | cold_open=1443 mid_session=2 not_working=1` and `total=1437 | cold_open=1425 mid_session=7 not_working=5`. Final `synthetic_train_help_mode_qwen.jsonl`: 7,462 rows = 7,413 cold_open / 33 mid_session / 16 not_working. Mean reply **509 chars** (p90 736) — the same length problem diagnosed for genzv5. Only 8 profiles. ~40% of turns open "I'm right here with…".
 
-**Also:** v7's `help_mode_qwen 200` slot now samples from this regenerated file. The markdown-stripped 2026-05-22 set the preset comment refers to is the cluster's `finetuning/synthetic_train_help_mode_qwen.jsonl`.
+**Also:** in the repo, the regenerated set is committed as `data/synthetic_train_help_mode_qwen_regen_20260602.jsonl`. `data/synthetic_train_help_mode_qwen.jsonl` stays the 200-row markdown-stripped 2026-05-22 set that v7 expects. On the cluster the names are swapped: `data/…_qwen.jsonl` is the regenerated file and the 200-row set is `finetuning/synthetic_train_help_mode_qwen.jsonl`. Fix that before launching v7 there.
 
 **Fix (proposed):** check the assistant turn **after the explicit ask** (find the user turn containing the help request), and add a word cap.
 
@@ -88,6 +88,20 @@ Replay 624905 (2026-06-01) → `benchmarks/results/cluster_qwen3_30b_20260530_19
 | % | 89 | 75 | 88 | 85 | 80 | 90 | 69 | 84 | 43 | 52 | 100 |
 
 Crisis strict pass by distress level: L1 2/2, L2 4/6, L3 3/5. (Every 3B model is ≤1/5 on L3.) NO_HALLUCINATION 52% and MEMORY_DRIFT 43% even for the teacher, so audit those criteria.
+
+### ❗ tryanchor.me runs the legacy system prompt — OPEN
+
+**Bug:** `deploy/config.py` (unchanged since 2026-04-12) sets `SYSTEM_PROMPT` from `inference/system_prompt.txt`. That's the 34-line legacy prompt ("PANIC MODE OVERRIDES ALL OTHER INSTRUCTIONS… Act like a casual, chill GenZ friend"), not the 6-line Anchor `BASE_PROMPT` used by the app, all training data since c3acdc9, and the v4 benchmark. Together with genzv2_ck1600 (v4 CRISIS 21%), the webapp runs an unmeasured prompt + model combination. Also `MAX_TOKENS 150` / `TEMPERATURE 0.75` vs the app's 1024 / 0.7. Found from the repo config; the live server wasn't checked.
+
+**Fix (proposed):** load `APP_BASE_PROMPT` (+ `render_system_prompt()` for memory), switch the model to genzv3_ck200 after a GGUF benchmark, and align the sampling. See [[Production]].
+
+### Data + results committed from the cluster (2026-10-20)
+
+- `data/synthetic_train_crisis_qwen.jsonl` — replaced the 5-row stub with the final 12,715-row regen (job 625037)
+- `data/synthetic_train_help_mode_qwen_regen_20260602.jsonl` — new, the final 7,462-row help_mode set
+- `benchmarks/results/cluster_*/judged.json` + `replay_*/judged.json` — 47 v4 result files (5.8 MB), incl. the qwen3_30b replay (78.0%)
+
+Not committed: full run dirs (transcripts/failures/traces, ~7k files), the quarantined `*.old_unsafe_*` crisis file, rebuildable `conversations_*` sets, adapter `tokenizer.json` copies. The qwen3_30b transcripts exist only on the cluster (`cluster_qwen3_30b_20260530_191415/transcripts/`).
 
 ### Plaintext HF token committed in `misc` — OPEN
 

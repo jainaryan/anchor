@@ -109,7 +109,7 @@ only 5 examples locally.
 > **2026-10-20 notes on v7:**
 > - Cluster measurement: s1 and s2 are long too (740 / 782 char), so only s0 is clean.
 > - **As written, v7 loses its whole targeted_fix slot (3,500, 27%) and 175/181 gold** to `--drop-min-turns 4`.
-> - The `help_mode_qwen 200` slot now samples from the regenerated 7,462-row `data/synthetic_train_help_mode_qwen.jsonl` (509-char mean, 99.3% cold_open), not the 2026-05-22 markdown-stripped set (on the cluster that one is `finetuning/synthetic_train_help_mode_qwen.jsonl`).
+> - **help_mode file naming:** in the repo, `data/synthetic_train_help_mode_qwen.jsonl` is still the 200-row 2026-05-22 markdown-stripped set that v7's `help_mode_qwen 200` slot expects. The regenerated 7,462-row set (509-char mean, 99.3% cold_open) is committed separately as `data/synthetic_train_help_mode_qwen_regen_20260602.jsonl`. It inherits w=3.0 via prefix match if added to a preset. **But on the cluster, `data/synthetic_train_help_mode_qwen.jsonl` is the regenerated file** (the 200-row set is at `finetuning/synthetic_train_help_mode_qwen.jsonl`). Rsync the repo's 200-row file over it before launching v7 there, or v7 will sample 200 of the regenerated rows.
 > - The cluster has neither the v7 preset nor `run_sft_v7.slurm` yet.
 
 ```python
