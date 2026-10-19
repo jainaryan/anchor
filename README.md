@@ -1,165 +1,75 @@
-# Anchor
+# Anchor (training repo, formerly MindMate)
 
-A finetuned, local mental-health companion that runs on Android. Models are trained with QLoRA on a CUDA cluster, exported to GGUF, and deployed in a React Native Android app via a llama.cpp JNI bridge.
+Training repo for **Anchor**, a privacy-first mental-health companion that runs on-device on Android:
+1. Llama 3.2 3B Instruct is fine-tuned with QLoRA on the NUS SoC SLURM cluster.
+2. The adapter is quantized to a ~2 GB Q4_K_M GGUF.
+3. llama.cpp serves it in two places:
+   - the React Native app ([tanmaykay/Anchor](https://github.com/tanmaykay/Anchor), branch `aryan_branch`, Mac: `~/projects/anchor-app/`)
+   - a demo webapp at https://tryanchor.me (`deploy/`)
 
-**Production webapp:** https://tryanchor.me (FastAPI + SSE, DigitalOcean)
-**Android app:** `anchor-app/` (React Native, package `com.pocketpal`)
+**All project knowledge lives in the Obsidian vault in [`docs/`](docs/)** — start at [`docs/Home.md`](docs/Home.md). Agents: read [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) first.
 
----
+## Pipeline
 
-## Best Model
+```
+synthetic/*_pipeline.py        teacher-as-Anchor data generation (Qwen3-30B-A3B / Gemma4 26B, A100-80)
+        ↓  data/synthetic_train_*.jsonl
+finetuning/build_dataset.py --model vN → finetuning/clean_dataset.py → finetuning/CUDA_train_qlora.py
+        ↓  adapters/genzvN/checkpoint-*
+benchmarks/run_benchmarks_v4.py        83-scenario suite, Gemma4 judge, production sampling
+        ↓
+scripts/export_gguf_cuda.py → exports/mindmate_<name>/mindmate_<name>_q4_k_m.gguf → scripts/upload_gguf_to_hf.py
+        ↓  jainaryan/mindmate-gguf (HF, private)
+Android app (llama.rn)  /  deploy/server.py (FastAPI + SSE, CPU)
+```
 
-**`adapters/genz/checkpoint-1200`** — Llama 3.2 3B SFT (genzv2_ck1200)
-- Best SFT model overall (71% on v1 benchmark, stable across runs)
-- DPO abandoned — all 3 DPO runs flat or worse than SFT
-- GGUF: `exports/mindmate_genzv2_ck1200/`
-- On device at `/sdcard/Download/mindmate.gguf` (Pixel 8a)
-- Gen: ~5.4–6.0 TPS, TTFT: 6s (cached) / 60–66s (cold 1100-tok prompt)
+## Status (2026-10-20)
 
-**⚠️ Base model currently beats all SFT on v3 benchmark (51% vs 45%)** — root cause identified, fix running (see below).
-
----
-
-## Stack
-
-| Layer | Tool |
+| | |
 |---|---|
-| Base model | Llama 3.2 3B Instruct |
-| SFT | QLoRA (4-bit NF4, PEFT), `CUDA_train_qlora.py` |
-| Teacher (datagen) | Gemma 4 26B A4B IT (bfloat16, ~52GB, A100-80) |
-| Export | GGUF Q4_K_M via llama.cpp, `scripts/export_gguf_cuda.py` |
-| Android runtime | JNI → llama.cpp (`android/llama/src/main/cpp/llama-android.cpp`) |
-| Webapp | FastAPI + SSE (`deploy/server.py`) |
-| Cluster | NUS SoC SLURM, `gpu-long` partition, A100-80 |
+| **Best model (v4)** | `genzv3_ck200` — 61.5%. Base Llama 3.2 3B 57.4%; Qwen3-30B teacher 78.0% |
+| **Latest SFT** | `genzv6_ck1600` — 56.7%; GGUF exported + on HF |
+| **Next run** | `v7` preset + `finetuning/run_sft_v7.slurm` prepared, **not trained** — blocked on the P0 fixes in [`docs/Next Steps.md`](docs/Next%20Steps.md) |
+| **Shipped** | App default: genzv2_ck1200 (last known). Webapp, per `deploy/config.py`: genzv2_ck1600 with the legacy 34-line `inference/system_prompt.txt` prompt, not the app's 6-line Anchor prompt. Both have the weakest CRISIS scores on v4 (21–28%) |
+| **Open bugs** | (see [`docs/Bug Log.md`](docs/Bug%20Log.md) 2026-10-20) |
 
----
+Open bugs in detail:
+- `--drop-min-turns 4` drops all single-turn training data (all of targeted_fix, most gold).
+- The cluster's old `clean_dataset.py` drops `loss_weight`.
+- v4 repeat runs aren't independent (global reseed in the simulator).
+- The holdout set is broken and its names leak into the training data.
+- The help-mode heuristic rejects mid-session conversations.
+- An HF token is committed in `misc` — revoke it.
 
-## Training Pipeline
+## Layout
 
-```
-Synthetic Data (Gemma 4 26B A4B IT teacher — teacher-as-Anchor mode)
-        ↓
-  SFT: CUDA_run_pipeline.py → CUDA_train_qlora.py
-        ↓
-  adapters/genz/checkpoint-1200  ← best SFT checkpoint
-        ↓
-  GGUF export: scripts/export_gguf_cuda.py
-        ↓
-  Android app (anchor-app/) or webapp (deploy/)
-```
+| Path | What |
+|---|---|
+| `synthetic/` | Data-generation pipelines (`crisis_help_pipeline.py`, `conversation_memory_pipeline.py`, `biometric_sft_pipeline.py`, …) + `utils.py` (`TeacherModel`, HF or vLLM backend) |
+| `finetuning/` | Dataset build/clean, QLoRA trainer (`CUDA_train_qlora.py`, weighted loss), SFT + datagen SLURM scripts |
+| `benchmarks/` | v4 suite (`scenarios.json`), runner, judge, crisis calibration, replay / diff / leaderboard; results in `benchmarks/results/` |
+| `scripts/` | GGUF export (`export_gguf_cuda.py`, `run_export.slurm`), HF upload, `chat_cluster.py`, `normalize_memory_format.py`, `sync_mobile_eval.sh` |
+| `deploy/` | tryanchor.me FastAPI server (`server.py`, `config.py`, `DEPLOY.md`) |
+| `data/` | Training JSONL — see [`docs/Data.md`](docs/Data.md) |
+| `adapters/`, `exports/` | LoRA checkpoints and GGUFs (weights gitignored) — see [`exports/README.md`](exports/README.md) |
+| `docs/` | Obsidian vault — the documentation |
+| `inference/`, `web/`, `mlx_export/`, root `*.py` / `*.slurm` | **Legacy**: old CLI chat scripts, Flask demo, MLX path, early duplicates. Use the `finetuning/`, `synthetic/`, `benchmarks/` and `scripts/` versions |
 
-### Running SFT on cluster
-```bash
-cd ~/projects/mindmate
-sbatch finetuning/run_sft_v4.slurm
-```
-
-### Exporting to GGUF
-```bash
-sbatch scripts/run_export_top3.slurm
-# or directly:
-python scripts/export_gguf_cuda.py --model genzv2_ck1200
-```
-
----
-
-## Data
-
-### Active SFT training data
-
-| File | Examples | Content |
-|---|---|---|
-| `data/synthetic_train_targeted_fix.jsonl` | 13,524 | help_mode + memory_recall |
-| `data/synthetic_train_friend_1.jsonl` | 7,380 | Casual friend-style support |
-| `data/synthetic_train_therapist_.jsonl` | 2,637 | Therapeutic dialogue |
-| `data/synthetic_train_transition.jsonl` | 6,184 | Casual→emotional pivot |
-| `data/synthetic_train.jsonl` | 5,565 | Grief/loss |
-| `data/synthetic_train_casual.jsonl` | 5,000 | Non-distress casual |
-| `data/synthetic_train_biometric.jsonl` | 2,348 | Biometric health context |
-| `data/synthetic_train_targeted_fixes.jsonl` | 181 | Hand-crafted gold examples |
-| `data/synthetic_train_conv_memory.jsonl` | generating | Multi-turn + memory (teacher-as-Anchor) |
-
----
-
-## Benchmarks
-
-58 scenarios, 9 categories, LLM judge (Gemma 4 26B A4B). **3-run averaged methodology** (temperature=0.7 causes variance).
+## Quick commands (cluster)
 
 ```bash
-# Single run
-sbatch --gres=gpu:a100-80:1 --export=ALL,MODEL=genzv2_ck1200 benchmarks/run_benchmarks.slurm
-
-# Average across runs
-python benchmarks/average_results.py --since 20260509
+cd ~/projects/mindmate && source mindmatenv/bin/activate
+sbatch finetuning/run_sft_v7.slurm                                         # build + clean + train (fix P0 items first)
+sbatch --export=ALL,MODEL=genzv3_ck200 benchmarks/run_benchmarks_v4.slurm  # benchmark (A100-80, ~30 min)
+sbatch --export=ALL,MODEL=genzv6_ck1600 scripts/run_export.slurm           # GGUF export (CPU-only)
+python scripts/upload_gguf_to_hf.py --model genzv6_ck1600                  # needs HF_TOKEN
 ```
 
-**v3 averaged results (3-run averaged, /61 weighted) — COMPLETE:**
-
-| Model | Avg % | ± | n |
-|---|---|---|---|
-| llama_base | **51%** | 1.9 | 3 |
-| genzv3_ck200 | 45% | 2.1 | 4 |
-| genzv2_ck1600 | 45% | 1.5 | 2 |
-| genzv2_ck1200 | 44% | 0.8 | 4 |
-| genzv4_ck200 | 42% | 1.2 | 3 |
-
-⚠️ Base still beats all SFT — root cause identified (training data format mismatch) and fixed in commit c3acdc9. genzv5 will be the first run with correct format.
-
-**Next step:** Wait for conv-memory pipeline (jobs 609110–609111) → design genzv5 mix → benchmark.
-
----
-
-## Cluster Access
-
-```bash
-ssh nus-student-cluster   # requires NUS VPN
-squeue -u aryanj          # check jobs
-
-# Push files to cluster (git pull blocked — GitHub SSH not allowed)
-rsync -az -e "ssh -o LogLevel=QUIET" file.py nus-student-cluster:~/projects/mindmate/path/
-
-# Sync results back
-rsync -az -e "ssh -o LogLevel=QUIET" nus-student-cluster:~/projects/mindmate/benchmarks/results/ benchmarks/results/
-```
-
-**Partitions:** `gpu` (max 3h), `gpu-long` (max 3 days). All training on `gpu-long` with `a100-80`.
-**Logs:** `~/logs/` on cluster (NOT `~/projects/mindmate/logs/`).
-**GPU note:** Always use `--gres=gpu:a100-80:1` explicitly. H100-96 GRES unreliable — has fallen back to ~46GB nodes.
-
----
-
-## Android App
-
-App: `anchor-app/` (React Native, NOT `mindmate_app/` which is a stale scratch fork)
-
-```bash
-cd anchor-app
-yarn typecheck
-cd android && ./gradlew assembleDebug
-```
-
----
-
-## Project Structure
-
-```
-mindmate/
-├── CUDA_*.py / run_*.slurm # ⚠️ ROOT-LEVEL LEGACY — canonical versions are in finetuning/ and synthetic/
-├── adapters/               # LoRA checkpoints
-│   ├── genz/checkpoint-1200/   ← BEST MODEL (genzv2_ck1200)
-│   ├── genzv3/checkpoint-200/  ← best genzv3
-│   └── genzv4/checkpoint-200/  ← best genzv4
-├── benchmarks/             # Benchmark suite + runner + results
-│   ├── scenarios.py        # 58 scenarios, 9 categories
-│   ├── run_benchmarks.py   # model loader + judge runner
-│   ├── average_results.py  # 3-run averaging
-│   └── results/            # JSON + MD per run
-├── data/                   # Training data (JSONL)
-├── exports/                # GGUF exports
-├── finetuning/             # Training scripts
-├── synthetic/              # Data generation pipelines
-│   ├── conversation_memory_pipeline.py  ← active (teacher-as-Anchor)
-│   └── utils.py            # TeacherModel.generate() + .chat()
-├── deploy/                 # Production FastAPI server
-└── scripts/                # Export + utility scripts
-```
+Cluster rules that cost jobs before ([`docs/Cluster.md`](docs/Cluster.md)):
+- always `--gres=gpu:a100-80:1`
+- `--export` goes before the script path
+- logs go to `/home/a/aryanj/logs/`
+- use `python -m pip`, never bare `pip`
+- run Python from `/tmp`
+- don't let parallel jobs modify the shared venv
+- GitHub SSH is blocked from the cluster — rsync from the Mac, or use HTTPS
